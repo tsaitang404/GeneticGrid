@@ -487,9 +487,38 @@ createApp({
             return { time, price };
         };
 
+        const findNearestTime = (targetTime) => {
+            if (allCandles.length === 0) return null;
+            if (targetTime < allCandles[0].time) return allCandles[0].time;
+            if (targetTime > allCandles[allCandles.length - 1].time) return allCandles[allCandles.length - 1].time;
+
+            let left = 0;
+            let right = allCandles.length - 1;
+            let closest = allCandles[0].time;
+
+            while (left <= right) {
+                const mid = Math.floor((left + right) / 2);
+                const midTime = allCandles[mid].time;
+                if (midTime === targetTime) return midTime;
+                if (midTime < targetTime) {
+                    closest = midTime;
+                    left = mid + 1;
+                } else {
+                    right = mid - 1;
+                }
+            }
+            return closest;
+        };
+
         const logicalToPoint = (logical) => {
             if (!chart || !candleSeries) return null;
-            const x = chart.timeScale().timeToCoordinate(logical.time);
+            let x = chart.timeScale().timeToCoordinate(logical.time);
+            if (x === null) {
+                const nearest = findNearestTime(logical.time);
+                if (nearest !== null) {
+                    x = chart.timeScale().timeToCoordinate(nearest);
+                }
+            }
             const y = candleSeries.priceToCoordinate(logical.price);
             if (x === null || y === null) return null;
             return { x, y };
@@ -794,6 +823,7 @@ createApp({
             }
             triggerWorkerCalculation();
             updateNoDataOverlay();
+            renderDrawings();
         };
 
         const triggerWorkerCalculation = () => {
