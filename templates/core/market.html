@@ -120,6 +120,7 @@
         .timeframe-buttons {
             display: flex;
             gap: 4px;
+            align-items: center;
         }
         .timeframe-buttons button {
             padding: 6px 12px;
@@ -129,6 +130,34 @@
             background: #2962ff;
             border-color: #2962ff;
             color: #fff;
+        }
+        .timeframe-select {
+            background: #2a2e39;
+            color: #d1d4dc;
+            border: 1px solid #363a45;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .timeframe-select:hover {
+            background: #363a45;
+        }
+        .custom-interval-input {
+            background: #2a2e39;
+            color: #d1d4dc;
+            border: 1px solid #363a45;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            width: 80px;
+            margin-left: 8px;
+            display: none;
+        }
+        .custom-interval-input:focus {
+            outline: none;
+            border-color: #2962ff;
         }
         .loading {
             display: flex;
@@ -241,6 +270,31 @@
                 <button data-bar="1H" class="active">1时</button>
                 <button data-bar="4H">4时</button>
                 <button data-bar="1D">日线</button>
+                <select id="more-timeframes" class="timeframe-select">
+                    <option value="">更多周期...</option>
+                    <option value="tick">分时</option>
+                    <option value="1s">1秒</option>
+                    <option value="5s">5秒</option>
+                    <option value="15s">15秒</option>
+                    <option value="30s">30秒</option>
+                    <option value="1m">1分</option>
+                    <option value="3m">3分</option>
+                    <option value="5m">5分</option>
+                    <option value="15m">15分</option>
+                    <option value="30m">30分</option>
+                    <option value="1H">1时</option>
+                    <option value="3H">3时</option>
+                    <option value="6H">6时</option>
+                    <option value="12H">12时</option>
+                    <option value="1D">1日</option>
+                    <option value="3D">3日</option>
+                    <option value="5D">5日</option>
+                    <option value="1W">1周</option>
+                    <option value="1M">1月</option>
+                    <option value="3M">3月</option>
+                    <option value="custom">自定义...</option>
+                </select>
+                <input type="text" id="custom-interval" class="custom-interval-input" placeholder="如: 2H, 7D">
             </div>
             <span class="source-label">数据源:</span>
             <select id="source-select" class="source-select">
@@ -905,8 +959,46 @@
                 document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 currentBar = btn.dataset.bar;
+                document.getElementById('more-timeframes').value = '';
+                document.getElementById('custom-interval').style.display = 'none';
                 refreshData();
             });
+        });
+        
+        // 更多周期下拉菜单
+        document.getElementById('more-timeframes').addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (!value) return;
+            
+            if (value === 'custom') {
+                // 显示自定义输入框
+                document.getElementById('custom-interval').style.display = 'block';
+                document.getElementById('custom-interval').focus();
+            } else {
+                // 选择预设周期
+                document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
+                currentBar = value;
+                document.getElementById('custom-interval').style.display = 'none';
+                refreshData();
+            }
+        });
+        
+        // 自定义周期输入
+        document.getElementById('custom-interval').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const customValue = e.target.value.trim().toUpperCase();
+                if (customValue) {
+                    // 验证格式：数字 + 单位 (如: 2H, 7D, 90m)
+                    const match = customValue.match(/^(\d+)([SMHDW])$/);
+                    if (match) {
+                        document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
+                        currentBar = customValue.toLowerCase();
+                        refreshData();
+                    } else {
+                        alert('格式错误！请使用格式：数字+单位\\n例如：2H (2小时), 7D (7天), 90m (90分钟)\\n单位：s(秒) m(分) H(时) D(日) W(周)');
+                    }
+                }
+            }
         });
 
         document.getElementById('refresh-btn').addEventListener('click', refreshData);
