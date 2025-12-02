@@ -417,6 +417,7 @@ createApp({
         const currentTool = ref('cursor');
         const drawings = reactive([]);
         const currentDrawing = ref(null);
+        const isDrawingToolbarExpanded = ref(false);
 
         const mainIndicatorsConfig = {
             ma: { label: 'MA (移动平均线)', title: 'Moving Average' },
@@ -1190,7 +1191,7 @@ createApp({
             refreshData, toggleMainIndicator, switchSubIndicator,
             toggleSettings, changeColorScheme, changeCurrency, hideError, retryLoad,
             setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh,
-            drawingCanvas, currentTool, setTool, clearDrawings
+            drawingCanvas, currentTool, setTool, clearDrawings, isDrawingToolbarExpanded
         };
     }
 }).mount('#app');
