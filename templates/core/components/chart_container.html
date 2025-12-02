@@ -11,7 +11,13 @@
             <button :class="{ active: currentTool === 'ray' }" @click="setTool('ray')" title="射线">➚</button>
             <button :class="{ active: currentTool === 'horizontal' }" @click="setTool('horizontal')" title="横线">─</button>
             <button :class="{ active: currentTool === 'fib' }" @click="setTool('fib')" title="斐波那契回调">≡</button>
-            <button :class="{ active: currentTool === 'parallel' }" @click="setTool('parallel')" title="等距通道">∥</button>
+            <div style="position: relative;">
+                <button :class="{ active: currentTool === 'parallel' }" @click="setTool('parallel')" title="等距通道">∥</button>
+                <div v-if="currentTool === 'parallel' && showToolSettings" class="tool-settings-popup">
+                    <span style="font-size: 12px; color: #d1d4dc;">条数</span>
+                    <input type="number" v-model.number="parallelLevels" min="1" max="10" style="width: 40px; background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; border-radius: 2px; padding: 2px 4px; font-size: 12px; text-align: center;">
+                </div>
+            </div>
             <button @click="clearDrawings" title="清除所有">🗑️</button>
         </div>
     </div>
