@@ -6,6 +6,10 @@
     <title>GeneticGrid - K线看盘</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
+        :root {
+            --up-color: #26a69a;
+            --down-color: #ef5350;
+        }
         * {
             margin: 0;
             padding: 0;
@@ -65,8 +69,8 @@
             font-size: 16px;
             font-weight: 600;
         }
-        .ticker-value.up { color: #26a69a; }
-        .ticker-value.down { color: #ef5350; }
+        .ticker-value.up { color: var(--up-color); }
+        .ticker-value.down { color: var(--down-color); }
         #chart-container {
             width: 100%;
             height: calc(100vh - 140px);
@@ -115,8 +119,8 @@
             font-weight: 500;
             margin-left: 16px;
         }
-        .candle-tooltip .tooltip-value.up { color: #26a69a; }
-        .candle-tooltip .tooltip-value.down { color: #ef5350; }
+        .candle-tooltip .tooltip-value.up { color: var(--up-color); }
+        .candle-tooltip .tooltip-value.down { color: var(--down-color); }
         .timeframe-buttons {
             display: flex;
             gap: 4px;
@@ -247,6 +251,91 @@
             color: #787b86;
             margin-right: 4px;
         }
+        
+        /* 设置模态框 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal {
+            background: #1e222d;
+            border: 1px solid #363a45;
+            border-radius: 6px;
+            width: 400px;
+            max-width: 90%;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #2a2e39;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #d1d4dc;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #787b86;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+        }
+        .modal-close:hover {
+            color: #d1d4dc;
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .setting-item {
+            margin-bottom: 20px;
+        }
+        .setting-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #d1d4dc;
+            font-size: 14px;
+        }
+        .setting-options {
+            display: flex;
+            gap: 10px;
+        }
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            color: #787b86;
+            font-size: 14px;
+        }
+        .radio-label input {
+            margin: 0;
+        }
+        .radio-label:hover {
+            color: #d1d4dc;
+        }
+        .color-preview {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-right: 4px;
+        }
     </style>
 </head>
 <body>
@@ -303,6 +392,7 @@
                 <option value="okx">OKX</option>
             </select>
             <button id="refresh-btn">🔄 刷新</button>
+            <button id="settings-btn" title="设置">⚙️</button>
         </div>
     </div>
 
@@ -366,6 +456,31 @@
         </div>
     </div>
 
+    <!-- 设置模态框 -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">偏好设置</div>
+                <button class="modal-close" onclick="toggleSettings()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <span class="setting-label">涨跌颜色</span>
+                    <div class="setting-options">
+                        <label class="radio-label">
+                            <input type="radio" name="color-scheme" value="green-up" checked onchange="changeColorScheme('green-up')">
+                            <span><span class="color-preview" style="background:#26a69a"></span>绿涨<span class="color-preview" style="background:#ef5350; margin-left:4px"></span>红跌</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="color-scheme" value="red-up" onchange="changeColorScheme('red-up')">
+                            <span><span class="color-preview" style="background:#ef5350"></span>红涨<span class="color-preview" style="background:#26a69a; margin-left:4px"></span>绿跌</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let chart = null;
         let candleSeries = null;
@@ -375,6 +490,105 @@
         let currentBar = '{{ bar }}';
         let currentSource = '{{ source }}';
         
+        // 颜色配置
+        const COLORS = {
+            GREEN: '#26a69a',
+            RED: '#ef5350',
+            GREEN_TRANSPARENT: '#26a69a80',
+            RED_TRANSPARENT: '#ef535080'
+        };
+        
+        // 偏好设置
+        let settings = {
+            colorScheme: localStorage.getItem('geneticgrid_color_scheme') || 'green-up' // 'green-up' or 'red-up'
+        };
+
+        // 获取当前颜色配置
+        function getColors() {
+            if (settings.colorScheme === 'green-up') {
+                return {
+                    up: COLORS.GREEN,
+                    down: COLORS.RED,
+                    upTransparent: COLORS.GREEN_TRANSPARENT,
+                    downTransparent: COLORS.RED_TRANSPARENT
+                };
+            } else {
+                return {
+                    up: COLORS.RED,
+                    down: COLORS.GREEN,
+                    upTransparent: COLORS.RED_TRANSPARENT,
+                    downTransparent: COLORS.GREEN_TRANSPARENT
+                };
+            }
+        }
+
+        // 应用颜色设置
+        function applyColorScheme() {
+            const colors = getColors();
+            const root = document.documentElement;
+            
+            // 更新 CSS 变量
+            root.style.setProperty('--up-color', colors.up);
+            root.style.setProperty('--down-color', colors.down);
+            
+            // 更新单选框状态
+            const radios = document.getElementsByName('color-scheme');
+            for (let radio of radios) {
+                if (radio.value === settings.colorScheme) {
+                    radio.checked = true;
+                }
+            }
+
+            // 如果图表已初始化，更新图表配置
+            if (candleSeries) {
+                candleSeries.applyOptions({
+                    upColor: colors.up,
+                    downColor: colors.down,
+                    borderDownColor: colors.down,
+                    borderUpColor: colors.up,
+                    wickDownColor: colors.down,
+                    wickUpColor: colors.up,
+                });
+                
+                // 重新渲染数据以更新成交量颜色
+                if (allCandles.length > 0) {
+                    updateChartData();
+                }
+            }
+        }
+
+        // 切换设置模态框
+        function toggleSettings() {
+            const modal = document.getElementById('settings-modal');
+            if (modal.classList.contains('show')) {
+                modal.classList.remove('show');
+            } else {
+                modal.classList.add('show');
+            }
+        }
+
+        // 更改颜色方案
+        function changeColorScheme(scheme) {
+            settings.colorScheme = scheme;
+            localStorage.setItem('geneticgrid_color_scheme', scheme);
+            applyColorScheme();
+        }
+
+        // 初始化时应用设置
+        document.addEventListener('DOMContentLoaded', () => {
+            applyColorScheme();
+            
+            // 绑定设置按钮事件
+            document.getElementById('settings-btn').addEventListener('click', toggleSettings);
+            
+            // 点击遮罩层关闭
+            document.getElementById('settings-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'settings-modal') {
+                    toggleSettings();
+                }
+            });
+        });
+
         // 数据缓存
         let allCandles = [];
         let isLoadingMore = false;
@@ -465,19 +679,21 @@
                 },
             });
 
+            const colors = getColors();
+
             // K线序列
             candleSeries = chart.addCandlestickSeries({
-                upColor: '#26a69a',
-                downColor: '#ef5350',
-                borderDownColor: '#ef5350',
-                borderUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
-                wickUpColor: '#26a69a',
+                upColor: colors.up,
+                downColor: colors.down,
+                borderDownColor: colors.down,
+                borderUpColor: colors.up,
+                wickDownColor: colors.down,
+                wickUpColor: colors.up,
             });
 
             // 成交量序列
             volumeSeries = chart.addHistogramSeries({
-                color: '#26a69a',
+                color: colors.up,
                 priceFormat: {
                     type: 'volume',
                 },
@@ -815,11 +1031,12 @@
         
         // 更新图表数据的通用函数
         function updateChartData() {
+            const colors = getColors();
             candleSeries.setData(allCandles);
             const volumeData = allCandles.map(c => ({
                 time: c.time,
                 value: c.volume,
-                color: c.close >= c.open ? '#26a69a80' : '#ef535080',
+                color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
             }));
             volumeSeries.setData(volumeData);
         }
@@ -876,11 +1093,12 @@
                     
                     candleSeries.setData(candles);
 
+                    const colors = getColors();
                     // 成交量数据
                     const volumeData = candles.map(c => ({
                         time: c.time,
                         value: c.volume,
-                        color: c.close >= c.open ? '#26a69a80' : '#ef535080',
+                        color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
                     }));
                     volumeSeries.setData(volumeData);
 
