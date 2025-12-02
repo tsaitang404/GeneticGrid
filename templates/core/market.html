@@ -324,8 +324,11 @@
         // 数据缓存
         let allCandles = [];
         let isLoadingMore = false;
+        let isLoadingNewer = false;
         let oldestTimestamp = null;
+        let newestTimestamp = null;
         let hasMoreData = true;
+        let hasNewerData = true;
         
         // Tooltip 锁定状态
         let isTooltipLocked = false;
@@ -380,8 +383,11 @@
             // 重置数据状态
             allCandles = [];
             oldestTimestamp = null;
+            newestTimestamp = null;
             hasMoreData = true;
+            hasNewerData = true;
             isLoadingMore = false;
+            isLoadingNewer = false;
 
             chart = LightweightCharts.createChart(container, {
                 layout: {
@@ -628,63 +634,140 @@
         
         // 可见范围变化时检查是否需要加载更多数据
         function onVisibleRangeChange(logicalRange) {
-            if (!logicalRange || isLoadingMore || !hasMoreData) return;
+            if (!logicalRange) return;
             
-            // 当用户滚动到左侧（历史数据区域）时加载更多
-            // logicalRange.from < 10 表示接近数据起点
-            if (logicalRange.from < 10) {
-                loadMoreHistory();
+            const dataLength = allCandles.length;
+            if (dataLength === 0) return;
+            
+            // 检查左侧（历史数据）- 更激进的策略，确保始终有足够数据
+            // 当可见范围的起始位置接近已加载数据的边界时，立即加载更多
+            if (logicalRange.from < 500 && hasMoreData && !isLoadingMore) {
+                // 立即触发加载
+                loadMoreHistoryUntilEnough(logicalRange);
+            }
+            
+            // 检查右侧（更新数据）
+            if (logicalRange.to > dataLength - 500 && hasNewerData && !isLoadingNewer) {
+                loadMoreNewerUntilEnough(logicalRange);
             }
         }
         
-        // 加载更多历史数据
-        async function loadMoreHistory() {
-            if (isLoadingMore || !hasMoreData || !oldestTimestamp) return;
+        // 持续加载历史数据直到缓冲区足够
+        async function loadMoreHistoryUntilEnough(logicalRange) {
+            if (isLoadingMore || !hasMoreData) return;
             
             isLoadingMore = true;
+            let loadedCount = 0;
+            const targetBuffer = 2000; // 进一步增加目标缓冲区到2000条（约33小时的1分钟数据）
             
             try {
-                // 请求更早的数据，before 参数传入最早的时间戳
-                const beforeTs = oldestTimestamp * 1000; // 转回毫秒
-                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=100&source=${currentSource}&before=${beforeTs}`;
-                const response = await fetch(url);
-                const result = await response.json();
-                
-                if (result.code === 0 && result.data && result.data.length > 0) {
-                    const newCandles = result.data;
+                // 持续加载直到缓冲区足够或没有更多数据
+                while (hasMoreData && loadedCount < targetBuffer) {
+                    const beforeTs = oldestTimestamp * 1000;
+                    const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=500&source=${currentSource}&before=${beforeTs}`;
+                    const response = await fetch(url);
+                    const result = await response.json();
                     
-                    // 过滤掉已存在的数据
-                    const existingTimes = new Set(allCandles.map(c => c.time));
-                    const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
-                    
-                    if (uniqueNewCandles.length > 0) {
-                        // 合并数据（新数据在前）
-                        allCandles = [...uniqueNewCandles, ...allCandles];
-                        allCandles.sort((a, b) => a.time - b.time);
+                    if (result.code === 0 && result.data && result.data.length > 0) {
+                        const newCandles = result.data;
                         
-                        // 更新最早时间戳
-                        oldestTimestamp = allCandles[0].time;
+                        // 过滤掉已存在的数据
+                        const existingTimes = new Set(allCandles.map(c => c.time));
+                        const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
                         
-                        // 更新图表
-                        candleSeries.setData(allCandles);
-                        const volumeData = allCandles.map(c => ({
-                            time: c.time,
-                            value: c.volume,
-                            color: c.close >= c.open ? '#26a69a80' : '#ef535080',
-                        }));
-                        volumeSeries.setData(volumeData);
+                        if (uniqueNewCandles.length > 0) {
+                            allCandles = [...uniqueNewCandles, ...allCandles];
+                            allCandles.sort((a, b) => a.time - b.time);
+                            oldestTimestamp = allCandles[0].time;
+                            loadedCount += uniqueNewCandles.length;
+                            
+                            // 每次加载后更新图表
+                            updateChartData();
+                        } else {
+                            // 没有新的唯一数据
+                            hasMoreData = false;
+                            break;
+                        }
+                        
+                        // 如果返回的数据少于请求的数量，说明没有更多数据了
+                        if (newCandles.length < 500) {
+                            hasMoreData = false;
+                            break;
+                        }
                     } else {
-                        // 没有新数据了
                         hasMoreData = false;
+                        break;
                     }
-                } else {
-                    hasMoreData = false;
                 }
+                
+                console.log(`历史数据加载完成，共加载 ${loadedCount} 条，总数据量 ${allCandles.length} 条`);
             } catch (error) {
-                console.error('加载历史数据失败:', error);
+                console.error('持续加载历史数据失败:', error);
             } finally {
                 isLoadingMore = false;
             }
+        }
+        
+        // 持续加载更新数据直到缓冲区足够
+        async function loadMoreNewerUntilEnough(logicalRange) {
+            if (isLoadingNewer || !hasNewerData) return;
+            
+            isLoadingNewer = true;
+            let loadedCount = 0;
+            const targetBuffer = 2000;
+            
+            try {
+                while (hasNewerData && loadedCount < targetBuffer) {
+                    const afterTs = newestTimestamp * 1000;
+                    const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=500&source=${currentSource}&after=${afterTs}`;
+                    const response = await fetch(url);
+                    const result = await response.json();
+                    
+                    if (result.code === 0 && result.data && result.data.length > 0) {
+                        const newCandles = result.data;
+                        
+                        const existingTimes = new Set(allCandles.map(c => c.time));
+                        const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
+                        
+                        if (uniqueNewCandles.length > 0) {
+                            allCandles = [...allCandles, ...uniqueNewCandles];
+                            allCandles.sort((a, b) => a.time - b.time);
+                            newestTimestamp = allCandles[allCandles.length - 1].time;
+                            loadedCount += uniqueNewCandles.length;
+                            
+                            updateChartData();
+                        } else {
+                            hasNewerData = false;
+                            break;
+                        }
+                        
+                        if (newCandles.length < 500) {
+                            hasNewerData = false;
+                            break;
+                        }
+                    } else {
+                        hasNewerData = false;
+                        break;
+                    }
+                }
+                
+                console.log(`最新数据加载完成，共加载 ${loadedCount} 条，总数据量 ${allCandles.length} 条`);
+            } catch (error) {
+                console.error('持续加载更新数据失败:', error);
+            } finally {
+                isLoadingNewer = false;
+            }
+        }
+        
+        // 更新图表数据的通用函数
+        function updateChartData() {
+            candleSeries.setData(allCandles);
+            const volumeData = allCandles.map(c => ({
+                time: c.time,
+                value: c.volume,
+                color: c.close >= c.open ? '#26a69a80' : '#ef535080',
+            }));
+            volumeSeries.setData(volumeData);
         }
 
         // 显示错误
@@ -732,7 +815,9 @@
                     allCandles = candles;
                     if (candles.length > 0) {
                         oldestTimestamp = candles[0].time;
+                        newestTimestamp = candles[candles.length - 1].time;
                         hasMoreData = true;
+                        hasNewerData = true;
                     }
                     
                     candleSeries.setData(candles);
