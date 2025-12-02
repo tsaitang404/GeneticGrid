@@ -377,6 +377,12 @@ createApp({
         const moreTimeframe = ref('');
         const customInterval = ref('');
         const showCustomInterval = ref(false);
+        
+        // Drawing Tools State
+        const drawingCanvas = ref(null);
+        const currentTool = ref('cursor');
+        const drawings = reactive([]);
+        const currentDrawing = ref(null);
 
         const mainIndicatorsConfig = {
             ma: { label: 'MA (移动平均线)', title: 'Moving Average' },
@@ -422,6 +428,191 @@ createApp({
         let refreshInterval = null;
         let isTooltipLocked = false;
         let lockedCandleTime = null;
+
+        // Drawing Tools Logic
+        const setTool = (tool) => {
+            currentTool.value = tool;
+            currentDrawing.value = null;
+            if (drawingCanvas.value) {
+                drawingCanvas.value.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
+                drawingCanvas.value.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
+            }
+        };
+
+        const clearDrawings = () => {
+            drawings.length = 0;
+            currentDrawing.value = null;
+            renderDrawings();
+        };
+
+        const getCanvasPoint = (e) => {
+            const rect = drawingCanvas.value.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        };
+
+        const pointToLogical = (point) => {
+            if (!chart || !candleSeries) return null;
+            const time = chart.timeScale().coordinateToTime(point.x);
+            const price = candleSeries.coordinateToPrice(point.y);
+            if (time === null || price === null) return null;
+            return { time, price };
+        };
+
+        const logicalToPoint = (logical) => {
+            if (!chart || !candleSeries) return null;
+            const x = chart.timeScale().timeToCoordinate(logical.time);
+            const y = candleSeries.priceToCoordinate(logical.price);
+            if (x === null || y === null) return null;
+            return { x, y };
+        };
+
+        const handleCanvasClick = (e) => {
+            if (currentTool.value === 'cursor') return;
+            const point = getCanvasPoint(e);
+            const logical = pointToLogical(point);
+            if (!logical) return;
+
+            if (!currentDrawing.value) {
+                // Start new drawing
+                currentDrawing.value = {
+                    type: currentTool.value,
+                    points: [logical]
+                };
+                
+                if (currentTool.value === 'horizontal') {
+                    drawings.push({ ...currentDrawing.value });
+                    currentDrawing.value = null;
+                }
+            } else {
+                // Finish drawing
+                currentDrawing.value.points.push(logical);
+                drawings.push({ ...currentDrawing.value });
+                currentDrawing.value = null;
+                // Reset tool to cursor after drawing? Or keep it? Let's keep it for continuous drawing.
+                // If we want one-off, uncomment: setTool('cursor');
+            }
+            renderDrawings();
+        };
+
+        const handleCanvasMove = (e) => {
+            if (!currentDrawing.value) return;
+            const point = getCanvasPoint(e);
+            const logical = pointToLogical(point);
+            if (!logical) return;
+            
+            // Update preview
+            // We don't modify the stored points, just use this for rendering preview
+            renderDrawings(logical);
+        };
+
+        const renderDrawings = (previewPoint = null) => {
+            if (!drawingCanvas.value || !chart) return;
+            const ctx = drawingCanvas.value.getContext('2d');
+            const { width, height } = drawingCanvas.value;
+            ctx.clearRect(0, 0, width, height);
+
+            const drawShape = (drawing, overrideLastPoint = null) => {
+                const points = drawing.points.map(p => logicalToPoint(p));
+                if (overrideLastPoint) {
+                    const p = logicalToPoint(overrideLastPoint);
+                    if (p) points.push(p);
+                }
+                
+                // Filter out invalid points (off-screen points might return null coordinate? No, they return coordinate outside range)
+                // timeToCoordinate returns null if time is not in the scale? 
+                // Actually timeToCoordinate returns null if the time is not found in the data? 
+                // If we use timestamps, it should interpolate.
+                // Let's check if points are valid.
+                if (points.some(p => p === null)) return;
+
+                ctx.strokeStyle = '#2962FF';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                if (drawing.type === 'line') {
+                    if (points.length < 2) return;
+                    ctx.moveTo(points[0].x, points[0].y);
+                    ctx.lineTo(points[1].x, points[1].y);
+                    ctx.stroke();
+                } else if (drawing.type === 'ray') {
+                    if (points.length < 2) return;
+                    ctx.moveTo(points[0].x, points[0].y);
+                    const dx = points[1].x - points[0].x;
+                    const dy = points[1].y - points[0].y;
+                    // Extend to screen edge
+                    const slope = dy / dx;
+                    let endX, endY;
+                    if (dx > 0) endX = width; else endX = 0;
+                    endY = points[0].y + slope * (endX - points[0].x);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                } else if (drawing.type === 'horizontal') {
+                    if (points.length < 1) return;
+                    ctx.moveTo(0, points[0].y);
+                    ctx.lineTo(width, points[0].y);
+                    ctx.stroke();
+
+                    // Draw price label
+                    const price = drawing.points[0].price;
+                    const formatNum = (num) => num >= 1000 ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : (num >= 1 ? num.toFixed(4) : num.toPrecision(4));
+                    const text = formatNum(price);
+                    
+                    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                    const textMetrics = ctx.measureText(text);
+                    const textWidth = textMetrics.width;
+                    const padding = 6;
+                    const boxHeight = 20;
+                    const boxWidth = textWidth + padding * 2;
+                    const boxX = width - boxWidth;
+                    const boxY = points[0].y - boxHeight / 2;
+
+                    ctx.fillStyle = '#2962FF';
+                    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(text, boxX + padding, points[0].y);
+                } else if (drawing.type === 'fib') {
+                    if (points.length < 2) return;
+                    const y1 = points[0].y;
+                    const y2 = points[1].y;
+                    const diff = y2 - y1;
+                    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+                    levels.forEach(level => {
+                        const y = y1 + diff * level;
+                        ctx.beginPath();
+                        ctx.moveTo(points[0].x, y);
+                        ctx.lineTo(points[1].x, y); // Or full width? Usually fib is between time range or full width. Let's do full width for now or between x1, x2?
+                        // Standard fib retracement is usually width of the trend. Let's do width of trend.
+                        // Actually, let's do full width for visibility.
+                        // ctx.lineTo(width, y); ctx.moveTo(0, y);
+                        // Let's stick to x1-x2 for now.
+                        ctx.stroke();
+                        ctx.fillStyle = '#2962FF';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(`${(level * 100).toFixed(1)}%`, points[1].x + 5, y + 3);
+                    });
+                } else if (drawing.type === 'parallel') {
+                    if (points.length < 2) return;
+                    const y1 = points[0].y;
+                    const y2 = points[1].y;
+                    const diff = y2 - y1;
+                    // Draw 5 parallel lines
+                    for (let i = -2; i <= 2; i++) {
+                        const y = y1 + diff * i;
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(width, y);
+                        ctx.stroke();
+                    }
+                }
+            };
+
+            drawings.forEach(d => drawShape(d));
+            if (currentDrawing.value) {
+                drawShape(currentDrawing.value, previewPoint);
+            }
+        };
 
         const initWorker = () => {
             const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
@@ -480,11 +671,29 @@ createApp({
                 if (entries.length === 0 || !chart) return;
                 const { width, height } = entries[0].contentRect;
                 chart.applyOptions({ width, height });
+                if (drawingCanvas.value) {
+                    drawingCanvas.value.width = width;
+                    drawingCanvas.value.height = height;
+                    renderDrawings();
+                }
             }).observe(chartRef.value);
 
-            chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
+            chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+                onVisibleRangeChange(range);
+                renderDrawings();
+            });
             chart.subscribeCrosshairMove(onCrosshairMove);
             chart.subscribeClick(onChartClick);
+
+            if (drawingCanvas.value) {
+                drawingCanvas.value.width = chartRef.value.clientWidth;
+                drawingCanvas.value.height = chartRef.value.clientHeight;
+                // Remove old listeners to avoid duplicates if initChart is called multiple times
+                drawingCanvas.value.removeEventListener('click', handleCanvasClick);
+                drawingCanvas.value.removeEventListener('mousemove', handleCanvasMove);
+                drawingCanvas.value.addEventListener('click', handleCanvasClick);
+                drawingCanvas.value.addEventListener('mousemove', handleCanvasMove);
+            }
         };
 
         const loadCandlesticks = async (shouldFit = true) => {
@@ -903,7 +1112,8 @@ createApp({
             chartRef,
             refreshData, toggleMainIndicator, switchSubIndicator,
             toggleSettings, changeColorScheme, hideError, retryLoad,
-            setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh
+            setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh,
+            drawingCanvas, currentTool, setTool, clearDrawings
         };
     }
 }).mount('#app');
