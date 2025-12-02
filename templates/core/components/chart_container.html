@@ -6,7 +6,8 @@
             <div class="error-icon">⚠️</div>
             <div class="error-title">图表加载失败</div>
             <div class="error-desc">[[ chartError.message ]]</div>
-            <button class="retry-btn" @click="initChart">重试</button>
+            <div class="error-detail" v-if="chartError.detail">[[ chartError.detail ]]</div>
+            <button class="retry-btn" @click="retryLoad">重试</button>
         </div>
     </div>
 
