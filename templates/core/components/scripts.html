@@ -600,15 +600,15 @@
             tooltip.style.display = 'none';
             tooltip.innerHTML = `
                 <div class="tooltip-time" id="tooltip-time"></div>
-                <div class="tooltip-row">
+                <div class="tooltip-row" id="row-open">
                     <span class="tooltip-label">开盘</span>
                     <span class="tooltip-value" id="tooltip-open">--</span>
                 </div>
-                <div class="tooltip-row">
+                <div class="tooltip-row" id="row-high">
                     <span class="tooltip-label">最高</span>
                     <span class="tooltip-value" id="tooltip-high">--</span>
                 </div>
-                <div class="tooltip-row">
+                <div class="tooltip-row" id="row-low">
                     <span class="tooltip-label">最低</span>
                     <span class="tooltip-value" id="tooltip-low">--</span>
                 </div>
@@ -629,6 +629,13 @@
         } else {
             container.appendChild(existingTooltip);
         }
+
+        // 添加无数据遮罩层
+        const noDataOverlay = document.createElement('div');
+        noDataOverlay.id = 'no-data-overlay';
+        noDataOverlay.style.cssText = 'position: absolute; left: 0; top: 0; bottom: 28px; width: 0; background: rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.2); display: none; pointer-events: none; z-index: 5; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.5); font-size: 13px; overflow: hidden; white-space: nowrap; backdrop-filter: blur(1px);';
+        noDataOverlay.innerText = '无数据';
+        container.appendChild(noDataOverlay);
         
         // 重置数据状态
         allCandles = [];
@@ -669,15 +676,26 @@
 
         const colors = getColors();
 
-        // K线序列
-        candleSeries = chart.addCandlestickSeries({
-            upColor: colors.up,
-            downColor: colors.down,
-            borderDownColor: colors.down,
-            borderUpColor: colors.up,
-            wickDownColor: colors.down,
-            wickUpColor: colors.up,
-        });
+        // 根据 currentBar 决定使用 K线图还是折线图
+        if (currentBar === 'tick') {
+            // 分时图使用 AreaSeries
+            candleSeries = chart.addAreaSeries({
+                lineColor: '#2962FF',
+                topColor: 'rgba(41, 98, 255, 0.3)',
+                bottomColor: 'rgba(41, 98, 255, 0)',
+                lineWidth: 2,
+            });
+        } else {
+            // K线序列
+            candleSeries = chart.addCandlestickSeries({
+                upColor: colors.up,
+                downColor: colors.down,
+                borderDownColor: colors.down,
+                borderUpColor: colors.up,
+                wickDownColor: colors.down,
+                wickUpColor: colors.up,
+            });
+        }
 
         // 成交量序列
         volumeSeries = chart.addHistogramSeries({
@@ -706,18 +724,35 @@
             crosshairMarkerVisible: false,
         });
         
-        // 创建用于高亮选中蜡烛的系列（白色边框）
-        highlightSeries = chart.addCandlestickSeries({
-            upColor: 'transparent',
-            downColor: 'transparent',
-            borderUpColor: '#ffffff',
-            borderDownColor: '#ffffff',
-            wickUpColor: '#ffffff',
-            wickDownColor: '#ffffff',
-            borderVisible: true,
-            priceLineVisible: false,
-            lastValueVisible: false,
-        });
+        // 创建用于高亮选中蜡烛的系列
+        if (currentBar !== 'tick') {
+            // K线图：白色边框蜡烛
+            highlightSeries = chart.addCandlestickSeries({
+                upColor: 'transparent',
+                downColor: 'transparent',
+                borderUpColor: '#ffffff',
+                borderDownColor: '#ffffff',
+                wickUpColor: '#ffffff',
+                wickDownColor: '#ffffff',
+                borderVisible: true,
+                priceLineVisible: false,
+                lastValueVisible: false,
+            });
+        } else {
+            // 分时图：白色垂直线 (使用 Histogram 模拟)
+            highlightSeries = chart.addHistogramSeries({
+                color: 'rgba(255, 255, 255, 0.3)',
+                priceFormat: { type: 'custom', formatter: () => '' },
+                priceScaleId: 'highlight_overlay',
+                lastValueVisible: false,
+                priceLineVisible: false,
+            });
+            // 配置独立轴使其充满高度
+            chart.priceScale('highlight_overlay').applyOptions({
+                scaleMargins: { top: 0, bottom: 0 },
+                visible: false
+            });
+        }
 
         // 自适应大小
         new ResizeObserver(entries => {
@@ -778,15 +813,24 @@
             if (tooltip) {
                 tooltip.classList.add('locked');
             }
-            // 添加白色边框高亮
+            // 添加高亮
             if (highlightSeries) {
-                highlightSeries.setData([{
-                    time: param.time,
-                    open: candleData.open,
-                    high: candleData.high,
-                    low: candleData.low,
-                    close: candleData.close
-                }]);
+                if (currentBar !== 'tick') {
+                    highlightSeries.setData([{
+                        time: param.time,
+                        open: candleData.open,
+                        high: candleData.high,
+                        low: candleData.low,
+                        close: candleData.close
+                    }]);
+                } else {
+                    // 分时图高亮：一条满高的线
+                    highlightSeries.setData([{
+                        time: param.time,
+                        value: 1,
+                        color: 'rgba(255, 255, 255, 0.3)'
+                    }]);
+                }
             }
             // 更新tooltip内容
             updateTooltipContent(param);
@@ -838,13 +882,44 @@
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            second: currentBar === 'tick' ? '2-digit' : undefined
         });
         
-        // 计算涨跌幅
-        const change = candleData.close - candleData.open;
-        const changePercent = ((change / candleData.open) * 100).toFixed(2);
-        const isUp = change >= 0;
+        // 获取数据
+        let open, high, low, close;
+        if (currentBar === 'tick') {
+            // 分时图只有 value (即 close)
+            close = candleData.value;
+            // 尝试从原始数据中查找对应的 open (如果有的话，但这里只有 value)
+            // 实际上，分时图通常只显示当前价格。
+            // 为了计算涨跌幅，我们需要前一个点的价格，或者当天的开盘价。
+            // 这里简化处理，只显示价格。
+            open = close; // 占位
+            high = close;
+            low = close;
+        } else {
+            open = candleData.open;
+            high = candleData.high;
+            low = candleData.low;
+            close = candleData.close;
+        }
+        
+        // 计算涨跌幅 (对于分时图，这里计算的是相对于前一个点的变化，或者如果能获取到 open24h 更好)
+        // 但在这里我们只能获取到当前点的数据。
+        // 对于 K 线，change 是 close - open。
+        // 对于分时图，我们暂时无法计算准确的涨跌幅（除非我们有前一个点的数据）。
+        // 简单起见，分时图不显示涨跌幅，或者显示 0。
+        let change = 0;
+        let changePercent = "0.00";
+        let isUp = true;
+        
+        if (currentBar !== 'tick') {
+            change = close - open;
+            changePercent = ((change / open) * 100).toFixed(2);
+            isUp = change >= 0;
+        }
+        
         const colorClass = isUp ? 'up' : 'down';
         
         // 格式化数字
@@ -870,6 +945,11 @@
         const changeEl = document.getElementById('tooltip-change');
         const volumeEl = document.getElementById('tooltip-volume');
         
+        // 行元素
+        const rowOpen = document.getElementById('row-open');
+        const rowHigh = document.getElementById('row-high');
+        const rowLow = document.getElementById('row-low');
+        
         // 如果任何元素不存在，直接返回
         if (!timeEl || !openEl || !highEl || !lowEl || !closeEl || !changeEl || !volumeEl) {
             return;
@@ -877,15 +957,42 @@
         
         // 更新 tooltip 内容
         timeEl.textContent = timeStr;
-        openEl.textContent = formatNum(candleData.open);
-        highEl.textContent = formatNum(candleData.high);
-        lowEl.textContent = formatNum(candleData.low);
         
-        closeEl.textContent = formatNum(candleData.close);
+        if (currentBar === 'tick') {
+            // 分时图隐藏 OHLC
+            if (rowOpen) rowOpen.style.display = 'none';
+            if (rowHigh) rowHigh.style.display = 'none';
+            if (rowLow) rowLow.style.display = 'none';
+            
+            // 更改标签
+            const closeLabel = closeEl.previousElementSibling;
+            if (closeLabel) closeLabel.textContent = '价格';
+            
+            // 隐藏涨跌幅 (因为没有参照)
+            const changeRow = changeEl.parentElement;
+            if (changeRow) changeRow.style.display = 'none';
+            
+        } else {
+            if (rowOpen) rowOpen.style.display = 'flex';
+            if (rowHigh) rowHigh.style.display = 'flex';
+            if (rowLow) rowLow.style.display = 'flex';
+            
+            const closeLabel = closeEl.previousElementSibling;
+            if (closeLabel) closeLabel.textContent = '收盘';
+            
+            const changeRow = changeEl.parentElement;
+            if (changeRow) changeRow.style.display = 'flex';
+            
+            openEl.textContent = formatNum(open);
+            highEl.textContent = formatNum(high);
+            lowEl.textContent = formatNum(low);
+            
+            changeEl.textContent = `${isUp ? '+' : ''}${changePercent}%`;
+            changeEl.className = `tooltip-value ${colorClass}`;
+        }
+        
+        closeEl.textContent = formatNum(close);
         closeEl.className = `tooltip-value ${colorClass}`;
-        
-        changeEl.textContent = `${isUp ? '+' : ''}${changePercent}%`;
-        changeEl.className = `tooltip-value ${colorClass}`;
         
         const volume = volumeData ? volumeData.value : (candleData.volume || 0);
         volumeEl.textContent = formatVolume(volume);
@@ -900,58 +1007,84 @@
         const dataLength = allCandles.length;
         if (dataLength === 0) return;
         
-        // 检查左侧（历史数据）- 更激进的策略，确保始终有足够数据
-        // 当可见范围的起始位置接近已加载数据的边界时，立即加载更多
-        if (logicalRange.from < 500 && hasMoreData && !isLoadingMore) {
-            // 立即触发加载
-            loadMoreHistoryUntilEnough(logicalRange);
+        // 检查左侧（历史数据）
+        if (hasMoreData && !isLoadingMore) {
+            let needed = 0;
+            // 如果 from < 0，说明用户已经拖到了数据之外，需要加载 abs(from) + 缓冲
+            if (logicalRange.from < 0) {
+                needed = Math.abs(Math.floor(logicalRange.from)) + 1000; 
+            } 
+            // 如果 from < 1000，说明接近边界，需要预加载
+            else if (logicalRange.from < 1000) {
+                needed = 1000; 
+            }
+            
+            if (needed > 0) {
+                loadMoreHistory(needed);
+            }
         }
         
         // 检查右侧（更新数据）
         if (logicalRange.to > dataLength - 500 && hasNewerData && !isLoadingNewer) {
             loadMoreNewerUntilEnough(logicalRange);
         }
+
+        updateNoDataOverlay();
+    }
+
+    // 更新无数据遮罩层
+    function updateNoDataOverlay() {
+        const overlay = document.getElementById('no-data-overlay');
+        if (!overlay || !chart) return;
+
+        if (!hasMoreData && allCandles.length > 0) {
+            const firstTime = allCandles[0].time;
+            const x = chart.timeScale().timeToCoordinate(firstTime);
+            
+            if (x !== null && x > 0) {
+                overlay.style.display = 'flex';
+                overlay.style.width = `${x}px`;
+            } else {
+                overlay.style.display = 'none';
+            }
+        } else {
+            overlay.style.display = 'none';
+        }
     }
     
-    // 持续加载历史数据直到缓冲区足够
-    async function loadMoreHistoryUntilEnough(logicalRange) {
+    // 加载指定数量的历史数据
+    async function loadMoreHistory(targetCount) {
         if (isLoadingMore || !hasMoreData) return;
         
         isLoadingMore = true;
         let loadedCount = 0;
-        const targetBuffer = 2000; // 进一步增加目标缓冲区到2000条（约33小时的1分钟数据）
+        const BATCH_LIMIT = 2000; // 单次请求最大限制
         
         try {
-            // 持续加载直到缓冲区足够或没有更多数据
-            while (hasMoreData && loadedCount < targetBuffer) {
+            let newCandlesAccumulator = [];
+            
+            // 循环请求直到满足目标数量或没有更多数据
+            while (hasMoreData && loadedCount < targetCount) {
                 const beforeTs = oldestTimestamp * 1000;
-                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=500&source=${currentSource}&before=${beforeTs}`;
+                // 动态计算本次请求数量
+                const currentLimit = Math.min(targetCount - loadedCount, BATCH_LIMIT);
+                
+                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=${currentLimit}&source=${currentSource}&before=${beforeTs}`;
                 const response = await fetch(url);
                 const result = await response.json();
                 
                 if (result.code === 0 && result.data && result.data.length > 0) {
-                    const newCandles = result.data;
+                    const fetchedCandles = result.data;
                     
-                    // 过滤掉已存在的数据
-                    const existingTimes = new Set(allCandles.map(c => c.time));
-                    const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
+                    // 累积数据 (注意顺序：新获取的在前面，因为它们更早)
+                    newCandlesAccumulator = [...fetchedCandles, ...newCandlesAccumulator];
                     
-                    if (uniqueNewCandles.length > 0) {
-                        allCandles = [...uniqueNewCandles, ...allCandles];
-                        allCandles.sort((a, b) => a.time - b.time);
-                        oldestTimestamp = allCandles[0].time;
-                        loadedCount += uniqueNewCandles.length;
-                        
-                        // 每次加载后更新图表
-                        updateChartData();
-                    } else {
-                        // 没有新的唯一数据
-                        hasMoreData = false;
-                        break;
-                    }
+                    // 更新 oldestTimestamp 用于下一次循环
+                    oldestTimestamp = fetchedCandles[0].time;
+                    loadedCount += fetchedCandles.length;
                     
                     // 如果返回的数据少于请求的数量，说明没有更多数据了
-                    if (newCandles.length < 500) {
+                    if (fetchedCandles.length < currentLimit) {
                         hasMoreData = false;
                         break;
                     }
@@ -961,9 +1094,22 @@
                 }
             }
             
-            console.log(`历史数据加载完成，共加载 ${loadedCount} 条，总数据量 ${allCandles.length} 条`);
+            // 批量更新图表
+            if (newCandlesAccumulator.length > 0) {
+                const existingTimes = new Set(allCandles.map(c => c.time));
+                const uniqueNewCandles = newCandlesAccumulator.filter(c => !existingTimes.has(c.time));
+                
+                if (uniqueNewCandles.length > 0) {
+                    allCandles = [...uniqueNewCandles, ...allCandles];
+                    allCandles.sort((a, b) => a.time - b.time);
+                    oldestTimestamp = allCandles[0].time;
+                    
+                    updateChartData();
+                    console.log(`历史数据加载完成，本次共加载 ${uniqueNewCandles.length} 条`);
+                }
+            }
         } catch (error) {
-            console.error('持续加载历史数据失败:', error);
+            console.error('加载历史数据失败:', error);
         } finally {
             isLoadingMore = false;
         }
@@ -1023,20 +1169,46 @@
     // 更新图表数据的通用函数
     function updateChartData() {
         const colors = getColors();
-        candleSeries.setData(allCandles);
+        
+        if (currentBar === 'tick') {
+            // 分时图数据转换
+            const lineData = allCandles.map(c => ({
+                time: c.time,
+                value: c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0))
+            }));
+            candleSeries.setData(lineData);
+        } else {
+            candleSeries.setData(allCandles);
+        }
         
         // 更新成交量
         if (indicators.vol.enabled && indicators.vol.series) {
-            const volumeData = allCandles.map(c => ({
-                time: c.time,
-                value: c.volume,
-                color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
-            }));
+            const volumeData = allCandles.map((c, i, arr) => {
+                let isUp = true;
+                if (c.open !== undefined && c.close !== undefined) {
+                    isUp = c.close >= c.open;
+                } else if (i > 0) {
+                    const prev = arr[i-1];
+                    const currPrice = c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0));
+                    const prevPrice = prev.close !== undefined ? prev.close : (prev.price !== undefined ? prev.price : (prev.value !== undefined ? prev.value : 0));
+                    if (currPrice !== undefined && prevPrice !== undefined) {
+                        isUp = currPrice >= prevPrice;
+                    }
+                }
+                return {
+                    time: c.time,
+                    value: c.volume,
+                    color: isUp ? colors.upTransparent : colors.downTransparent,
+                };
+            });
             indicators.vol.series.setData(volumeData);
         }
 
         // 触发 Worker 计算
         triggerWorkerCalculation();
+        
+        // 更新遮罩层
+        updateNoDataOverlay();
     }
 
     // 切换主图指标
@@ -1055,11 +1227,24 @@
                     indicators.vol.series.applyOptions({ visible: true });
                     // 重新填充数据
                     const colors = getColors();
-                    const volumeData = allCandles.map(c => ({
-                        time: c.time,
-                        value: c.volume,
-                        color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
-                    }));
+                    const volumeData = allCandles.map((c, i, arr) => {
+                        let isUp = true;
+                        if (c.open !== undefined && c.close !== undefined) {
+                            isUp = c.close >= c.open;
+                        } else if (i > 0) {
+                            const prev = arr[i-1];
+                            const currPrice = c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0));
+                            const prevPrice = prev.close !== undefined ? prev.close : (prev.price !== undefined ? prev.price : (prev.value !== undefined ? prev.value : 0));
+                            if (currPrice !== undefined && prevPrice !== undefined) {
+                                isUp = currPrice >= prevPrice;
+                            }
+                        }
+                        return {
+                            time: c.time,
+                            value: c.volume,
+                            color: isUp ? colors.upTransparent : colors.downTransparent,
+                        };
+                    });
                     indicators.vol.series.setData(volumeData);
                 }
             } else {
@@ -1295,9 +1480,11 @@
     }
 
     // 加载 K 线数据
-    async function loadCandlesticks() {
+    async function loadCandlesticks(shouldFit = true) {
         try {
-            const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=100&source=${currentSource}`);
+            // 增加初始加载数量到 500，避免初始数据过少导致左侧空白
+            const limit = 500;
+            const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=${limit}&source=${currentSource}`);
             const result = await response.json();
             
             if (result.code === 0 && result.data) {
@@ -1309,25 +1496,22 @@
                 if (candles.length > 0) {
                     oldestTimestamp = candles[0].time;
                     newestTimestamp = candles[candles.length - 1].time;
-                    hasMoreData = true;
+                    // 如果返回的数据少于请求的数量，说明没有更多历史数据了
+                    hasMoreData = candles.length >= limit;
                     hasNewerData = true;
+                } else {
+                    hasMoreData = false;
                 }
                 
-                candleSeries.setData(candles);
+                updateChartData();
 
-                const colors = getColors();
-                // 成交量数据
-                const volumeData = candles.map(c => ({
-                    time: c.time,
-                    value: c.volume,
-                    color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
-                }));
-                volumeSeries.setData(volumeData);
+                if (shouldFit) {
+                    chart.timeScale().fitContent();
+                }
 
-                chart.timeScale().fitContent();
-                
-                // 触发 Worker 计算
-                triggerWorkerCalculation();
+                // 兜底机制：如果数据量较少，自动尝试加载更多历史数据
+                ensureEnoughHistoryData();
+
             } else {
                 // API 返回错误
                 const errorMsg = result.error || 'K线数据加载失败';
@@ -1338,6 +1522,18 @@
             console.error('加载K线失败:', error);
             showError(`网络错误: ${error.message}`);
             showChartError('无法连接到服务器', error.message);
+        }
+    }
+
+    // 兜底机制：确保有足够的历史数据
+    function ensureEnoughHistoryData() {
+        if (isLoadingMore || !hasMoreData) return;
+        
+        // 如果当前数据量少于 1000 条，且还有更多数据，则自动加载
+        // 这可以防止左侧出现大片空白
+        if (allCandles.length < 1000) {
+            console.log('数据量不足，触发兜底加载...');
+            loadMoreHistory(1000);
         }
     }
 
@@ -1381,8 +1577,8 @@
     }
 
     // 刷新数据
-    function refreshData() {
-        loadCandlesticks();
+    function refreshData(auto = false) {
+        loadCandlesticks(!auto);
         loadTicker();
     }
 
@@ -1404,6 +1600,7 @@
             currentBar = btn.dataset.bar;
             document.getElementById('more-timeframes').value = '';
             document.getElementById('custom-interval').style.display = 'none';
+            initChart();
             refreshData();
         });
     });
@@ -1422,6 +1619,7 @@
             document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
             currentBar = value;
             document.getElementById('custom-interval').style.display = 'none';
+            initChart();
             refreshData();
         }
     });
@@ -1436,6 +1634,7 @@
                 if (match) {
                     document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
                     currentBar = customValue.toLowerCase();
+                    initChart();
                     refreshData();
                 } else {
                     alert('格式错误！请使用格式：数字+单位\\n例如：2H (2小时), 7D (7天), 90m (90分钟)\\n单位：s(秒) m(分) H(时) D(日) W(周)');
@@ -1461,6 +1660,6 @@
     initChart();
     refreshData();
 
-    // 定时刷新（每30秒）
-    setInterval(refreshData, 30000);
+    // 定时刷新（每2秒）
+    setInterval(() => refreshData(true), 2000);
 </script>
