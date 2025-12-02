@@ -1,14 +1,19 @@
 <div id="chart-container" style="position: relative;">
     <div class="loading" v-if="isLoading">加载中...</div>
 
-    <div class="drawing-toolbar">
-        <button :class="{ active: currentTool === 'cursor' }" @click="setTool('cursor')" title="光标">👆</button>
-        <button :class="{ active: currentTool === 'line' }" @click="setTool('line')" title="直线">╱</button>
-        <button :class="{ active: currentTool === 'ray' }" @click="setTool('ray')" title="射线">➚</button>
-        <button :class="{ active: currentTool === 'horizontal' }" @click="setTool('horizontal')" title="横线">─</button>
-        <button :class="{ active: currentTool === 'fib' }" @click="setTool('fib')" title="斐波那契回调">≡</button>
-        <button :class="{ active: currentTool === 'parallel' }" @click="setTool('parallel')" title="等距通道">∥</button>
-        <button @click="clearDrawings" title="清除所有">🗑️</button>
+    <div class="drawing-controls">
+        <button v-if="!isDrawingToolbarExpanded" class="drawing-toggle-btn" @click="isDrawingToolbarExpanded = true" title="画线工具">✏️</button>
+        <div v-else class="drawing-toolbar">
+            <button class="close-btn" @click="isDrawingToolbarExpanded = false" title="收起">✕</button>
+            <div class="separator"></div>
+            <button :class="{ active: currentTool === 'cursor' }" @click="setTool('cursor')" title="光标">👆</button>
+            <button :class="{ active: currentTool === 'line' }" @click="setTool('line')" title="直线">╱</button>
+            <button :class="{ active: currentTool === 'ray' }" @click="setTool('ray')" title="射线">➚</button>
+            <button :class="{ active: currentTool === 'horizontal' }" @click="setTool('horizontal')" title="横线">─</button>
+            <button :class="{ active: currentTool === 'fib' }" @click="setTool('fib')" title="斐波那契回调">≡</button>
+            <button :class="{ active: currentTool === 'parallel' }" @click="setTool('parallel')" title="等距通道">∥</button>
+            <button @click="clearDrawings" title="清除所有">🗑️</button>
+        </div>
     </div>
     <canvas id="drawing-canvas" ref="drawingCanvas" style="position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none;"></canvas>
     
