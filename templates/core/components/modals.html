@@ -1,20 +1,20 @@
 <!-- 设置模态框 -->
-<div class="modal-overlay" id="settings-modal">
+<div class="modal-overlay" :class="{ show: settings.showModal }" @click.self="toggleSettings">
     <div class="modal">
         <div class="modal-header">
             <div class="modal-title">偏好设置</div>
-            <button class="modal-close" onclick="toggleSettings()">×</button>
+            <button class="modal-close" @click="toggleSettings">×</button>
         </div>
         <div class="modal-body">
             <div class="setting-item">
                 <span class="setting-label">涨跌颜色</span>
                 <div class="setting-options">
                     <label class="radio-label">
-                        <input type="radio" name="color-scheme" value="green-up" checked onchange="changeColorScheme('green-up')">
+                        <input type="radio" name="color-scheme" value="green-up" v-model="settings.colorScheme" @change="changeColorScheme('green-up')">
                         <span><span class="color-preview" style="background:#26a69a"></span>绿涨<span class="color-preview" style="background:#ef5350; margin-left:4px"></span>红跌</span>
                     </label>
                     <label class="radio-label">
-                        <input type="radio" name="color-scheme" value="red-up" onchange="changeColorScheme('red-up')">
+                        <input type="radio" name="color-scheme" value="red-up" v-model="settings.colorScheme" @change="changeColorScheme('red-up')">
                         <span><span class="color-preview" style="background:#ef5350"></span>红涨<span class="color-preview" style="background:#26a69a; margin-left:4px"></span>绿跌</span>
                     </label>
                 </div>

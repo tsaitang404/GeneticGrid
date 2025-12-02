@@ -1,16 +1,28 @@
-<div id="chart-container">
-    <div class="loading">加载中...</div>
+<div id="chart-container" style="position: relative;">
+    <div class="loading" v-if="isLoading">加载中...</div>
+    
+        <div class="chart-error" v-if="chartError.show">
+        <div class="error-content">
+            <div class="error-icon">⚠️</div>
+            <div class="error-title">图表加载失败</div>
+            <div class="error-desc">[[ chartError.message ]]</div>
+            <button class="retry-btn" @click="initChart">重试</button>
+        </div>
+    </div>
+
+    <div ref="chartRef" style="width: 100%; height: 100%;"></div>
+
     <div class="candle-tooltip" id="candle-tooltip" style="display: none;">
         <div class="tooltip-time" id="tooltip-time"></div>
-        <div class="tooltip-row">
+        <div class="tooltip-row" id="row-open">
             <span class="tooltip-label">开盘</span>
             <span class="tooltip-value" id="tooltip-open">--</span>
         </div>
-        <div class="tooltip-row">
+        <div class="tooltip-row" id="row-high">
             <span class="tooltip-label">最高</span>
             <span class="tooltip-value" id="tooltip-high">--</span>
         </div>
-        <div class="tooltip-row">
+        <div class="tooltip-row" id="row-low">
             <span class="tooltip-label">最低</span>
             <span class="tooltip-value" id="tooltip-low">--</span>
         </div>
@@ -27,4 +39,5 @@
             <span class="tooltip-value" id="tooltip-volume">--</span>
         </div>
     </div>
+    <div id="no-data-overlay" style="position: absolute; left: 0; top: 0; bottom: 28px; width: 0; background: rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.2); display: none; pointer-events: none; z-index: 5; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.5); font-size: 13px; overflow: hidden; white-space: nowrap; backdrop-filter: blur(1px);">无数据</div>
 </div>
