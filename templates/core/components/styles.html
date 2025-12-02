@@ -131,6 +131,35 @@
         background: #2a2e39;
         margin: 0 2px;
     }
+    .tool-settings-popup {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 8px;
+        background: #1e222d;
+        border: 1px solid #2a2e39;
+        padding: 6px 10px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        z-index: 100;
+        white-space: nowrap;
+    }
+    .tool-settings-popup::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        transform: translateX(-50%) rotate(45deg);
+        width: 8px;
+        height: 8px;
+        background: #1e222d;
+        border-left: 1px solid #2a2e39;
+        border-top: 1px solid #2a2e39;
+    }
     .drawing-toolbar button {
         background: transparent;
         border: none;

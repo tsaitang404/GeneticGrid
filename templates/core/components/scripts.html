@@ -418,6 +418,8 @@ createApp({
         const drawings = reactive([]);
         const currentDrawing = ref(null);
         const isDrawingToolbarExpanded = ref(false);
+        const parallelLevels = ref(2);
+        const showToolSettings = ref(false);
 
         const mainIndicatorsConfig = {
             ma: { label: 'MA (移动平均线)', title: 'Moving Average' },
@@ -466,8 +468,22 @@ createApp({
 
         // Drawing Tools Logic
         const setTool = (tool) => {
+            if (currentTool.value === tool) {
+                if (tool === 'parallel') {
+                    showToolSettings.value = !showToolSettings.value;
+                }
+                return;
+            }
+
             currentTool.value = tool;
             currentDrawing.value = null;
+            
+            if (tool === 'parallel') {
+                showToolSettings.value = true;
+            } else {
+                showToolSettings.value = false;
+            }
+
             if (chartRef.value) {
                 chartRef.value.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
             }
@@ -540,6 +556,8 @@ createApp({
                 if (currentTool.value === 'horizontal') {
                     drawings.push({ ...currentDrawing.value });
                     currentDrawing.value = null;
+                } else if (currentTool.value === 'parallel') {
+                    currentDrawing.value.levels = parallelLevels.value;
                 }
             } else {
                 // Finish drawing
@@ -627,20 +645,50 @@ createApp({
                     const y1 = points[0].y;
                     const y2 = points[1].y;
                     const diff = y2 - y1;
-                    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+                    
+                    const price1 = candleSeries.coordinateToPrice(y1);
+                    const colors = getColors();
+
+                    const levels = [0, 1, 1.618, 2.618, 4.236, -1, -1.618, -2.618, -4.236];
                     levels.forEach(level => {
                         const y = y1 + diff * level;
                         ctx.beginPath();
-                        ctx.lineWidth = (level === 0 || level === 0.5 || level === 1) ? 2 : 1;
+                        ctx.lineWidth = (level === 0) ? 2 : 1;
                         ctx.moveTo(0, y);
                         ctx.lineTo(width, y); 
                         ctx.stroke();
                         
-                        ctx.fillStyle = '#2962FF';
-                        ctx.font = '10px Arial';
-                        ctx.fillText(`${(level * 100).toFixed(1)}%`, points[1].x + 5, y - 2);
-
                         const price = candleSeries.coordinateToPrice(y);
+                        let text = '';
+                        let color = '#d1d4dc';
+                        
+                        if (price !== null && price1 !== null && price1 !== 0) {
+                            const change = ((price - price1) / price1 * 100);
+                            const sign = change > 0 ? '+' : '';
+                            text = `${sign}${change.toFixed(2)}%`;
+                            
+                            if (Math.abs(change) < 0.01) color = '#d1d4dc';
+                            else color = change >= 0 ? colors.up : colors.down;
+                        } else {
+                             color = '#2962FF';
+                             text = `${(level * 100).toFixed(1)}%`;
+                        }
+
+                        let rightOffset = 0;
+                        if (price !== null) {
+                            const formatNum = (num) => num >= 1000 ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : (num >= 1 ? num.toFixed(4) : num.toPrecision(4));
+                            const priceText = formatNum(price);
+                            ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                            const metrics = ctx.measureText(priceText);
+                            rightOffset = metrics.width + 12; // padding * 2
+                        }
+
+                        ctx.fillStyle = color;
+                        ctx.font = 'bold 12px Arial';
+                        ctx.textAlign = 'right';
+                        ctx.fillText(text, width - rightOffset - 5, y - 4);
+                        ctx.textAlign = 'start';
+
                         if (price !== null) drawPriceLabel(price, y);
                     });
                 } else if (drawing.type === 'parallel') {
@@ -648,7 +696,8 @@ createApp({
                     const y1 = points[0].y;
                     const y2 = points[1].y;
                     const diff = y2 - y1;
-                    for (let i = -2; i <= 2; i++) {
+                    const levels = drawing.levels || 2;
+                    for (let i = -levels; i <= levels; i++) {
                         const y = y1 + diff * i;
                         ctx.beginPath();
                         ctx.lineWidth = (i === 0) ? 2 : 1;
@@ -1229,7 +1278,7 @@ createApp({
             refreshData, toggleMainIndicator, switchSubIndicator,
             toggleSettings, changeColorScheme, changeCurrency, hideError, retryLoad,
             setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh,
-            drawingCanvas, currentTool, setTool, clearDrawings, isDrawingToolbarExpanded
+            drawingCanvas, currentTool, setTool, clearDrawings, isDrawingToolbarExpanded, parallelLevels, showToolSettings
         };
     }
 }).mount('#app');
