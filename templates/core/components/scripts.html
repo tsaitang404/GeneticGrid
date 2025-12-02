@@ -371,8 +371,42 @@ createApp({
 
         const settings = reactive({
             colorScheme: localStorage.getItem('geneticgrid_color_scheme') || 'green-up',
+            currency: localStorage.getItem('geneticgrid_currency') || 'USDT',
             showModal: false
         });
+
+        const exchangeRates = reactive({
+            'USDT': 1, 'USDC': 1, 'USD': 1,
+            'CNY': 7.25, 'EUR': 0.95, 'GBP': 0.79, 'JPY': 150, 'KRW': 1400,
+            'HKD': 7.8, 'AUD': 1.5, 'CAD': 1.4, 'CHF': 0.88, 'SGD': 1.34,
+            'INR': 84, 'RUB': 105
+        });
+
+        const fetchExchangeRates = async () => {
+            try {
+                const res = await fetch('https://open.er-api.com/v6/latest/USD');
+                const data = await res.json();
+                if (data && data.rates) {
+                    Object.keys(exchangeRates).forEach(key => {
+                        if (key !== 'USDT' && key !== 'USDC' && key !== 'USD' && data.rates[key]) {
+                            exchangeRates[key] = data.rates[key];
+                        }
+                    });
+                }
+                if (settings.currency !== 'USDT' && settings.currency !== 'USD' && settings.currency !== 'USDC') {
+                    updateChartData();
+                    loadTicker();
+                }
+            } catch (e) {
+                console.warn('获取实时汇率失败，使用默认汇率');
+            }
+        };
+
+        const getRate = () => exchangeRates[settings.currency] || 1;
+        const convertPrice = (price) => {
+            if (price === undefined || price === null) return 0;
+            return price * getRate();
+        };
         
         const moreTimeframe = ref('');
         const customInterval = ref('');
@@ -723,10 +757,24 @@ createApp({
         const updateChartData = () => {
             if (!chart || !candleSeries) return;
             const colors = getColors();
+            const rate = getRate();
+
             if (currentBar.value === 'tick') {
-                const lineData = allCandles.map(c => ({ time: c.time, value: c.close !== undefined ? c.close : (c.price || c.value || 0) }));
+                const lineData = allCandles.map(c => ({ 
+                    time: c.time, 
+                    value: (c.close !== undefined ? c.close : (c.price || c.value || 0)) * rate 
+                }));
                 candleSeries.setData(lineData);
-            } else candleSeries.setData(allCandles);
+            } else {
+                const candleData = allCandles.map(c => ({
+                    time: c.time,
+                    open: c.open * rate,
+                    high: c.high * rate,
+                    low: c.low * rate,
+                    close: c.close * rate
+                }));
+                candleSeries.setData(candleData);
+            }
             
             if (indicators.vol.enabled && indicators.vol.series) {
                 const volumeData = allCandles.map((c, i, arr) => {
@@ -754,8 +802,16 @@ createApp({
             });
             if (indicators.activeSubIndicator !== 'none') activeIndicators.push(indicators.activeSubIndicator);
             if (activeIndicators.length > 0 && allCandles.length > 0) {
+                const rate = getRate();
+                const convertedCandles = allCandles.map(c => ({
+                    ...c,
+                    open: c.open * rate,
+                    high: c.high * rate,
+                    low: c.low * rate,
+                    close: c.close * rate
+                }));
                 workerTaskCounter++;
-                indicatorWorker.postMessage({ id: workerTaskCounter, type: 'CALCULATE', data: { candles: allCandles, indicators: activeIndicators } });
+                indicatorWorker.postMessage({ id: workerTaskCounter, type: 'CALCULATE', data: { candles: convertedCandles, indicators: activeIndicators } });
             }
         };
 
@@ -863,19 +919,32 @@ createApp({
                 if (result.code === 0 && result.data && result.data.length > 0) {
                     const newCandles = result.data;
                     let hasChanges = false;
+                    const rate = getRate();
                     for (const newCandle of newCandles) {
                         if (newCandle.time === lastTime) {
                             if (newCandle.close !== lastCandle.close || newCandle.volume !== lastCandle.volume) {
                                 allCandles[allCandles.length - 1] = newCandle;
-                                if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close });
-                                else candleSeries.update(newCandle);
+                                if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close * rate });
+                                else candleSeries.update({
+                                    time: newCandle.time,
+                                    open: newCandle.open * rate,
+                                    high: newCandle.high * rate,
+                                    low: newCandle.low * rate,
+                                    close: newCandle.close * rate
+                                });
                                 hasChanges = true;
                             }
                         } else if (newCandle.time > lastTime) {
                             allCandles.push(newCandle);
                             newestTimestamp = newCandle.time;
-                            if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close });
-                            else candleSeries.update(newCandle);
+                            if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close * rate });
+                            else candleSeries.update({
+                                    time: newCandle.time,
+                                    open: newCandle.open * rate,
+                                    high: newCandle.high * rate,
+                                    low: newCandle.low * rate,
+                                    close: newCandle.close * rate
+                                });
                             hasChanges = true;
                         }
                     }
@@ -890,13 +959,14 @@ createApp({
                 const result = await response.json();
                 if (result.code === 0 && result.data) {
                     const t = result.data;
-                    const last = parseFloat(t.last);
-                    const open = parseFloat(t.open24h);
+                    const rate = getRate();
+                    const last = parseFloat(t.last) * rate;
+                    const open = parseFloat(t.open24h) * rate;
                     ticker.last = last.toLocaleString();
                     ticker.changePercent = ((last - open) / open * 100).toFixed(2);
                     ticker.isUp = last >= open;
-                    ticker.high24h = parseFloat(t.high24h).toLocaleString();
-                    ticker.low24h = parseFloat(t.low24h).toLocaleString();
+                    ticker.high24h = (parseFloat(t.high24h) * rate).toLocaleString();
+                    ticker.low24h = (parseFloat(t.low24h) * rate).toLocaleString();
                     ticker.vol24h = parseFloat(t.vol24h).toLocaleString();
                 }
             } catch (e) { console.error(e); }
@@ -917,6 +987,12 @@ createApp({
                 if (currentBar.value !== 'tick') candleSeries.applyOptions({ upColor: colors.up, downColor: colors.down, borderDownColor: colors.down, borderUpColor: colors.up, wickDownColor: colors.down, wickUpColor: colors.up });
                 updateChartData();
             }
+        };
+
+        const changeCurrency = () => {
+            localStorage.setItem('geneticgrid_currency', settings.currency);
+            updateChartData();
+            loadTicker();
         };
         
         const setBar = (bar) => { currentBar.value = bar; moreTimeframe.value = ''; showCustomInterval.value = false; initChart(); refreshData(true); };
@@ -1094,6 +1170,7 @@ createApp({
         onMounted(() => {
             initChart();
             refreshData(true);
+            fetchExchangeRates();
             refreshInterval = setInterval(() => { if (isAutoRefresh.value) refreshData(false); }, 2000);
             changeColorScheme(settings.colorScheme);
         });
@@ -1111,7 +1188,7 @@ createApp({
             mainIndicatorsConfig, subIndicatorsConfig,
             chartRef,
             refreshData, toggleMainIndicator, switchSubIndicator,
-            toggleSettings, changeColorScheme, hideError, retryLoad,
+            toggleSettings, changeColorScheme, changeCurrency, hideError, retryLoad,
             setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh,
             drawingCanvas, currentTool, setTool, clearDrawings
         };
