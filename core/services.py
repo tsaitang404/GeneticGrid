@@ -1,6 +1,23 @@
 # 行情服务 - 支持多数据源
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# 全局 Session 复用连接池
+_session = None
+
+def get_session():
+    """获取复用的 requests session，带连接池和重试"""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        # 配置重试策略
+        retry = Retry(total=2, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=retry)
+        _session.mount('https://', adapter)
+        _session.mount('http://', adapter)
+    return _session
 
 
 class MarketAPIError(Exception):
@@ -13,8 +30,9 @@ class BinanceMarketService:
     
     BASE_URL = "https://api.binance.com"
     
-    def __init__(self, timeout=10):
+    def __init__(self, timeout=5):
         self.timeout = timeout
+        self.session = get_session()
     
     def _convert_symbol(self, inst_id: str) -> str:
         """将 OKX 格式转换为 Binance 格式: BTC-USDT -> BTCUSDT"""
@@ -28,8 +46,10 @@ class BinanceMarketService:
         }
         return mapping.get(bar, "1h")
     
-    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100):
-        """获取 K 线数据"""
+    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100, before: int = None):
+        """获取 K 线数据
+        :param before: 获取该时间戳之前的数据（毫秒）
+        """
         symbol = self._convert_symbol(inst_id)
         interval = self._convert_bar(bar)
         
@@ -40,8 +60,11 @@ class BinanceMarketService:
             "limit": min(limit, 1000)
         }
         
+        if before:
+            params["endTime"] = before - 1
+        
         try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp = self.session.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
         except requests.exceptions.Timeout:
@@ -69,11 +92,12 @@ class BinanceMarketService:
         """获取最新行情"""
         symbol = self._convert_symbol(inst_id)
         
+        # 使用更轻量的 ticker/price 接口获取最新价，再用 ticker/24hr 获取其他数据
         url = f"{self.BASE_URL}/api/v3/ticker/24hr"
         params = {"symbol": symbol}
         
         try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp = self.session.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
         except requests.exceptions.Timeout:
@@ -94,7 +118,6 @@ class BinanceMarketService:
             "volCcy24h": data.get("quoteVolume"),
         }
 
-
 class CoinGeckoMarketService:
     """CoinGecko 公开行情接口（无需 API Key）"""
     
@@ -112,8 +135,9 @@ class CoinGeckoMarketService:
         "LINK-USDT": "chainlink",
     }
     
-    def __init__(self, timeout=10):
+    def __init__(self, timeout=5):
         self.timeout = timeout
+        self.session = get_session()
     
     def _get_coin_id(self, inst_id: str) -> str:
         coin_id = self.COIN_IDS.get(inst_id)
@@ -129,8 +153,10 @@ class CoinGeckoMarketService:
         }
         return mapping.get(bar, 2)
     
-    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100):
-        """获取 K 线数据（OHLC）"""
+    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100, before: int = None):
+        """获取 K 线数据（OHLC）
+        注意: CoinGecko 免费 API 不支持历史分页，before 参数会被忽略
+        """
         coin_id = self._get_coin_id(inst_id)
         days = self._bar_to_days(bar)
         
@@ -141,7 +167,7 @@ class CoinGeckoMarketService:
         }
         
         try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp = self.session.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
         except requests.exceptions.Timeout:
@@ -179,7 +205,7 @@ class CoinGeckoMarketService:
         }
         
         try:
-            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp = self.session.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
         except requests.exceptions.Timeout:
@@ -221,10 +247,15 @@ class OKXMarketService:
         except Exception:
             self.market_api = MarketData.MarketAPI(flag="0")
 
-    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100):
-        """获取 K 线数据"""
+    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100, before: int = None):
+        """获取 K 线数据
+        :param before: 获取该时间戳之前的数据（毫秒）
+        """
         try:
-            result = self.market_api.get_candlesticks(instId=inst_id, bar=bar, limit=str(limit))
+            params = {"instId": inst_id, "bar": bar, "limit": str(limit)}
+            if before:
+                params["before"] = str(before)
+            result = self.market_api.get_candlesticks(**params)
         except Exception as e:
             raise MarketAPIError(f"OKX 网络连接失败: {str(e)}")
         

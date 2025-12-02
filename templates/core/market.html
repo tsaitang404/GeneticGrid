@@ -246,11 +246,23 @@
         let currentSymbol = '{{ inst_id }}';
         let currentBar = '{{ bar }}';
         let currentSource = '{{ source }}';
+        
+        // 数据缓存
+        let allCandles = [];
+        let isLoadingMore = false;
+        let oldestTimestamp = null;
+        let hasMoreData = true;
 
         // 初始化图表
         function initChart() {
             const container = document.getElementById('chart-container');
             container.innerHTML = '';
+            
+            // 重置数据状态
+            allCandles = [];
+            oldestTimestamp = null;
+            hasMoreData = true;
+            isLoadingMore = false;
 
             chart = LightweightCharts.createChart(container, {
                 layout: {
@@ -305,6 +317,70 @@
                 const { width, height } = entries[0].contentRect;
                 chart.applyOptions({ width, height });
             }).observe(container);
+            
+            // 监听可见范围变化，加载更多历史数据
+            chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
+        }
+        
+        // 可见范围变化时检查是否需要加载更多数据
+        function onVisibleRangeChange(logicalRange) {
+            if (!logicalRange || isLoadingMore || !hasMoreData) return;
+            
+            // 当用户滚动到左侧（历史数据区域）时加载更多
+            // logicalRange.from < 10 表示接近数据起点
+            if (logicalRange.from < 10) {
+                loadMoreHistory();
+            }
+        }
+        
+        // 加载更多历史数据
+        async function loadMoreHistory() {
+            if (isLoadingMore || !hasMoreData || !oldestTimestamp) return;
+            
+            isLoadingMore = true;
+            
+            try {
+                // 请求更早的数据，before 参数传入最早的时间戳
+                const beforeTs = oldestTimestamp * 1000; // 转回毫秒
+                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=100&source=${currentSource}&before=${beforeTs}`;
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.code === 0 && result.data && result.data.length > 0) {
+                    const newCandles = result.data;
+                    
+                    // 过滤掉已存在的数据
+                    const existingTimes = new Set(allCandles.map(c => c.time));
+                    const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
+                    
+                    if (uniqueNewCandles.length > 0) {
+                        // 合并数据（新数据在前）
+                        allCandles = [...uniqueNewCandles, ...allCandles];
+                        allCandles.sort((a, b) => a.time - b.time);
+                        
+                        // 更新最早时间戳
+                        oldestTimestamp = allCandles[0].time;
+                        
+                        // 更新图表
+                        candleSeries.setData(allCandles);
+                        const volumeData = allCandles.map(c => ({
+                            time: c.time,
+                            value: c.volume,
+                            color: c.close >= c.open ? '#26a69a80' : '#ef535080',
+                        }));
+                        volumeSeries.setData(volumeData);
+                    } else {
+                        // 没有新数据了
+                        hasMoreData = false;
+                    }
+                } else {
+                    hasMoreData = false;
+                }
+            } catch (error) {
+                console.error('加载历史数据失败:', error);
+            } finally {
+                isLoadingMore = false;
+            }
         }
 
         // 显示错误
@@ -341,12 +417,20 @@
         // 加载 K 线数据
         async function loadCandlesticks() {
             try {
-                const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=200&source=${currentSource}`);
+                const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=100&source=${currentSource}`);
                 const result = await response.json();
                 
                 if (result.code === 0 && result.data) {
                     hideError();
                     const candles = result.data;
+                    
+                    // 保存到缓存
+                    allCandles = candles;
+                    if (candles.length > 0) {
+                        oldestTimestamp = candles[0].time;
+                        hasMoreData = true;
+                    }
+                    
                     candleSeries.setData(candles);
 
                     // 成交量数据
