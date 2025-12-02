@@ -622,14 +622,12 @@ createApp({
                     for (let i = -2; i <= 2; i++) {
                         const y = y1 + diff * i;
                         ctx.beginPath();
-                        ctx.lineWidth = (i === 0 || Math.abs(i) === 2) ? 2 : 1;
-                        if (Math.abs(i) === 1) ctx.setLineDash([4, 4]);
-                        else ctx.setLineDash([]);
+                        ctx.lineWidth = (i === 0) ? 2 : 1;
+                        ctx.setLineDash([]);
 
                         ctx.moveTo(0, y);
                         ctx.lineTo(width, y);
                         ctx.stroke();
-                        ctx.setLineDash([]);
 
                         const price = candleSeries.coordinateToPrice(y);
                         if (price !== null) drawPriceLabel(price, y);
