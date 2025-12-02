@@ -18,7 +18,7 @@
                     <input type="number" v-model.number="parallelLevels" min="1" max="10" style="width: 40px; background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; border-radius: 2px; padding: 2px 4px; font-size: 12px; text-align: center;">
                 </div>
             </div>
-            <button @click="clearDrawings" title="清除所有">🗑️</button>
+            <button :class="{ active: currentTool === 'delete' }" @click="toggleDeleteMode" title="删除模式 (再次点击清空)">🗑️</button>
         </div>
     </div>
     <canvas id="drawing-canvas" ref="drawingCanvas" style="position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none;"></canvas>

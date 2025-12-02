@@ -420,6 +420,7 @@ createApp({
         const isDrawingToolbarExpanded = ref(false);
         const parallelLevels = ref(2);
         const showToolSettings = ref(false);
+        const draggingState = reactive({ drawing: null, pointIndex: -1, isDragging: false });
 
         const mainIndicatorsConfig = {
             ma: { label: 'MA (移动平均线)', title: 'Moving Average' },
@@ -468,7 +469,7 @@ createApp({
 
         // Drawing Tools Logic
         const setTool = (tool) => {
-            if (currentTool.value === tool) {
+            if (currentTool.value === tool && tool !== 'delete') {
                 if (tool === 'parallel') {
                     showToolSettings.value = !showToolSettings.value;
                 }
@@ -485,7 +486,21 @@ createApp({
             }
 
             if (chartRef.value) {
-                chartRef.value.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
+                if (tool === 'cursor') chartRef.value.style.cursor = 'default';
+                else if (tool === 'delete') chartRef.value.style.cursor = 'pointer'; // Or specific delete cursor
+                else chartRef.value.style.cursor = 'crosshair';
+            }
+            renderDrawings();
+        };
+
+        const toggleDeleteMode = () => {
+            if (currentTool.value === 'delete') {
+                if (confirm('确定要删除所有画线吗？')) {
+                    clearDrawings();
+                    setTool('cursor');
+                }
+            } else {
+                setTool('delete');
             }
         };
 
@@ -540,6 +555,66 @@ createApp({
             return { x, y };
         };
 
+        const distToSegment = (p, v, w) => {
+            const l2 = (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
+            if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+        };
+
+        const distToRay = (p, v, w) => {
+             const dx = w.x - v.x;
+             const dy = w.y - v.y;
+             const l2 = dx*dx + dy*dy;
+             if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+             let t = ((p.x - v.x) * dx + (p.y - v.y) * dy) / l2;
+             t = Math.max(0, t);
+             const projX = v.x + t * dx;
+             const projY = v.y + t * dy;
+             return Math.hypot(p.x - projX, p.y - projY);
+        };
+
+        const isHit = (drawing, point) => {
+            const threshold = 5;
+            const points = drawing.points.map(p => logicalToPoint(p));
+            if (points.some(p => p === null)) return false;
+            
+            if (drawing.type === 'line') {
+                return distToSegment(point, points[0], points[1]) < threshold;
+            } else if (drawing.type === 'ray') {
+                return distToRay(point, points[0], points[1]) < threshold;
+            } else if (drawing.type === 'horizontal') {
+                return Math.abs(point.y - points[0].y) < threshold;
+            } else if (drawing.type === 'fib') {
+                const y1 = points[0].y;
+                const y2 = points[1].y;
+                const diff = y2 - y1;
+                const levels = [0, 1, 1.618, 2.618, 4.236, -1, -1.618, -2.618, -4.236];
+                return levels.some(level => Math.abs(point.y - (y1 + diff * level)) < threshold);
+            } else if (drawing.type === 'parallel') {
+                const y1 = points[0].y;
+                const y2 = points[1].y;
+                const diff = y2 - y1;
+                const levels = drawing.levels || 2;
+                for (let i = -levels; i <= levels; i++) {
+                    if (Math.abs(point.y - (y1 + diff * i)) < threshold) return true;
+                }
+                return false;
+            }
+            return false;
+        };
+
+        const handleDeleteClick = (point) => {
+            for (let i = drawings.length - 1; i >= 0; i--) {
+                if (isHit(drawings[i], point)) {
+                    drawings.splice(i, 1);
+                    renderDrawings();
+                    return;
+                }
+            }
+        };
+
         const handleDrawingClick = (param) => {
             if (currentTool.value === 'cursor' || !param || !param.point) return;
             const point = param.point;
@@ -578,6 +653,11 @@ createApp({
             renderDrawings(logical);
         };
 
+        const getCanvasPoint = (e) => {
+            const rect = drawingCanvas.value.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        };
+
         const renderDrawings = (previewPoint = null) => {
             if (!drawingCanvas.value || !chart) return;
             const ctx = drawingCanvas.value.getContext('2d');
@@ -603,6 +683,16 @@ createApp({
                 ctx.fillStyle = '#ffffff';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(text, boxX + padding, y);
+            };
+
+            const drawHandle = (x, y) => {
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#2962FF';
+                ctx.lineWidth = 1;
+                ctx.stroke();
             };
 
             const drawShape = (drawing, overrideLastPoint = null) => {
@@ -710,6 +800,17 @@ createApp({
                         const price = candleSeries.coordinateToPrice(y);
                         if (price !== null) drawPriceLabel(price, y);
                     }
+                }
+
+                // Draw handles if tool matches
+                if (currentTool.value === drawing.type && !overrideLastPoint) {
+                    points.forEach(p => {
+                        let hx = p.x;
+                        if (['horizontal', 'fib', 'parallel'].includes(drawing.type)) {
+                            hx = width / 2;
+                        }
+                        drawHandle(hx, p.y);
+                    });
                 }
             };
 
@@ -1165,6 +1266,11 @@ createApp({
         };
         
         const onChartClick = (param) => {
+            if (currentTool.value === 'delete') {
+                if (!param || !param.point) return;
+                handleDeleteClick(param.point);
+                return;
+            }
             if (currentTool.value !== 'cursor') {
                 handleDrawingClick(param);
                 return;
@@ -1255,18 +1361,119 @@ createApp({
             tooltip.style.display = 'block';
         };
 
+        const getHandleAtPoint = (point) => {
+            const threshold = 6;
+            const width = drawingCanvas.value ? drawingCanvas.value.width : 0;
+
+            for (let i = drawings.length - 1; i >= 0; i--) {
+                const d = drawings[i];
+                if (currentTool.value !== d.type) continue;
+                
+                for (let j = 0; j < d.points.length; j++) {
+                    const p = logicalToPoint(d.points[j]);
+                    if (p) {
+                        let hx = p.x;
+                        if (['horizontal', 'fib', 'parallel'].includes(d.type)) {
+                            hx = width / 2;
+                        }
+                        
+                        if (Math.hypot(hx - point.x, p.y - point.y) < threshold) {
+                            return { drawing: d, pointIndex: j };
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        const handleContainerMouseMove = (e) => {
+            if (draggingState.isDragging) return;
+            if (!drawingCanvas.value) return;
+            
+            const rect = drawingCanvas.value.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const handle = getHandleAtPoint({x, y});
+            if (handle) {
+                drawingCanvas.value.style.pointerEvents = 'auto';
+                drawingCanvas.value.style.cursor = 'move';
+            } else {
+                drawingCanvas.value.style.pointerEvents = 'none';
+                drawingCanvas.value.style.cursor = 'default';
+            }
+        };
+
+        const handleCanvasMouseDown = (e) => {
+            if (!drawingCanvas.value) return;
+            const rect = drawingCanvas.value.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const handle = getHandleAtPoint({x, y});
+            
+            if (handle) {
+                draggingState.isDragging = true;
+                draggingState.drawing = handle.drawing;
+                draggingState.pointIndex = handle.pointIndex;
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        const handleWindowMouseMove = (e) => {
+            if (!draggingState.isDragging || !draggingState.drawing) return;
+            if (!drawingCanvas.value) return;
+            
+            const rect = drawingCanvas.value.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const logical = pointToLogical({x, y});
+            if (logical) {
+                draggingState.drawing.points[draggingState.pointIndex] = logical;
+                renderDrawings();
+            }
+        };
+
+        const handleWindowMouseUp = () => {
+            if (draggingState.isDragging) {
+                draggingState.isDragging = false;
+                draggingState.drawing = null;
+                draggingState.pointIndex = -1;
+            }
+        };
+
         onMounted(() => {
             initChart();
             refreshData(true);
             fetchExchangeRates();
             refreshInterval = setInterval(() => { if (isAutoRefresh.value) refreshData(false); }, 2000);
             changeColorScheme(settings.colorScheme);
+
+            if (drawingCanvas.value) {
+                drawingCanvas.value.addEventListener('mousedown', handleCanvasMouseDown);
+            }
+            window.addEventListener('mousemove', handleWindowMouseMove);
+            window.addEventListener('mouseup', handleWindowMouseUp);
+            
+            if (chartRef.value && chartRef.value.parentElement) {
+                chartRef.value.parentElement.addEventListener('mousemove', handleContainerMouseMove);
+            }
         });
 
         onUnmounted(() => {
             if (refreshInterval) clearInterval(refreshInterval);
             if (chart) chart.remove();
             if (indicatorWorker) indicatorWorker.terminate();
+
+            if (drawingCanvas.value) {
+                drawingCanvas.value.removeEventListener('mousedown', handleCanvasMouseDown);
+            }
+            window.removeEventListener('mousemove', handleWindowMouseMove);
+            window.removeEventListener('mouseup', handleWindowMouseUp);
+            if (chartRef.value && chartRef.value.parentElement) {
+                chartRef.value.parentElement.removeEventListener('mousemove', handleContainerMouseMove);
+            }
         });
 
         return {
@@ -1278,7 +1485,7 @@ createApp({
             refreshData, toggleMainIndicator, switchSubIndicator,
             toggleSettings, changeColorScheme, changeCurrency, hideError, retryLoad,
             setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh,
-            drawingCanvas, currentTool, setTool, clearDrawings, isDrawingToolbarExpanded, parallelLevels, showToolSettings
+            drawingCanvas, currentTool, setTool, clearDrawings, isDrawingToolbarExpanded, parallelLevels, showToolSettings, toggleDeleteMode
         };
     }
 }).mount('#app');
