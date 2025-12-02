@@ -1,5 +1,5 @@
 <script>
-const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, watch } = Vue;
+const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, watch, toRaw } = Vue;
 
 const WORKER_CODE = `
     self.onmessage = function(e) {
@@ -171,11 +171,28 @@ const WORKER_CODE = `
 
     function calculateSupportResistance(candles) {
         const support = [], resistance = [];
-        for (let i = 2; i < candles.length - 2; i++) {
-            const isHigh = candles[i].high > candles[i-1].high && candles[i].high > candles[i-2].high && candles[i].high > candles[i+1].high && candles[i].high > candles[i+2].high;
-            const isLow = candles[i].low < candles[i-1].low && candles[i].low < candles[i-2].low && candles[i].low < candles[i+1].low && candles[i].low < candles[i+2].low;
-            if (isHigh) for (let j = 0; j < 50 && i+j < candles.length; j++) resistance.push({ time: candles[i+j].time, value: candles[i].high });
-            if (isLow) for (let j = 0; j < 50 && i+j < candles.length; j++) support.push({ time: candles[i+j].time, value: candles[i].low });
+        let lastHigh = null;
+        let lastLow = null;
+        
+        for (let i = 0; i < candles.length; i++) {
+            if (i >= 4) {
+                const idx = i - 2;
+                const center = candles[idx];
+                const l1 = candles[idx-1];
+                const l2 = candles[idx-2];
+                const r1 = candles[idx+1];
+                const r2 = candles[i];
+                
+                if (center.high > l1.high && center.high > l2.high && center.high > r1.high && center.high > r2.high) {
+                    lastHigh = center.high;
+                }
+                if (center.low < l1.low && center.low < l2.low && center.low < r1.low && center.low < r2.low) {
+                    lastLow = center.low;
+                }
+            }
+            
+            if (lastHigh !== null) resistance.push({ time: candles[i].time, value: lastHigh });
+            if (lastLow !== null) support.push({ time: candles[i].time, value: lastLow });
         }
         return { support, resistance };
     }
@@ -610,12 +627,12 @@ createApp({
             if (name === 'vol') { if (indicators.vol.series) indicators.vol.series.applyOptions({ visible: indicators.vol.enabled }); }
             else {
                 if (indicators[name].enabled) { if (indicators[name].series.length === 0) createMainIndicatorSeries(name); triggerWorkerCalculation(); }
-                else { indicators[name].series.forEach(s => chart.removeSeries(s)); indicators[name].series = []; }
+                else { indicators[name].series.forEach(s => chart.removeSeries(toRaw(s))); indicators[name].series = []; }
             }
         };
 
         const switchSubIndicator = (name) => {
-            if (indicators.subSeries.length > 0) { indicators.subSeries.forEach(s => chart.removeSeries(s)); indicators.subSeries = []; }
+            if (indicators.subSeries.length > 0) { indicators.subSeries.forEach(s => chart.removeSeries(toRaw(s))); indicators.subSeries = []; }
             indicators.activeSubIndicator = name;
             if (name === 'none') chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
             else { chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.4 } }); createSubIndicatorSeries(name); triggerWorkerCalculation(); }
