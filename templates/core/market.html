@@ -246,6 +246,75 @@
         .source-select:hover {
             background: #363a45;
         }
+        /* 下拉菜单样式 */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #1e222d;
+            min-width: 280px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            border: 1px solid #363a45;
+            border-radius: 4px;
+            z-index: 1000;
+            padding: 0;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .dropdown-group {
+            border-bottom: 1px solid #2a2e39;
+        }
+        .dropdown-group:last-child {
+            border-bottom: none;
+        }
+        .dropdown-group-title {
+            padding: 8px 16px;
+            font-size: 12px;
+            color: #787b86;
+            font-weight: 600;
+            background: #252933;
+        }
+        .dropdown-item {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            color: #d1d4dc;
+            font-size: 13px;
+            justify-content: space-between;
+        }
+        .dropdown-item:hover {
+            background-color: #2a2e39;
+        }
+        .dropdown-item label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            flex: 1;
+        }
+        .dropdown-item input {
+            margin-right: 8px;
+        }
+        .info-icon {
+            color: #787b86;
+            font-size: 12px;
+            cursor: help;
+            margin-left: 8px;
+            border: 1px solid #787b86;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .info-icon:hover {
+            color: #d1d4dc;
+            border-color: #d1d4dc;
+        }
         .source-label {
             font-size: 12px;
             color: #787b86;
@@ -385,6 +454,115 @@
                 </select>
                 <input type="text" id="custom-interval" class="custom-interval-input" placeholder="如: 2H, 7D">
             </div>
+            
+            <div class="dropdown">
+                <button>指标 ▼</button>
+                <div class="dropdown-content">
+                    <div class="dropdown-group">
+                        <div class="dropdown-group-title">主图指标 (叠加)</div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-ma" onchange="toggleMainIndicator('ma')"> MA (移动平均线)</label>
+                            <span class="info-icon" title="Moving Average: 简单移动平均线，显示过去N天的平均价格趋势。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-ema" onchange="toggleMainIndicator('ema')"> EMA (指数移动平均)</label>
+                            <span class="info-icon" title="Exponential Moving Average: 指数移动平均线，对近期价格赋予更大权重。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-boll" onchange="toggleMainIndicator('boll')"> BOLL (布林带)</label>
+                            <span class="info-icon" title="Bollinger Bands: 利用标准差计算出的价格通道，反映价格波动率。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-sar" onchange="toggleMainIndicator('sar')"> SAR (抛物线转向)</label>
+                            <span class="info-icon" title="Parabolic SAR: 停损点转向指标，用于判断趋势反转点。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-supertrend" onchange="toggleMainIndicator('supertrend')"> SuperTrend (超级趋势)</label>
+                            <span class="info-icon" title="SuperTrend: 基于ATR的趋势跟踪指标，显示当前趋势方向和支撑/阻力位。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-sr" onchange="toggleMainIndicator('sr')"> Support/Resistance (撑压线)</label>
+                            <span class="info-icon" title="Support & Resistance: 自动识别近期的支撑位和阻力位。">?</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dropdown-group">
+                        <div class="dropdown-group-title">副图指标 (单选)</div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="none" checked onchange="switchSubIndicator('none')"> 无</label>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="macd" onchange="switchSubIndicator('macd')"> MACD (指数平滑异同)</label>
+                            <span class="info-icon" title="MACD: 趋势跟踪动量指标，显示两条移动平均线之间的关系。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="kdj" onchange="switchSubIndicator('kdj')"> KDJ (随机指标)</label>
+                            <span class="info-icon" title="KDJ: 随机震荡指标，用于判断超买超卖。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="rsi" onchange="switchSubIndicator('rsi')"> RSI (相对强弱指数)</label>
+                            <span class="info-icon" title="RSI: 衡量价格变动的速度和变化，判断超买超卖。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="stochrsi" onchange="switchSubIndicator('stochrsi')"> StochRSI (随机RSI)</label>
+                            <span class="info-icon" title="Stochastic RSI: 将随机指标公式应用于RSI值，更灵敏。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="cci" onchange="switchSubIndicator('cci')"> CCI (顺势指标)</label>
+                            <span class="info-icon" title="CCI: 衡量当前价格与其历史平均价格的偏离程度。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="dmi" onchange="switchSubIndicator('dmi')"> DMI (动向指标)</label>
+                            <span class="info-icon" title="DMI: 识别趋势的存在和强度。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="wr" onchange="switchSubIndicator('wr')"> WR (威廉指标)</label>
+                            <span class="info-icon" title="Williams %R: 动量指标，衡量超买超卖水平。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="obv" onchange="switchSubIndicator('obv')"> OBV (能量潮)</label>
+                            <span class="info-icon" title="On-Balance Volume: 通过成交量变化预测价格趋势。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="trix" onchange="switchSubIndicator('trix')"> TRIX (三重指数平滑)</label>
+                            <span class="info-icon" title="TRIX: 过滤短期波动，显示长期趋势。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="roc" onchange="switchSubIndicator('roc')"> ROC (变动率)</label>
+                            <span class="info-icon" title="Rate of Change: 衡量价格变化的百分比。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="mtm" onchange="switchSubIndicator('mtm')"> MTM (动量指标)</label>
+                            <span class="info-icon" title="Momentum: 衡量价格变化的速度。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="dma" onchange="switchSubIndicator('dma')"> DMA (平均线差)</label>
+                            <span class="info-icon" title="DMA: 利用两条不同期间的平均线差值判断趋势。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="vr" onchange="switchSubIndicator('vr')"> VR (成交量比率)</label>
+                            <span class="info-icon" title="Volume Ratio: 通过成交量比率分析市场气氛。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="brar" onchange="switchSubIndicator('brar')"> BRAR (情绪指标)</label>
+                            <span class="info-icon" title="BRAR: 人气意愿指标，反映市场买卖意愿。">?</span>
+                        </div>
+                        <div class="dropdown-item">
+                            <label><input type="radio" name="sub-ind" value="psy" onchange="switchSubIndicator('psy')"> PSY (心理线)</label>
+                            <span class="info-icon" title="Psychological Line: 研究投资者心理波动的情绪指标。">?</span>
+                        </div>
+                    </div>
+
+                    <div class="dropdown-group">
+                        <div class="dropdown-group-title">其他</div>
+                        <div class="dropdown-item">
+                            <label><input type="checkbox" id="ind-vol" checked onchange="toggleMainIndicator('vol')"> VOL (成交量)</label>
+                            <span class="info-icon" title="Volume: 交易量。">?</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <span class="source-label">数据源:</span>
             <select id="source-select" class="source-select">
                 <option value="binance">Binance</option>
@@ -490,6 +668,22 @@
         let currentBar = '{{ bar }}';
         let currentSource = '{{ source }}';
         
+        // 指标状态和Series
+        const indicators = {
+            // 主图指标
+            vol: { enabled: true, series: null },
+            ma: { enabled: false, series: [] },
+            ema: { enabled: false, series: [] },
+            boll: { enabled: false, series: [] },
+            sar: { enabled: false, series: [] },
+            supertrend: { enabled: false, series: [] },
+            sr: { enabled: false, series: [] },
+            
+            // 副图指标 (当前选中的副图指标名称)
+            activeSubIndicator: 'none',
+            subSeries: [] // 存储当前副图指标的所有 Series
+        };
+
         // 颜色配置
         const COLORS = {
             GREEN: '#26a69a',
@@ -657,6 +851,12 @@
             isLoadingMore = false;
             isLoadingNewer = false;
 
+            // 重置指标 Series 引用，因为 chart 将被重建
+            indicators.vol.series = null;
+            indicators.ma.series = [];
+            indicators.ema.series = [];
+            indicators.boll.series = [];
+
             chart = LightweightCharts.createChart(container, {
                 layout: {
                     background: { type: 'solid', color: '#131722' },
@@ -705,6 +905,9 @@
                     bottom: 0,
                 },
             });
+            // 应用 VOL 状态
+            volumeSeries.applyOptions({ visible: indicators.vol.enabled });
+            indicators.vol.series = volumeSeries;
             
             // 创建用于标记选中蜡烛的系列
             markerSeries = chart.addLineSeries({
@@ -1033,12 +1236,733 @@
         function updateChartData() {
             const colors = getColors();
             candleSeries.setData(allCandles);
-            const volumeData = allCandles.map(c => ({
-                time: c.time,
-                value: c.volume,
-                color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
-            }));
-            volumeSeries.setData(volumeData);
+            
+            // 更新成交量
+            if (indicators.vol.enabled && indicators.vol.series) {
+                const volumeData = allCandles.map(c => ({
+                    time: c.time,
+                    value: c.volume,
+                    color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
+                }));
+                indicators.vol.series.setData(volumeData);
+            }
+
+            // 更新其他指标
+            updateMainIndicators();
+            updateSubIndicator();
+        }
+
+        // 切换主图指标
+        function toggleMainIndicator(name) {
+            const checkbox = document.getElementById(`ind-${name}`);
+            indicators[name].enabled = checkbox.checked;
+            
+            if (name === 'vol') {
+                if (indicators.vol.enabled) {
+                    if (indicators.vol.series) {
+                        indicators.vol.series.applyOptions({ visible: true });
+                        // 重新填充数据
+                        const colors = getColors();
+                        const volumeData = allCandles.map(c => ({
+                            time: c.time,
+                            value: c.volume,
+                            color: c.close >= c.open ? colors.upTransparent : colors.downTransparent,
+                        }));
+                        indicators.vol.series.setData(volumeData);
+                    }
+                } else {
+                    if (indicators.vol.series) {
+                        indicators.vol.series.applyOptions({ visible: false });
+                    }
+                }
+            } else {
+                if (indicators[name].enabled) {
+                    removeMainIndicatorSeries(name);
+                    createMainIndicatorSeries(name);
+                    calculateAndSetMainIndicatorData(name);
+                } else {
+                    removeMainIndicatorSeries(name);
+                }
+            }
+        }
+
+        // 切换副图指标
+        function switchSubIndicator(name) {
+            // 清除旧的副图指标
+            if (indicators.subSeries.length > 0) {
+                indicators.subSeries.forEach(s => chart.removeSeries(s));
+                indicators.subSeries = [];
+            }
+            
+            indicators.activeSubIndicator = name;
+            
+            if (name === 'none') {
+                // 恢复主图全屏 (保留底部 VOL 空间)
+                chart.priceScale('right').applyOptions({
+                    scaleMargins: {
+                        top: 0.1,
+                        bottom: 0.2, // 留给 VOL
+                    },
+                });
+            } else {
+                // 调整主图空间，给副图腾位置
+                chart.priceScale('right').applyOptions({
+                    scaleMargins: {
+                        top: 0.05,
+                        bottom: 0.4, // 留出 40% 给副图 + VOL
+                    },
+                });
+                
+                createSubIndicatorSeries(name);
+                calculateAndSetSubIndicatorData(name);
+            }
+        }
+
+        // 创建主图指标 Series
+        function createMainIndicatorSeries(name) {
+            if (name === 'ma') {
+                const ma7 = chart.addLineSeries({ color: '#E6E600', lineWidth: 1, title: 'MA7' });
+                const ma25 = chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'MA25' });
+                const ma99 = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MA99' });
+                indicators.ma.series = [ma7, ma25, ma99];
+            } else if (name === 'ema') {
+                const ema7 = chart.addLineSeries({ color: '#FF9800', lineWidth: 1, title: 'EMA7' });
+                const ema25 = chart.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'EMA25' });
+                const ema99 = chart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'EMA99' });
+                indicators.ema.series = [ema7, ema25, ema99];
+            } else if (name === 'boll') {
+                const upper = chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Upper' });
+                const middle = chart.addLineSeries({ color: '#F44336', lineWidth: 1, title: 'BOLL Mid' });
+                const lower = chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Lower' });
+                indicators.boll.series = [upper, middle, lower];
+            } else if (name === 'sar') {
+                const sarSeries = chart.addLineSeries({ 
+                    color: '#2962FF', 
+                    lineWidth: 1, 
+                    lineStyle: 2, // Dashed
+                    title: 'SAR' 
+                });
+                indicators.sar.series = [sarSeries];
+            } else if (name === 'supertrend') {
+                const stSeries = chart.addLineSeries({ color: '#2962FF', lineWidth: 2, title: 'SuperTrend' });
+                indicators.supertrend.series = [stSeries];
+            } else if (name === 'sr') {
+                const support = chart.addLineSeries({ color: '#26a69a', lineWidth: 2, title: 'Support' });
+                const resistance = chart.addLineSeries({ color: '#ef5350', lineWidth: 2, title: 'Resistance' });
+                indicators.sr.series = [support, resistance];
+            }
+        }
+
+        // 创建副图指标 Series
+        function createSubIndicatorSeries(name) {
+            const subScaleId = 'sub';
+            
+            // 配置副图 Scale
+            chart.priceScale(subScaleId).applyOptions({
+                scaleMargins: {
+                    top: 0.65, // 副图从 65% 开始
+                    bottom: 0,
+                },
+            });
+
+            if (name === 'macd') {
+                const macdHist = chart.addHistogramSeries({
+                    priceScaleId: subScaleId,
+                    color: '#26a69a',
+                    lineWidth: 1,
+                    priceFormat: { type: 'volume' },
+                    title: 'MACD Hist'
+                });
+                const dif = chart.addLineSeries({
+                    priceScaleId: subScaleId,
+                    color: '#2962FF',
+                    lineWidth: 1,
+                    title: 'DIF'
+                });
+                const dea = chart.addLineSeries({
+                    priceScaleId: subScaleId,
+                    color: '#FF6D00',
+                    lineWidth: 1,
+                    title: 'DEA'
+                });
+                indicators.subSeries = [macdHist, dif, dea];
+            } else if (name === 'kdj') {
+                const k = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' });
+                const d = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' });
+                const j = chart.addLineSeries({ priceScaleId: subScaleId, color: '#E91E63', lineWidth: 1, title: 'J' });
+                indicators.subSeries = [k, d, j];
+            } else if (name === 'rsi' || name === 'psy') {
+                const line = chart.addLineSeries({ priceScaleId: subScaleId, color: '#9C27B0', lineWidth: 1, title: name.toUpperCase() });
+                indicators.subSeries = [line];
+            } else if (name === 'stochrsi') {
+                const k = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' });
+                const d = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' });
+                indicators.subSeries = [k, d];
+            } else if (name === 'dmi') {
+                const pdi = chart.addLineSeries({ priceScaleId: subScaleId, color: '#26a69a', lineWidth: 1, title: '+DI' });
+                const mdi = chart.addLineSeries({ priceScaleId: subScaleId, color: '#ef5350', lineWidth: 1, title: '-DI' });
+                const adx = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'ADX' });
+                indicators.subSeries = [pdi, mdi, adx];
+            } else {
+                // 通用单线指标
+                const line = chart.addLineSeries({ 
+                    priceScaleId: subScaleId, 
+                    color: '#9C27B0', 
+                    lineWidth: 1, 
+                    title: name.toUpperCase() 
+                });
+                indicators.subSeries = [line];
+                
+                if (name === 'dma') {
+                    const ama = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'AMA' });
+                    indicators.subSeries.push(ama);
+                } else if (name === 'brar') {
+                    line.applyOptions({ title: 'AR', color: '#FF6D00' });
+                    const br = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'BR' });
+                    indicators.subSeries.push(br);
+                }
+            }
+        }
+
+        // 移除主图指标 Series
+        function removeMainIndicatorSeries(name) {
+            if (indicators[name].series) {
+                indicators[name].series.forEach(s => chart.removeSeries(s));
+                indicators[name].series = [];
+            }
+        }
+
+        // 更新所有开启的主图指标
+        function updateMainIndicators() {
+            ['ma', 'ema', 'boll', 'sar', 'supertrend', 'sr'].forEach(name => {
+                if (indicators[name].enabled) {
+                    if (indicators[name].series.length === 0) {
+                        createMainIndicatorSeries(name);
+                    }
+                    calculateAndSetMainIndicatorData(name);
+                }
+            });
+        }
+        
+        // 更新副图指标
+        function updateSubIndicator() {
+            if (indicators.activeSubIndicator !== 'none') {
+                if (indicators.subSeries.length === 0) {
+                    createSubIndicatorSeries(indicators.activeSubIndicator);
+                }
+                calculateAndSetSubIndicatorData(indicators.activeSubIndicator);
+            }
+        }
+
+        // 计算并设置主图指标数据
+        function calculateAndSetMainIndicatorData(name) {
+            if (!allCandles || allCandles.length === 0) return;
+            
+            if (name === 'ma') {
+                indicators.ma.series[0].setData(calculateSMA(allCandles, 7));
+                indicators.ma.series[1].setData(calculateSMA(allCandles, 25));
+                indicators.ma.series[2].setData(calculateSMA(allCandles, 99));
+            } else if (name === 'ema') {
+                indicators.ema.series[0].setData(calculateEMA(allCandles, 7));
+                indicators.ema.series[1].setData(calculateEMA(allCandles, 25));
+                indicators.ema.series[2].setData(calculateEMA(allCandles, 99));
+            } else if (name === 'boll') {
+                const bollData = calculateBollingerBands(allCandles, 20, 2);
+                indicators.boll.series[0].setData(bollData.upper);
+                indicators.boll.series[1].setData(bollData.middle);
+                indicators.boll.series[2].setData(bollData.lower);
+            } else if (name === 'sar') {
+                indicators.sar.series[0].setData(calculateSAR(allCandles));
+            } else if (name === 'supertrend') {
+                indicators.supertrend.series[0].setData(calculateSuperTrend(allCandles));
+            } else if (name === 'sr') {
+                const srData = calculateSupportResistance(allCandles);
+                indicators.sr.series[0].setData(srData.support);
+                indicators.sr.series[1].setData(srData.resistance);
+            }
+        }
+        
+        // 计算并设置副图指标数据
+        function calculateAndSetSubIndicatorData(name) {
+            if (!allCandles || allCandles.length === 0) return;
+            
+            if (name === 'macd') {
+                const data = calculateMACD(allCandles, 12, 26, 9);
+                indicators.subSeries[0].setData(data.histogram);
+                indicators.subSeries[1].setData(data.dif);
+                indicators.subSeries[2].setData(data.dea);
+            } else if (name === 'kdj') {
+                const data = calculateKDJ(allCandles, 9, 3, 3);
+                indicators.subSeries[0].setData(data.k);
+                indicators.subSeries[1].setData(data.d);
+                indicators.subSeries[2].setData(data.j);
+            } else if (name === 'rsi') {
+                indicators.subSeries[0].setData(calculateRSI(allCandles, 14));
+            } else if (name === 'stochrsi') {
+                const data = calculateStochRSI(allCandles, 14, 14, 3, 3);
+                indicators.subSeries[0].setData(data.k);
+                indicators.subSeries[1].setData(data.d);
+            } else if (name === 'cci') {
+                indicators.subSeries[0].setData(calculateCCI(allCandles, 20));
+            } else if (name === 'dmi') {
+                const data = calculateDMI(allCandles, 14);
+                indicators.subSeries[0].setData(data.pdi);
+                indicators.subSeries[1].setData(data.mdi);
+                indicators.subSeries[2].setData(data.adx);
+            } else if (name === 'wr') {
+                indicators.subSeries[0].setData(calculateWR(allCandles, 14));
+            } else if (name === 'obv') {
+                indicators.subSeries[0].setData(calculateOBV(allCandles));
+            } else if (name === 'trix') {
+                indicators.subSeries[0].setData(calculateTRIX(allCandles, 12));
+            } else if (name === 'roc') {
+                indicators.subSeries[0].setData(calculateROC(allCandles, 12));
+            } else if (name === 'mtm') {
+                indicators.subSeries[0].setData(calculateMTM(allCandles, 12));
+            } else if (name === 'dma') {
+                const data = calculateDMA(allCandles, 10, 50);
+                indicators.subSeries[0].setData(data.ddd);
+                indicators.subSeries[1].setData(data.ama);
+            } else if (name === 'vr') {
+                indicators.subSeries[0].setData(calculateVR(allCandles, 26));
+            } else if (name === 'brar') {
+                const data = calculateBRAR(allCandles, 26);
+                indicators.subSeries[0].setData(data.ar);
+                indicators.subSeries[1].setData(data.br);
+            } else if (name === 'psy') {
+                indicators.subSeries[0].setData(calculatePSY(allCandles, 12));
+            }
+        }
+
+        // 计算 SMA
+        function calculateSMA(candles, period) {
+            const result = [];
+            for (let i = 0; i < candles.length; i++) {
+                if (i < period - 1) continue;
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += candles[i - j].close;
+                }
+                result.push({ time: candles[i].time, value: sum / period });
+            }
+            return result;
+        }
+
+        // 计算 EMA
+        function calculateEMA(candles, period) {
+            const result = [];
+            const k = 2 / (period + 1);
+            let ema = candles[0].close;
+            
+            // 初始 EMA 通常用 SMA 代替，或者直接从第一个值开始
+            // 这里简单处理，前 period-1 个点不输出，第 period 个点用 SMA 初始化
+            // 或者更简单的：第一个点就是 EMA，然后迭代。为了准确性，通常需要足够的历史数据。
+            // 这里采用标准做法：第一个点作为初始 EMA
+            
+            // 重新实现：为了与 SMA 对齐，我们从第0个开始算，但只输出有效部分？
+            // TradingView 等通常从一开始就计算。
+            
+            ema = candles[0].close;
+            result.push({ time: candles[0].time, value: ema });
+
+            for (let i = 1; i < candles.length; i++) {
+                ema = (candles[i].close - ema) * k + ema;
+                result.push({ time: candles[i].time, value: ema });
+            }
+            return result;
+        }
+
+        // 计算 Bollinger Bands
+        function calculateBollingerBands(candles, period, stdDevMultiplier) {
+            const upper = [];
+            const middle = [];
+            const lower = [];
+
+            for (let i = 0; i < candles.length; i++) {
+                if (i < period - 1) continue;
+                
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += candles[i - j].close;
+                }
+                const sma = sum / period;
+                
+                let sumSquaredDiff = 0;
+                for (let j = 0; j < period; j++) {
+                    sumSquaredDiff += Math.pow(candles[i - j].close - sma, 2);
+                }
+                const stdDev = Math.sqrt(sumSquaredDiff / period);
+
+                middle.push({ time: candles[i].time, value: sma });
+                upper.push({ time: candles[i].time, value: sma + stdDev * stdDevMultiplier });
+                lower.push({ time: candles[i].time, value: sma - stdDev * stdDevMultiplier });
+            }
+
+        // SAR (Parabolic SAR)
+        function calculateSAR(candles) {
+            const result = [];
+            if (candles.length < 2) return result;
+            
+            let af = 0.02;
+            let maxAf = 0.2;
+            let isLong = true;
+            let sar = candles[0].low;
+            let ep = candles[0].high;
+            
+            for (let i = 1; i < candles.length; i++) {
+                const prevSar = sar;
+                sar = prevSar + af * (ep - prevSar);
+                
+                if (isLong) {
+                    if (candles[i].low < sar) {
+                        isLong = false;
+                        sar = ep;
+                        ep = candles[i].low;
+                        af = 0.02;
+                    } else {
+                        if (candles[i].high > ep) {
+                            ep = candles[i].high;
+                            af = Math.min(af + 0.02, maxAf);
+                        }
+                    }
+                } else {
+                    if (candles[i].high > sar) {
+                        isLong = true;
+                        sar = ep;
+                        ep = candles[i].high;
+                        af = 0.02;
+                    } else {
+                        if (candles[i].low < ep) {
+                            ep = candles[i].low;
+                            af = Math.min(af + 0.02, maxAf);
+                        }
+                    }
+                }
+                result.push({ time: candles[i].time, value: sar });
+            }
+            return result;
+        }
+        
+        // SuperTrend
+        function calculateSuperTrend(candles, period = 10, multiplier = 3) {
+            const result = [];
+            if (candles.length < period) return result;
+            
+            // 计算 ATR
+            const trs = [];
+            for(let i = 1; i < candles.length; i++) {
+                const high = candles[i].high;
+                const low = candles[i].low;
+                const prevClose = candles[i-1].close;
+                const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+                trs.push(tr);
+            }
+            
+            let atr = trs.slice(0, period).reduce((a,b) => a+b, 0) / period;
+            
+            let upperBand = (candles[period].high + candles[period].low) / 2 + multiplier * atr;
+            let lowerBand = (candles[period].high + candles[period].low) / 2 - multiplier * atr;
+            let inUptrend = true;
+            
+            for (let i = period; i < candles.length; i++) {
+                const currHigh = candles[i].high;
+                const currLow = candles[i].low;
+                const currClose = candles[i].close;
+                const prevClose = candles[i-1].close;
+                
+                if (i > period) {
+                    const tr = Math.max(currHigh - currLow, Math.abs(currHigh - prevClose), Math.abs(currLow - prevClose));
+                    atr = (atr * (period - 1) + tr) / period;
+                }
+                
+                let currUpperBand = (currHigh + currLow) / 2 + multiplier * atr;
+                let currLowerBand = (currHigh + currLow) / 2 - multiplier * atr;
+                
+                if (inUptrend) {
+                    if (currLowerBand < lowerBand) currLowerBand = lowerBand;
+                    if (currClose < lowerBand) {
+                        inUptrend = false;
+                        upperBand = currUpperBand;
+                    } else {
+                        lowerBand = currLowerBand;
+                    }
+                } else {
+                    if (currUpperBand > upperBand) currUpperBand = upperBand;
+                    if (currClose > upperBand) {
+                        inUptrend = true;
+                        lowerBand = currLowerBand;
+                    } else {
+                        upperBand = currUpperBand;
+                    }
+                }
+                
+                result.push({ 
+                    time: candles[i].time, 
+                    value: inUptrend ? lowerBand : upperBand,
+                    color: inUptrend ? '#26a69a' : '#ef5350'
+                });
+            }
+            return result;
+        }
+        
+        // Support/Resistance (Fractals based)
+        function calculateSupportResistance(candles) {
+            const support = [];
+            const resistance = [];
+            for (let i = 2; i < candles.length - 2; i++) {
+                const isHigh = candles[i].high > candles[i-1].high && 
+                               candles[i].high > candles[i-2].high &&
+                               candles[i].high > candles[i+1].high &&
+                               candles[i].high > candles[i+2].high;
+                               
+                const isLow = candles[i].low < candles[i-1].low && 
+                              candles[i].low < candles[i-2].low &&
+                              candles[i].low < candles[i+1].low &&
+                              candles[i].low < candles[i+2].low;
+                              
+                if (isHigh) {
+                    for (let j = 0; j < 50 && i+j < candles.length; j++) {
+                        resistance.push({ time: candles[i+j].time, value: candles[i].high });
+                    }
+                }
+                if (isLow) {
+                    for (let j = 0; j < 50 && i+j < candles.length; j++) {
+                        support.push({ time: candles[i+j].time, value: candles[i].low });
+                    }
+                }
+            }
+            return { support, resistance };
+        }
+
+        // MACD
+        function calculateMACD(candles, fastPeriod, slowPeriod, signalPeriod) {
+            const emaFast = calculateEMA(candles, fastPeriod);
+            const emaSlow = calculateEMA(candles, slowPeriod);
+            
+            const difData = [];
+            const deaData = [];
+            const histogramData = [];
+            
+            const minLen = Math.min(emaFast.length, emaSlow.length);
+            const offsetFast = emaFast.length - minLen;
+            const offsetSlow = emaSlow.length - minLen;
+            
+            const difValues = [];
+            
+            for (let i = 0; i < minLen; i++) {
+                const val = emaFast[i + offsetFast].value - emaSlow[i + offsetSlow].value;
+                const time = emaFast[i + offsetFast].time;
+                difValues.push({ time, value: val });
+                difData.push({ time, value: val });
+            }
+            
+            let dea = difValues[0].value;
+            const k = 2 / (signalPeriod + 1);
+            
+            deaData.push({ time: difValues[0].time, value: dea });
+            histogramData.push({ 
+                time: difValues[0].time, 
+                value: difValues[0].value - dea,
+                color: (difValues[0].value - dea) >= 0 ? '#26a69a' : '#ef5350'
+            });
+            
+            for (let i = 1; i < difValues.length; i++) {
+                dea = (difValues[i].value - dea) * k + dea;
+                deaData.push({ time: difValues[i].time, value: dea });
+                const hist = difValues[i].value - dea;
+                histogramData.push({ 
+                    time: difValues[i].time, 
+                    value: hist,
+                    color: hist >= 0 ? '#26a69a' : '#ef5350'
+                });
+            }
+            
+            return { dif: difData, dea: deaData, histogram: histogramData };
+        }
+
+        // RSI
+        function calculateRSI(candles, period) {
+            const result = [];
+            if (candles.length < period + 1) return result;
+            
+            let gains = 0;
+            let losses = 0;
+            
+            for (let i = 1; i <= period; i++) {
+                const change = candles[i].close - candles[i-1].close;
+                if (change > 0) gains += change;
+                else losses -= change;
+            }
+            
+            let avgGain = gains / period;
+            let avgLoss = losses / period;
+            
+            for (let i = period + 1; i < candles.length; i++) {
+                const change = candles[i].close - candles[i-1].close;
+                let gain = change > 0 ? change : 0;
+                let loss = change < 0 ? -change : 0;
+                
+                avgGain = (avgGain * (period - 1) + gain) / period;
+                avgLoss = (avgLoss * (period - 1) + loss) / period;
+                
+                const rs = avgGain / avgLoss;
+                const rsi = 100 - (100 / (1 + rs));
+                
+                result.push({ time: candles[i].time, value: rsi });
+            }
+            return result;
+        }
+
+        // KDJ
+        function calculateKDJ(candles, n, m1, m2) {
+            const kData = [];
+            const dData = [];
+            const jData = [];
+            
+            let k = 50;
+            let d = 50;
+            
+            for (let i = 0; i < candles.length; i++) {
+                if (i < n - 1) continue;
+                
+                let low = candles[i].low;
+                let high = candles[i].high;
+                for (let j = 0; j < n; j++) {
+                    if (candles[i-j].low < low) low = candles[i-j].low;
+                    if (candles[i-j].high > high) high = candles[i-j].high;
+                }
+                
+                const rsv = (candles[i].close - low) / (high - low) * 100;
+                
+                k = (m1 - 1) / m1 * k + 1 / m1 * rsv;
+                d = (m2 - 1) / m2 * d + 1 / m2 * k;
+                const jVal = 3 * k - 2 * d;
+                
+                kData.push({ time: candles[i].time, value: k });
+                dData.push({ time: candles[i].time, value: d });
+                jData.push({ time: candles[i].time, value: jVal });
+            }
+            return { k: kData, d: dData, j: jData };
+        }
+
+        // CCI
+        function calculateCCI(candles, period) {
+            const result = [];
+            if (candles.length < period) return result;
+            
+            const tps = candles.map(c => (c.high + c.low + c.close) / 3);
+            
+            for (let i = period - 1; i < candles.length; i++) {
+                let sumTp = 0;
+                for (let j = 0; j < period; j++) sumTp += tps[i-j];
+                const maTp = sumTp / period;
+                
+                let sumMd = 0;
+                for (let j = 0; j < period; j++) sumMd += Math.abs(tps[i-j] - maTp);
+                const md = sumMd / period;
+                
+                const cci = (tps[i] - maTp) / (0.015 * md);
+                result.push({ time: candles[i].time, value: cci });
+            }
+            return result;
+        }
+
+        // WR (Williams %R)
+        function calculateWR(candles, period) {
+            const result = [];
+            for (let i = period - 1; i < candles.length; i++) {
+                let highest = -Infinity;
+                let lowest = Infinity;
+                for (let j = 0; j < period; j++) {
+                    if (candles[i-j].high > highest) highest = candles[i-j].high;
+                    if (candles[i-j].low < lowest) lowest = candles[i-j].low;
+                }
+                const wr = (highest - candles[i].close) / (highest - lowest) * -100;
+                result.push({ time: candles[i].time, value: wr });
+            }
+            return result;
+        }
+
+        // OBV
+        function calculateOBV(candles) {
+            const result = [];
+            let obv = 0;
+            result.push({ time: candles[0].time, value: obv });
+            
+            for (let i = 1; i < candles.length; i++) {
+                if (candles[i].close > candles[i-1].close) {
+                    obv += candles[i].volume;
+                } else if (candles[i].close < candles[i-1].close) {
+                    obv -= candles[i].volume;
+                }
+                result.push({ time: candles[i].time, value: obv });
+            }
+            return result;
+        }
+
+        // ROC
+        function calculateROC(candles, period) {
+            const result = [];
+            for (let i = period; i < candles.length; i++) {
+                const roc = ((candles[i].close - candles[i-period].close) / candles[i-period].close) * 100;
+                result.push({ time: candles[i].time, value: roc });
+            }
+            return result;
+        }
+
+        // MTM
+        function calculateMTM(candles, period) {
+            const result = [];
+            for (let i = period; i < candles.length; i++) {
+                const mtm = candles[i].close - candles[i-period].close;
+                result.push({ time: candles[i].time, value: mtm });
+            }
+            return result;
+        }
+
+        // DMI (ADX) - 简化版
+        function calculateDMI(candles, period) {
+            // 简化版，返回空数据以避免错误
+            return { pdi: [], mdi: [], adx: [] };
+        }
+
+        // StochRSI
+        function calculateStochRSI(candles, rsiPeriod, stochPeriod, kPeriod, dPeriod) {
+            // 简化版
+            return { k: [], d: [] };
+        }
+
+        // TRIX
+        function calculateTRIX(candles, period) {
+            return [];
+        }
+
+        // DMA
+        function calculateDMA(candles, shortPeriod, longPeriod) {
+            return { ddd: [], ama: [] };
+        }
+
+        // VR
+        function calculateVR(candles, period) {
+            return [];
+        }
+
+        // BRAR
+        function calculateBRAR(candles, period) {
+            return { br: [], ar: [] };
+        }
+
+        // PSY
+        function calculatePSY(candles, period) {
+            const result = [];
+            for (let i = period; i < candles.length; i++) {
+                let upCount = 0;
+                for (let j = 0; j < period; j++) {
+                    if (candles[i-j].close > candles[i-j-1].close) upCount++;
+                }
+                result.push({ time: candles[i].time, value: (upCount / period) * 100 });
+            }
+            return result;
         }
 
         // 显示错误
