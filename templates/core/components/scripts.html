@@ -1476,7 +1476,7 @@
     function retryLoad() {
         hideError();
         initChart();
-        refreshData();
+        refreshData(true);
     }
 
     // 加载 K 线数据
@@ -1576,21 +1576,24 @@
         }
     }
 
+    // 自动刷新状态
+    let isAutoRefresh = true;
+
     // 刷新数据
-    function refreshData(auto = false) {
-        loadCandlesticks(!auto);
+    function refreshData(fitContent = false) {
+        loadCandlesticks(fitContent);
         loadTicker();
     }
 
     // 事件绑定
     document.getElementById('symbol-select').addEventListener('change', (e) => {
         currentSymbol = e.target.value;
-        refreshData();
+        refreshData(true);
     });
 
     document.getElementById('source-select').addEventListener('change', (e) => {
         currentSource = e.target.value;
-        refreshData();
+        refreshData(true);
     });
 
     document.querySelectorAll('.timeframe-buttons button').forEach(btn => {
@@ -1601,7 +1604,7 @@
             document.getElementById('more-timeframes').value = '';
             document.getElementById('custom-interval').style.display = 'none';
             initChart();
-            refreshData();
+            refreshData(true);
         });
     });
     
@@ -1620,7 +1623,7 @@
             currentBar = value;
             document.getElementById('custom-interval').style.display = 'none';
             initChart();
-            refreshData();
+            refreshData(true);
         }
     });
     
@@ -1635,7 +1638,7 @@
                     document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
                     currentBar = customValue.toLowerCase();
                     initChart();
-                    refreshData();
+                    refreshData(true);
                 } else {
                     alert('格式错误！请使用格式：数字+单位\\n例如：2H (2小时), 7D (7天), 90m (90分钟)\\n单位：s(秒) m(分) H(时) D(日) W(周)');
                 }
@@ -1643,7 +1646,25 @@
         }
     });
 
-    document.getElementById('refresh-btn').addEventListener('click', refreshData);
+    // 手动刷新按钮
+    document.getElementById('refresh-btn').addEventListener('click', () => {
+        refreshData(false); // 手动刷新不重置视图
+    });
+
+    // 自动刷新按钮
+    const autoRefreshBtn = document.getElementById('auto-refresh-btn');
+    if (autoRefreshBtn) {
+        autoRefreshBtn.addEventListener('click', () => {
+            isAutoRefresh = !isAutoRefresh;
+            if (isAutoRefresh) {
+                autoRefreshBtn.classList.add('active');
+                autoRefreshBtn.textContent = '自动: 开';
+            } else {
+                autoRefreshBtn.classList.remove('active');
+                autoRefreshBtn.textContent = '自动: 关';
+            }
+        });
+    }
 
     // 设置初始选中状态
     document.getElementById('symbol-select').value = currentSymbol;
@@ -1658,8 +1679,12 @@
 
     // 初始化
     initChart();
-    refreshData();
+    refreshData(true); // 初始化时重置视图
 
-    // 定时刷新（每2秒）
-    setInterval(() => refreshData(true), 2000);
+    // 定时刷新（每1秒）
+    setInterval(() => {
+        if (isAutoRefresh) {
+            refreshData(false); // 自动刷新不重置视图
+        }
+    }, 1000);
 </script>

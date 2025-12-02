@@ -43,6 +43,26 @@
     .controls select:hover, .controls button:hover {
         background: #363a45;
     }
+    .refresh-group {
+        display: flex;
+        gap: 1px;
+    }
+    .refresh-group button {
+        border-radius: 0;
+    }
+    .refresh-group button:first-child {
+        border-top-left-radius: 4px;
+        border-bottom-left-radius: 4px;
+    }
+    .refresh-group button:last-child {
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
+    }
+    #auto-refresh-btn.active {
+        background: #2962ff;
+        color: #fff;
+        border-color: #2962ff;
+    }
     .ticker-info {
         display: flex;
         gap: 24px;
