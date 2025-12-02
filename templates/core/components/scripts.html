@@ -468,9 +468,8 @@ createApp({
         const setTool = (tool) => {
             currentTool.value = tool;
             currentDrawing.value = null;
-            if (drawingCanvas.value) {
-                drawingCanvas.value.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
-                drawingCanvas.value.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
+            if (chartRef.value) {
+                chartRef.value.style.cursor = tool === 'cursor' ? 'default' : 'crosshair';
             }
         };
 
@@ -478,11 +477,6 @@ createApp({
             drawings.length = 0;
             currentDrawing.value = null;
             renderDrawings();
-        };
-
-        const getCanvasPoint = (e) => {
-            const rect = drawingCanvas.value.getBoundingClientRect();
-            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
         };
 
         const pointToLogical = (point) => {
@@ -501,9 +495,9 @@ createApp({
             return { x, y };
         };
 
-        const handleCanvasClick = (e) => {
-            if (currentTool.value === 'cursor') return;
-            const point = getCanvasPoint(e);
+        const handleDrawingClick = (param) => {
+            if (currentTool.value === 'cursor' || !param || !param.point) return;
+            const point = param.point;
             const logical = pointToLogical(point);
             if (!logical) return;
 
@@ -523,20 +517,17 @@ createApp({
                 currentDrawing.value.points.push(logical);
                 drawings.push({ ...currentDrawing.value });
                 currentDrawing.value = null;
-                // Reset tool to cursor after drawing? Or keep it? Let's keep it for continuous drawing.
-                // If we want one-off, uncomment: setTool('cursor');
             }
             renderDrawings();
         };
 
-        const handleCanvasMove = (e) => {
-            if (!currentDrawing.value) return;
-            const point = getCanvasPoint(e);
+        const handleDrawingMove = (param) => {
+            if (!currentDrawing.value || !param || !param.point) return;
+            const point = param.point;
             const logical = pointToLogical(point);
             if (!logical) return;
             
             // Update preview
-            // We don't modify the stored points, just use this for rendering preview
             renderDrawings(logical);
         };
 
@@ -546,6 +537,27 @@ createApp({
             const { width, height } = drawingCanvas.value;
             ctx.clearRect(0, 0, width, height);
 
+            const drawPriceLabel = (price, y) => {
+                const formatNum = (num) => num >= 1000 ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : (num >= 1 ? num.toFixed(4) : num.toPrecision(4));
+                const text = formatNum(price);
+                
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                const textMetrics = ctx.measureText(text);
+                const textWidth = textMetrics.width;
+                const padding = 6;
+                const boxHeight = 20;
+                const boxWidth = textWidth + padding * 2;
+                const boxX = width - boxWidth;
+                const boxY = y - boxHeight / 2;
+
+                ctx.fillStyle = '#2962FF';
+                ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, boxX + padding, y);
+            };
+
             const drawShape = (drawing, overrideLastPoint = null) => {
                 const points = drawing.points.map(p => logicalToPoint(p));
                 if (overrideLastPoint) {
@@ -553,11 +565,6 @@ createApp({
                     if (p) points.push(p);
                 }
                 
-                // Filter out invalid points (off-screen points might return null coordinate? No, they return coordinate outside range)
-                // timeToCoordinate returns null if time is not in the scale? 
-                // Actually timeToCoordinate returns null if the time is not found in the data? 
-                // If we use timestamps, it should interpolate.
-                // Let's check if points are valid.
                 if (points.some(p => p === null)) return;
 
                 ctx.strokeStyle = '#2962FF';
@@ -574,7 +581,6 @@ createApp({
                     ctx.moveTo(points[0].x, points[0].y);
                     const dx = points[1].x - points[0].x;
                     const dy = points[1].y - points[0].y;
-                    // Extend to screen edge
                     const slope = dy / dx;
                     let endX, endY;
                     if (dx > 0) endX = width; else endX = 0;
@@ -586,27 +592,7 @@ createApp({
                     ctx.moveTo(0, points[0].y);
                     ctx.lineTo(width, points[0].y);
                     ctx.stroke();
-
-                    // Draw price label
-                    const price = drawing.points[0].price;
-                    const formatNum = (num) => num >= 1000 ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : (num >= 1 ? num.toFixed(4) : num.toPrecision(4));
-                    const text = formatNum(price);
-                    
-                    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-                    const textMetrics = ctx.measureText(text);
-                    const textWidth = textMetrics.width;
-                    const padding = 6;
-                    const boxHeight = 20;
-                    const boxWidth = textWidth + padding * 2;
-                    const boxX = width - boxWidth;
-                    const boxY = points[0].y - boxHeight / 2;
-
-                    ctx.fillStyle = '#2962FF';
-                    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-                    
-                    ctx.fillStyle = '#ffffff';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(text, boxX + padding, points[0].y);
+                    drawPriceLabel(drawing.points[0].price, points[0].y);
                 } else if (drawing.type === 'fib') {
                     if (points.length < 2) return;
                     const y1 = points[0].y;
@@ -616,29 +602,37 @@ createApp({
                     levels.forEach(level => {
                         const y = y1 + diff * level;
                         ctx.beginPath();
-                        ctx.moveTo(points[0].x, y);
-                        ctx.lineTo(points[1].x, y); // Or full width? Usually fib is between time range or full width. Let's do full width for now or between x1, x2?
-                        // Standard fib retracement is usually width of the trend. Let's do width of trend.
-                        // Actually, let's do full width for visibility.
-                        // ctx.lineTo(width, y); ctx.moveTo(0, y);
-                        // Let's stick to x1-x2 for now.
+                        ctx.lineWidth = (level === 0 || level === 0.5 || level === 1) ? 2 : 1;
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(width, y); 
                         ctx.stroke();
+                        
                         ctx.fillStyle = '#2962FF';
                         ctx.font = '10px Arial';
-                        ctx.fillText(`${(level * 100).toFixed(1)}%`, points[1].x + 5, y + 3);
+                        ctx.fillText(`${(level * 100).toFixed(1)}%`, points[1].x + 5, y - 2);
+
+                        const price = candleSeries.coordinateToPrice(y);
+                        if (price !== null) drawPriceLabel(price, y);
                     });
                 } else if (drawing.type === 'parallel') {
                     if (points.length < 2) return;
                     const y1 = points[0].y;
                     const y2 = points[1].y;
                     const diff = y2 - y1;
-                    // Draw 5 parallel lines
                     for (let i = -2; i <= 2; i++) {
                         const y = y1 + diff * i;
                         ctx.beginPath();
+                        ctx.lineWidth = (i === 0 || Math.abs(i) === 2) ? 2 : 1;
+                        if (Math.abs(i) === 1) ctx.setLineDash([4, 4]);
+                        else ctx.setLineDash([]);
+
                         ctx.moveTo(0, y);
                         ctx.lineTo(width, y);
                         ctx.stroke();
+                        ctx.setLineDash([]);
+
+                        const price = candleSeries.coordinateToPrice(y);
+                        if (price !== null) drawPriceLabel(price, y);
                     }
                 }
             };
@@ -678,7 +672,21 @@ createApp({
             chart = LightweightCharts.createChart(chartRef.value, {
                 layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                crosshair: { 
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: {
+                        width: 1,
+                        style: 2,
+                        visible: true,
+                        labelVisible: true
+                    },
+                    horzLine: {
+                        width: 1,
+                        style: 2,
+                        visible: true,
+                        labelVisible: true
+                    }
+                },
                 rightPriceScale: { borderColor: '#2a2e39' },
                 timeScale: { borderColor: '#2a2e39', timeVisible: true, secondsVisible: false },
                 width: chartRef.value.clientWidth, height: chartRef.value.clientHeight
@@ -723,11 +731,6 @@ createApp({
             if (drawingCanvas.value) {
                 drawingCanvas.value.width = chartRef.value.clientWidth;
                 drawingCanvas.value.height = chartRef.value.clientHeight;
-                // Remove old listeners to avoid duplicates if initChart is called multiple times
-                drawingCanvas.value.removeEventListener('click', handleCanvasClick);
-                drawingCanvas.value.removeEventListener('mousemove', handleCanvasMove);
-                drawingCanvas.value.addEventListener('click', handleCanvasClick);
-                drawingCanvas.value.addEventListener('mousemove', handleCanvasMove);
             }
         };
 
@@ -1074,6 +1077,9 @@ createApp({
         };
         
         const onCrosshairMove = (param) => {
+            if (currentTool.value !== 'cursor') {
+                handleDrawingMove(param);
+            }
             const tooltip = document.getElementById('candle-tooltip');
             if (!tooltip) return;
             if (isTooltipLocked) return;
@@ -1082,6 +1088,10 @@ createApp({
         };
         
         const onChartClick = (param) => {
+            if (currentTool.value !== 'cursor') {
+                handleDrawingClick(param);
+                return;
+            }
             if (!param || !param.time) {
                 isTooltipLocked = false; lockedCandleTime = null;
                 document.getElementById('candle-tooltip').classList.remove('locked');
