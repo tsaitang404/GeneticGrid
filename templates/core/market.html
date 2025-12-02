@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeneticGrid - K线看盘</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #131722;
+            color: #d1d4dc;
+            min-height: 100vh;
+        }
+        .header {
+            background: #1e222d;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #2a2e39;
+        }
+        .header h1 {
+            font-size: 20px;
+            color: #fff;
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .controls select, .controls button {
+            background: #2a2e39;
+            color: #d1d4dc;
+            border: 1px solid #363a45;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .controls select:hover, .controls button:hover {
+            background: #363a45;
+        }
+        .ticker-info {
+            display: flex;
+            gap: 24px;
+            padding: 12px 24px;
+            background: #1e222d;
+            border-bottom: 1px solid #2a2e39;
+        }
+        .ticker-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .ticker-label {
+            font-size: 12px;
+            color: #787b86;
+        }
+        .ticker-value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .ticker-value.up { color: #26a69a; }
+        .ticker-value.down { color: #ef5350; }
+        #chart-container {
+            width: 100%;
+            height: calc(100vh - 140px);
+        }
+        .timeframe-buttons {
+            display: flex;
+            gap: 4px;
+        }
+        .timeframe-buttons button {
+            padding: 6px 12px;
+            min-width: 40px;
+        }
+        .timeframe-buttons button.active {
+            background: #2962ff;
+            border-color: #2962ff;
+            color: #fff;
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 18px;
+            color: #787b86;
+        }
+        .error-banner {
+            background: #ef5350;
+            color: #fff;
+            padding: 12px 24px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+        }
+        .error-banner.show {
+            display: flex;
+        }
+        .error-banner .error-icon {
+            font-size: 20px;
+        }
+        .error-banner .error-message {
+            flex: 1;
+        }
+        .error-banner .error-close {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .chart-error {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #ef5350;
+            text-align: center;
+            padding: 40px;
+        }
+        .chart-error .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .chart-error .error-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .chart-error .error-detail {
+            font-size: 14px;
+            color: #787b86;
+            max-width: 500px;
+            word-break: break-all;
+        }
+        .chart-error .retry-btn {
+            margin-top: 20px;
+            background: #2962ff;
+            color: #fff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .chart-error .retry-btn:hover {
+            background: #1e4bd8;
+        }
+        .source-select {
+            background: #2a2e39;
+            color: #d1d4dc;
+            border: 1px solid #363a45;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .source-select:hover {
+            background: #363a45;
+        }
+        .source-label {
+            font-size: 12px;
+            color: #787b86;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧬 GeneticGrid 看盘</h1>
+        <div class="controls">
+            <select id="symbol-select">
+                <option value="BTC-USDT">BTC/USDT</option>
+                <option value="ETH-USDT">ETH/USDT</option>
+                <option value="SOL-USDT">SOL/USDT</option>
+                <option value="XRP-USDT">XRP/USDT</option>
+                <option value="DOGE-USDT">DOGE/USDT</option>
+                <option value="ADA-USDT">ADA/USDT</option>
+                <option value="AVAX-USDT">AVAX/USDT</option>
+                <option value="LINK-USDT">LINK/USDT</option>
+            </select>
+            <div class="timeframe-buttons">
+                <button data-bar="1m">1分</button>
+                <button data-bar="5m">5分</button>
+                <button data-bar="15m">15分</button>
+                <button data-bar="1H" class="active">1时</button>
+                <button data-bar="4H">4时</button>
+                <button data-bar="1D">日线</button>
+            </div>
+            <span class="source-label">数据源:</span>
+            <select id="source-select" class="source-select">
+                <option value="binance">Binance</option>
+                <option value="coingecko">CoinGecko</option>
+                <option value="okx">OKX</option>
+            </select>
+            <button id="refresh-btn">🔄 刷新</button>
+        </div>
+    </div>
+
+    <div class="error-banner" id="error-banner">
+        <span class="error-icon">⚠️</span>
+        <span class="error-message" id="error-message"></span>
+        <button class="error-close" onclick="hideError()">✕</button>
+    </div>
+
+    <div class="ticker-info">
+        <div class="ticker-item">
+            <span class="ticker-label">最新价</span>
+            <span class="ticker-value" id="last-price">--</span>
+        </div>
+        <div class="ticker-item">
+            <span class="ticker-label">24h涨跌</span>
+            <span class="ticker-value" id="change-24h">--</span>
+        </div>
+        <div class="ticker-item">
+            <span class="ticker-label">24h最高</span>
+            <span class="ticker-value" id="high-24h">--</span>
+        </div>
+        <div class="ticker-item">
+            <span class="ticker-label">24h最低</span>
+            <span class="ticker-value" id="low-24h">--</span>
+        </div>
+        <div class="ticker-item">
+            <span class="ticker-label">24h成交量</span>
+            <span class="ticker-value" id="volume-24h">--</span>
+        </div>
+    </div>
+
+    <div id="chart-container">
+        <div class="loading">加载中...</div>
+    </div>
+
+    <script>
+        let chart = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let currentSymbol = '{{ inst_id }}';
+        let currentBar = '{{ bar }}';
+        let currentSource = '{{ source }}';
+
+        // 初始化图表
+        function initChart() {
+            const container = document.getElementById('chart-container');
+            container.innerHTML = '';
+
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#131722' },
+                    textColor: '#d1d4dc',
+                },
+                grid: {
+                    vertLines: { color: '#1e222d' },
+                    horzLines: { color: '#1e222d' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#2a2e39',
+                },
+                timeScale: {
+                    borderColor: '#2a2e39',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+            });
+
+            // K线序列
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // 成交量序列
+            volumeSeries = chart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: {
+                    type: 'volume',
+                },
+                priceScaleId: '',
+            });
+            volumeSeries.priceScale().applyOptions({
+                scaleMargins: {
+                    top: 0.8,
+                    bottom: 0,
+                },
+            });
+
+            // 自适应大小
+            new ResizeObserver(entries => {
+                if (entries.length === 0 || entries[0].target !== container) return;
+                const { width, height } = entries[0].contentRect;
+                chart.applyOptions({ width, height });
+            }).observe(container);
+        }
+
+        // 显示错误
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-banner').classList.add('show');
+        }
+
+        // 隐藏错误
+        function hideError() {
+            document.getElementById('error-banner').classList.remove('show');
+        }
+
+        // 显示图表区域错误
+        function showChartError(message, detail) {
+            const container = document.getElementById('chart-container');
+            container.innerHTML = `
+                <div class="chart-error">
+                    <div class="error-icon">❌</div>
+                    <div class="error-title">${message}</div>
+                    <div class="error-detail">${detail}</div>
+                    <button class="retry-btn" onclick="retryLoad()">🔄 重试</button>
+                </div>
+            `;
+        }
+
+        // 重试加载
+        function retryLoad() {
+            hideError();
+            initChart();
+            refreshData();
+        }
+
+        // 加载 K 线数据
+        async function loadCandlesticks() {
+            try {
+                const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=200&source=${currentSource}`);
+                const result = await response.json();
+                
+                if (result.code === 0 && result.data) {
+                    hideError();
+                    const candles = result.data;
+                    candleSeries.setData(candles);
+
+                    // 成交量数据
+                    const volumeData = candles.map(c => ({
+                        time: c.time,
+                        value: c.volume,
+                        color: c.close >= c.open ? '#26a69a80' : '#ef535080',
+                    }));
+                    volumeSeries.setData(volumeData);
+
+                    chart.timeScale().fitContent();
+                } else {
+                    // API 返回错误
+                    const errorMsg = result.error || 'K线数据加载失败';
+                    showError(`K线数据错误: ${errorMsg}`);
+                    showChartError('K线数据加载失败', errorMsg);
+                }
+            } catch (error) {
+                console.error('加载K线失败:', error);
+                showError(`网络错误: ${error.message}`);
+                showChartError('无法连接到服务器', error.message);
+            }
+        }
+
+        // 加载行情
+        async function loadTicker() {
+            try {
+                const response = await fetch(`/api/ticker/?symbol=${currentSymbol}&source=${currentSource}`);
+                const result = await response.json();
+                
+                if (result.code === 0 && result.data) {
+                    const ticker = result.data;
+                    const lastPrice = parseFloat(ticker.last);
+                    const open24h = parseFloat(ticker.open24h);
+                    const changePercent = ((lastPrice - open24h) / open24h * 100).toFixed(2);
+                    const isUp = lastPrice >= open24h;
+
+                    document.getElementById('last-price').textContent = lastPrice.toLocaleString();
+                    document.getElementById('last-price').className = `ticker-value ${isUp ? 'up' : 'down'}`;
+
+                    document.getElementById('change-24h').textContent = `${isUp ? '+' : ''}${changePercent}%`;
+                    document.getElementById('change-24h').className = `ticker-value ${isUp ? 'up' : 'down'}`;
+
+                    document.getElementById('high-24h').textContent = parseFloat(ticker.high24h).toLocaleString();
+                    document.getElementById('low-24h').textContent = parseFloat(ticker.low24h).toLocaleString();
+                    document.getElementById('volume-24h').textContent = parseFloat(ticker.vol24h).toLocaleString();
+                } else {
+                    // API 返回错误
+                    const errorMsg = result.error || '行情数据加载失败';
+                    showError(`行情错误: ${errorMsg}`);
+                    // 清空行情显示
+                    document.getElementById('last-price').textContent = '--';
+                    document.getElementById('change-24h').textContent = '--';
+                    document.getElementById('high-24h').textContent = '--';
+                    document.getElementById('low-24h').textContent = '--';
+                    document.getElementById('volume-24h').textContent = '--';
+                }
+            } catch (error) {
+                console.error('加载行情失败:', error);
+                showError(`行情网络错误: ${error.message}`);
+            }
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadCandlesticks();
+            loadTicker();
+        }
+
+        // 事件绑定
+        document.getElementById('symbol-select').addEventListener('change', (e) => {
+            currentSymbol = e.target.value;
+            refreshData();
+        });
+
+        document.getElementById('source-select').addEventListener('change', (e) => {
+            currentSource = e.target.value;
+            refreshData();
+        });
+
+        document.querySelectorAll('.timeframe-buttons button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentBar = btn.dataset.bar;
+                refreshData();
+            });
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', refreshData);
+
+        // 设置初始选中状态
+        document.getElementById('symbol-select').value = currentSymbol;
+        document.getElementById('source-select').value = currentSource;
+        document.querySelectorAll('.timeframe-buttons button').forEach(btn => {
+            if (btn.dataset.bar === currentBar) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // 初始化
+        initChart();
+        refreshData();
+
+        // 定时刷新（每30秒）
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>
