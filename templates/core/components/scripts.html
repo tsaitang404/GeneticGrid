@@ -1,1690 +1,893 @@
 <script>
-    let chart = null;
-    let candleSeries = null;
-    let volumeSeries = null;
-    let highlightSeries = null;
-    let currentSymbol = '{{ inst_id }}';
-    let currentBar = '{{ bar }}';
-    let currentSource = '{{ source }}';
-    
-    // 指标状态和Series
-    const indicators = {
-        // 主图指标
-        vol: { enabled: true, series: null },
-        ma: { enabled: false, series: [] },
-        ema: { enabled: false, series: [] },
-        boll: { enabled: false, series: [] },
-        sar: { enabled: false, series: [] },
-        supertrend: { enabled: false, series: [] },
-        sr: { enabled: false, series: [] },
-        
-        // 副图指标 (当前选中的副图指标名称)
-        activeSubIndicator: 'none',
-        subSeries: [] // 存储当前副图指标的所有 Series
-    };
-    
+const { createApp, ref, reactive, onMounted, onUnmounted, nextTick, watch } = Vue;
 
-    // --- Web Worker 初始化 ---
-    let indicatorWorker = null;
-    let workerTaskCounter = 0;
-
-    function initWorker() {
-        const workerCode = `
-            self.onmessage = function(e) {
-                const { id, type, data } = e.data;
-                if (type === 'CALCULATE') {
-                    const { candles, indicators } = data;
-                    const results = {};
-                    
-                    for (const ind of indicators) {
-                        try {
-                            if (ind === 'ma') {
-                                results.ma = [
-                                    calculateSMA(candles, 7),
-                                    calculateSMA(candles, 25),
-                                    calculateSMA(candles, 99)
-                                ];
-                            } else if (ind === 'ema') {
-                                results.ema = [
-                                    calculateEMA(candles, 7),
-                                    calculateEMA(candles, 25),
-                                    calculateEMA(candles, 99)
-                                ];
-                            } else if (ind === 'boll') {
-                                results.boll = calculateBollingerBands(candles, 20, 2);
-                            } else if (ind === 'sar') {
-                                results.sar = calculateSAR(candles);
-                            } else if (ind === 'supertrend') {
-                                results.supertrend = calculateSuperTrend(candles);
-                            } else if (ind === 'sr') {
-                                results.sr = calculateSupportResistance(candles);
-                            } else if (ind === 'macd') {
-                                results.macd = calculateMACD(candles, 12, 26, 9);
-                            } else if (ind === 'kdj') {
-                                results.kdj = calculateKDJ(candles, 9, 3, 3);
-                            } else if (ind === 'rsi') {
-                                results.rsi = calculateRSI(candles, 14);
-                            } else if (ind === 'stochrsi') {
-                                results.stochrsi = calculateStochRSI(candles, 14, 14, 3, 3);
-                            } else if (ind === 'cci') {
-                                results.cci = calculateCCI(candles, 20);
-                            } else if (ind === 'dmi') {
-                                results.dmi = calculateDMI(candles, 14);
-                            } else if (ind === 'wr') {
-                                results.wr = calculateWR(candles, 14);
-                            } else if (ind === 'obv') {
-                                results.obv = calculateOBV(candles);
-                            } else if (ind === 'trix') {
-                                results.trix = calculateTRIX(candles, 12);
-                            } else if (ind === 'roc') {
-                                results.roc = calculateROC(candles, 12);
-                            } else if (ind === 'mtm') {
-                                results.mtm = calculateMTM(candles, 12);
-                            } else if (ind === 'dma') {
-                                results.dma = calculateDMA(candles, 10, 50);
-                            } else if (ind === 'vr') {
-                                results.vr = calculateVR(candles, 26);
-                            } else if (ind === 'brar') {
-                                results.brar = calculateBRAR(candles, 26);
-                            } else if (ind === 'psy') {
-                                results.psy = calculatePSY(candles, 12);
-                            }
-                        } catch (err) {
-                            console.error('Worker calculation error:', ind, err);
-                        }
-                    }
-                    self.postMessage({ id, type: 'RESULT', results });
-                }
-            };
-
-            // --- 算法函数库 ---
-            function calculateSMA(candles, period) {
-                const result = [];
-                for (let i = 0; i < candles.length; i++) {
-                    if (i < period - 1) continue;
-                    let sum = 0;
-                    for (let j = 0; j < period; j++) sum += candles[i - j].close;
-                    result.push({ time: candles[i].time, value: sum / period });
-                }
-                return result;
-            }
-
-            function calculateEMA(candles, period) {
-                const result = [];
-                const k = 2 / (period + 1);
-                let ema = candles[0].close;
-                result.push({ time: candles[0].time, value: ema });
-                for (let i = 1; i < candles.length; i++) {
-                    ema = (candles[i].close - ema) * k + ema;
-                    result.push({ time: candles[i].time, value: ema });
-                }
-                return result;
-            }
-
-            function calculateBollingerBands(candles, period, stdDevMultiplier) {
-                const upper = [];
-                const middle = [];
-                const lower = [];
-                for (let i = 0; i < candles.length; i++) {
-                    if (i < period - 1) continue;
-                    let sum = 0;
-                    for (let j = 0; j < period; j++) sum += candles[i - j].close;
-                    const sma = sum / period;
-                    let sumSquaredDiff = 0;
-                    for (let j = 0; j < period; j++) sumSquaredDiff += Math.pow(candles[i - j].close - sma, 2);
-                    const stdDev = Math.sqrt(sumSquaredDiff / period);
-                    middle.push({ time: candles[i].time, value: sma });
-                    upper.push({ time: candles[i].time, value: sma + stdDev * stdDevMultiplier });
-                    lower.push({ time: candles[i].time, value: sma - stdDev * stdDevMultiplier });
-                }
-                return { upper, middle, lower };
-            }
-
-            function calculateSAR(candles) {
-                const result = [];
-                if (candles.length < 2) return result;
-                let af = 0.02, maxAf = 0.2, isLong = true;
-                let sar = candles[0].low, ep = candles[0].high;
-                for (let i = 1; i < candles.length; i++) {
-                    const prevSar = sar;
-                    sar = prevSar + af * (ep - prevSar);
-                    if (isLong) {
-                        if (candles[i].low < sar) {
-                            isLong = false; sar = ep; ep = candles[i].low; af = 0.02;
-                        } else {
-                            if (candles[i].high > ep) { ep = candles[i].high; af = Math.min(af + 0.02, maxAf); }
-                        }
-                    } else {
-                        if (candles[i].high > sar) {
-                            isLong = true; sar = ep; ep = candles[i].high; af = 0.02;
-                        } else {
-                            if (candles[i].low < ep) { ep = candles[i].low; af = Math.min(af + 0.02, maxAf); }
-                        }
-                    }
-                    result.push({ time: candles[i].time, value: sar });
-                }
-                return result;
-            }
-
-            function calculateSuperTrend(candles, period = 10, multiplier = 3) {
-                const result = [];
-                if (candles.length < period) return result;
-                const trs = [];
-                for(let i = 1; i < candles.length; i++) {
-                    const high = candles[i].high, low = candles[i].low, prevClose = candles[i-1].close;
-                    trs.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
-                }
-                let atr = trs.slice(0, period).reduce((a,b) => a+b, 0) / period;
-                let upperBand = (candles[period].high + candles[period].low) / 2 + multiplier * atr;
-                let lowerBand = (candles[period].high + candles[period].low) / 2 - multiplier * atr;
-                let inUptrend = true;
-                for (let i = period; i < candles.length; i++) {
-                    const currHigh = candles[i].high, currLow = candles[i].low, currClose = candles[i].close, prevClose = candles[i-1].close;
-                    if (i > period) {
-                        const tr = Math.max(currHigh - currLow, Math.abs(currHigh - prevClose), Math.abs(currLow - prevClose));
-                        atr = (atr * (period - 1) + tr) / period;
-                    }
-                    let currUpperBand = (currHigh + currLow) / 2 + multiplier * atr;
-                    let currLowerBand = (currHigh + currLow) / 2 - multiplier * atr;
-                    if (inUptrend) {
-                        if (currLowerBand < lowerBand) currLowerBand = lowerBand;
-                        if (currClose < lowerBand) { inUptrend = false; upperBand = currUpperBand; } else { lowerBand = currLowerBand; }
-                    } else {
-                        if (currUpperBand > upperBand) currUpperBand = upperBand;
-                        if (currClose > upperBand) { inUptrend = true; lowerBand = currLowerBand; } else { upperBand = currUpperBand; }
-                    }
-                    result.push({ time: candles[i].time, value: inUptrend ? lowerBand : upperBand, color: inUptrend ? '#26a69a' : '#ef5350' });
-                }
-                return result;
-            }
-
-            function calculateSupportResistance(candles) {
-                const support = [], resistance = [];
-                for (let i = 2; i < candles.length - 2; i++) {
-                    const isHigh = candles[i].high > candles[i-1].high && candles[i].high > candles[i-2].high && candles[i].high > candles[i+1].high && candles[i].high > candles[i+2].high;
-                    const isLow = candles[i].low < candles[i-1].low && candles[i].low < candles[i-2].low && candles[i].low < candles[i+1].low && candles[i].low < candles[i+2].low;
-                    if (isHigh) for (let j = 0; j < 50 && i+j < candles.length; j++) resistance.push({ time: candles[i+j].time, value: candles[i].high });
-                    if (isLow) for (let j = 0; j < 50 && i+j < candles.length; j++) support.push({ time: candles[i+j].time, value: candles[i].low });
-                }
-                return { support, resistance };
-            }
-
-            function calculateMACD(candles, fastPeriod, slowPeriod, signalPeriod) {
-                const emaFast = calculateEMA(candles, fastPeriod);
-                const emaSlow = calculateEMA(candles, slowPeriod);
-                const difData = [], deaData = [], histogramData = [];
-                const minLen = Math.min(emaFast.length, emaSlow.length);
-                const offsetFast = emaFast.length - minLen, offsetSlow = emaSlow.length - minLen;
-                const difValues = [];
-                for (let i = 0; i < minLen; i++) {
-                    const val = emaFast[i + offsetFast].value - emaSlow[i + offsetSlow].value;
-                    const time = emaFast[i + offsetFast].time;
-                    difValues.push({ time, value: val });
-                    difData.push({ time, value: val });
-                }
-                let dea = difValues[0].value;
-                const k = 2 / (signalPeriod + 1);
-                deaData.push({ time: difValues[0].time, value: dea });
-                histogramData.push({ time: difValues[0].time, value: difValues[0].value - dea, color: (difValues[0].value - dea) >= 0 ? '#26a69a' : '#ef5350' });
-                for (let i = 1; i < difValues.length; i++) {
-                    dea = (difValues[i].value - dea) * k + dea;
-                    deaData.push({ time: difValues[i].time, value: dea });
-                    const hist = difValues[i].value - dea;
-                    histogramData.push({ time: difValues[i].time, value: hist, color: hist >= 0 ? '#26a69a' : '#ef5350' });
-                }
-                return { dif: difData, dea: deaData, histogram: histogramData };
-            }
-
-            function calculateRSI(candles, period) {
-                const result = [];
-                if (candles.length < period + 1) return result;
-                let gains = 0, losses = 0;
-                for (let i = 1; i <= period; i++) {
-                    const change = candles[i].close - candles[i-1].close;
-                    if (change > 0) gains += change; else losses -= change;
-                }
-                let avgGain = gains / period, avgLoss = losses / period;
-                for (let i = period + 1; i < candles.length; i++) {
-                    const change = candles[i].close - candles[i-1].close;
-                    let gain = change > 0 ? change : 0, loss = change < 0 ? -change : 0;
-                    avgGain = (avgGain * (period - 1) + gain) / period;
-                    avgLoss = (avgLoss * (period - 1) + loss) / period;
-                    const rs = avgGain / avgLoss;
-                    result.push({ time: candles[i].time, value: 100 - (100 / (1 + rs)) });
-                }
-                return result;
-            }
-
-            function calculateKDJ(candles, n, m1, m2) {
-                const kData = [], dData = [], jData = [];
-                let k = 50, d = 50;
-                for (let i = 0; i < candles.length; i++) {
-                    if (i < n - 1) continue;
-                    let low = candles[i].low, high = candles[i].high;
-                    for (let j = 0; j < n; j++) {
-                        if (candles[i-j].low < low) low = candles[i-j].low;
-                        if (candles[i-j].high > high) high = candles[i-j].high;
-                    }
-                    const rsv = (candles[i].close - low) / (high - low) * 100;
-                    k = (m1 - 1) / m1 * k + 1 / m1 * rsv;
-                    d = (m2 - 1) / m2 * d + 1 / m2 * k;
-                    kData.push({ time: candles[i].time, value: k });
-                    dData.push({ time: candles[i].time, value: d });
-                    jData.push({ time: candles[i].time, value: 3 * k - 2 * d });
-                }
-                return { k: kData, d: dData, j: jData };
-            }
-
-            function calculateCCI(candles, period) {
-                const result = [];
-                if (candles.length < period) return result;
-                const tps = candles.map(c => (c.high + c.low + c.close) / 3);
-                for (let i = period - 1; i < candles.length; i++) {
-                    let sumTp = 0;
-                    for (let j = 0; j < period; j++) sumTp += tps[i-j];
-                    const maTp = sumTp / period;
-                    let sumMd = 0;
-                    for (let j = 0; j < period; j++) sumMd += Math.abs(tps[i-j] - maTp);
-                    const md = sumMd / period;
-                    result.push({ time: candles[i].time, value: (tps[i] - maTp) / (0.015 * md) });
-                }
-                return result;
-            }
-
-            function calculateWR(candles, period) {
-                const result = [];
-                for (let i = period - 1; i < candles.length; i++) {
-                    let highest = -Infinity, lowest = Infinity;
-                    for (let j = 0; j < period; j++) {
-                        if (candles[i-j].high > highest) highest = candles[i-j].high;
-                        if (candles[i-j].low < lowest) lowest = candles[i-j].low;
-                    }
-                    result.push({ time: candles[i].time, value: (highest - candles[i].close) / (highest - lowest) * -100 });
-                }
-                return result;
-            }
-
-            function calculateOBV(candles) {
-                const result = [];
-                let obv = 0;
-                result.push({ time: candles[0].time, value: obv });
-                for (let i = 1; i < candles.length; i++) {
-                    if (candles[i].close > candles[i-1].close) obv += candles[i].volume;
-                    else if (candles[i].close < candles[i-1].close) obv -= candles[i].volume;
-                    result.push({ time: candles[i].time, value: obv });
-                }
-                return result;
-            }
-
-            function calculateROC(candles, period) {
-                const result = [];
-                for (let i = period; i < candles.length; i++) {
-                    result.push({ time: candles[i].time, value: ((candles[i].close - candles[i-period].close) / candles[i-period].close) * 100 });
-                }
-                return result;
-            }
-
-            function calculateMTM(candles, period) {
-                const result = [];
-                for (let i = period; i < candles.length; i++) {
-                    result.push({ time: candles[i].time, value: candles[i].close - candles[i-period].close });
-                }
-                return result;
-            }
-
-            function calculatePSY(candles, period) {
-                const result = [];
-                for (let i = period; i < candles.length; i++) {
-                    let upCount = 0;
-                    for (let j = 0; j < period; j++) {
-                        if (candles[i-j].close > candles[i-j-1].close) upCount++;
-                    }
-                    result.push({ time: candles[i].time, value: (upCount / period) * 100 });
-                }
-                return result;
-            }
-
-            // 占位函数
-            function calculateDMI(candles, period) { return { pdi: [], mdi: [], adx: [] }; }
-            function calculateStochRSI(candles, rsiPeriod, stochPeriod, kPeriod, dPeriod) { return { k: [], d: [] }; }
-            function calculateTRIX(candles, period) { return []; }
-            function calculateDMA(candles, shortPeriod, longPeriod) { return { ddd: [], ama: [] }; }
-            function calculateVR(candles, period) { return []; }
-            function calculateBRAR(candles, period) { return { br: [], ar: [] }; }
-        `;
-
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        indicatorWorker = new Worker(URL.createObjectURL(blob));
-        
-        indicatorWorker.onmessage = function(e) {
-            const { id, type, results } = e.data;
-            if (type === 'RESULT') {
-                console.log('Worker calculation results received:', Object.keys(results));
-                applyIndicatorResults(results);
-            }
-        };
-        
-        indicatorWorker.onerror = function(e) {
-            console.error('Worker error:', e.message, e.filename, e.lineno);
-        };
-    }
-
-    // 应用指标计算结果
-    function applyIndicatorResults(results) {
-        // 主图指标
-        if (results.ma && indicators.ma.enabled) {
-            indicators.ma.series[0].setData(results.ma[0]);
-            indicators.ma.series[1].setData(results.ma[1]);
-            indicators.ma.series[2].setData(results.ma[2]);
-        }
-        if (results.ema && indicators.ema.enabled) {
-            indicators.ema.series[0].setData(results.ema[0]);
-            indicators.ema.series[1].setData(results.ema[1]);
-            indicators.ema.series[2].setData(results.ema[2]);
-        }
-        if (results.boll && indicators.boll.enabled) {
-            indicators.boll.series[0].setData(results.boll.upper);
-            indicators.boll.series[1].setData(results.boll.middle);
-            indicators.boll.series[2].setData(results.boll.lower);
-        }
-        if (results.sar && indicators.sar.enabled) indicators.sar.series[0].setData(results.sar);
-        if (results.supertrend && indicators.supertrend.enabled) indicators.supertrend.series[0].setData(results.supertrend);
-        if (results.sr && indicators.sr.enabled) {
-            indicators.sr.series[0].setData(results.sr.support);
-            indicators.sr.series[1].setData(results.sr.resistance);
-        }
-
-        // 副图指标
-        if (indicators.activeSubIndicator !== 'none') {
-            const name = indicators.activeSubIndicator;
-            if (results[name]) {
-                if (name === 'macd') {
-                    indicators.subSeries[0].setData(results.macd.histogram);
-                    indicators.subSeries[1].setData(results.macd.dif);
-                    indicators.subSeries[2].setData(results.macd.dea);
-                } else if (name === 'kdj') {
-                    indicators.subSeries[0].setData(results.kdj.k);
-                    indicators.subSeries[1].setData(results.kdj.d);
-                    indicators.subSeries[2].setData(results.kdj.j);
-                } else if (name === 'rsi') {
-                    indicators.subSeries[0].setData(results.rsi);
-                } else if (name === 'stochrsi') {
-                    indicators.subSeries[0].setData(results.stochrsi.k);
-                    indicators.subSeries[1].setData(results.stochrsi.d);
-                } else if (name === 'cci') {
-                    indicators.subSeries[0].setData(results.cci);
-                } else if (name === 'dmi') {
-                    indicators.subSeries[0].setData(results.dmi.pdi);
-                    indicators.subSeries[1].setData(results.dmi.mdi);
-                    indicators.subSeries[2].setData(results.dmi.adx);
-                } else if (name === 'wr') {
-                    indicators.subSeries[0].setData(results.wr);
-                } else if (name === 'obv') {
-                    indicators.subSeries[0].setData(results.obv);
-                } else if (name === 'trix') {
-                    indicators.subSeries[0].setData(results.trix);
-                } else if (name === 'roc') {
-                    indicators.subSeries[0].setData(results.roc);
-                } else if (name === 'mtm') {
-                    indicators.subSeries[0].setData(results.mtm);
-                } else if (name === 'dma') {
-                    indicators.subSeries[0].setData(results.dma.ddd);
-                    indicators.subSeries[1].setData(results.dma.ama);
-                } else if (name === 'vr') {
-                    indicators.subSeries[0].setData(results.vr);
-                } else if (name === 'brar') {
-                    indicators.subSeries[0].setData(results.brar.ar);
-                    indicators.subSeries[1].setData(results.brar.br);
-                } else if (name === 'psy') {
-                    indicators.subSeries[0].setData(results.psy);
-                }
-            }
-        }
-    }
-
-    // 触发后台计算
-    function triggerWorkerCalculation() {
-        if (!indicatorWorker) initWorker();
-        
-        const activeIndicators = [];
-        // 收集开启的主图指标
-        ['ma', 'ema', 'boll', 'sar', 'supertrend', 'sr'].forEach(name => {
-            if (indicators[name].enabled) activeIndicators.push(name);
-        });
-        // 收集开启的副图指标
-        if (indicators.activeSubIndicator !== 'none') {
-            activeIndicators.push(indicators.activeSubIndicator);
-        }
-        
-        if (activeIndicators.length > 0 && allCandles.length > 0) {
-            workerTaskCounter++;
-            console.log('Triggering worker calculation:', activeIndicators);
-            indicatorWorker.postMessage({
-                id: workerTaskCounter,
-                type: 'CALCULATE',
-                data: {
-                    candles: allCandles,
-                    indicators: activeIndicators
-                }
-            });
-        } else {
-            console.log('No active indicators or no candles data. Active:', activeIndicators, 'Candles:', allCandles ? allCandles.length : 0);
-        }
-    }
-    
-    // 颜色配置
-    const COLORS = {
-        GREEN: '#26a69a',
-        RED: '#ef5350',
-        GREEN_TRANSPARENT: '#26a69a80',
-        RED_TRANSPARENT: '#ef535080'
-    };
-    
-    // 偏好设置
-    let settings = {
-        colorScheme: localStorage.getItem('geneticgrid_color_scheme') || 'green-up' // 'green-up' or 'red-up'
-    };
-
-    // 获取当前颜色配置
-    function getColors() {
-        if (settings.colorScheme === 'green-up') {
-            return {
-                up: COLORS.GREEN,
-                down: COLORS.RED,
-                upTransparent: COLORS.GREEN_TRANSPARENT,
-                downTransparent: COLORS.RED_TRANSPARENT
-            };
-        } else {
-            return {
-                up: COLORS.RED,
-                down: COLORS.GREEN,
-                upTransparent: COLORS.RED_TRANSPARENT,
-                downTransparent: COLORS.GREEN_TRANSPARENT
-            };
-        }
-    }
-
-    // 应用颜色设置
-    function applyColorScheme() {
-        const colors = getColors();
-        const root = document.documentElement;
-        
-        // 更新 CSS 变量
-        root.style.setProperty('--up-color', colors.up);
-        root.style.setProperty('--down-color', colors.down);
-        
-        // 更新单选框状态
-        const radios = document.getElementsByName('color-scheme');
-        for (let radio of radios) {
-            if (radio.value === settings.colorScheme) {
-                radio.checked = true;
-            }
-        }
-
-        // 如果图表已初始化，更新图表配置
-        if (candleSeries) {
-            candleSeries.applyOptions({
-                upColor: colors.up,
-                downColor: colors.down,
-                borderDownColor: colors.down,
-                borderUpColor: colors.up,
-                wickDownColor: colors.down,
-                wickUpColor: colors.up,
-            });
+const WORKER_CODE = `
+    self.onmessage = function(e) {
+        const { id, type, data } = e.data;
+        if (type === 'CALCULATE') {
+            const { candles, indicators } = data;
+            const results = {};
             
-            // 重新渲染数据以更新成交量颜色
-            if (allCandles.length > 0) {
-                updateChartData();
+            for (const ind of indicators) {
+                try {
+                    if (ind === 'ma') {
+                        results.ma = [
+                            calculateSMA(candles, 7),
+                            calculateSMA(candles, 25),
+                            calculateSMA(candles, 99)
+                        ];
+                    } else if (ind === 'ema') {
+                        results.ema = [
+                            calculateEMA(candles, 7),
+                            calculateEMA(candles, 25),
+                            calculateEMA(candles, 99)
+                        ];
+                    } else if (ind === 'boll') {
+                        results.boll = calculateBollingerBands(candles, 20, 2);
+                    } else if (ind === 'sar') {
+                        results.sar = calculateSAR(candles);
+                    } else if (ind === 'supertrend') {
+                        results.supertrend = calculateSuperTrend(candles);
+                    } else if (ind === 'sr') {
+                        results.sr = calculateSupportResistance(candles);
+                    } else if (ind === 'macd') {
+                        results.macd = calculateMACD(candles, 12, 26, 9);
+                    } else if (ind === 'kdj') {
+                        results.kdj = calculateKDJ(candles, 9, 3, 3);
+                    } else if (ind === 'rsi') {
+                        results.rsi = calculateRSI(candles, 14);
+                    } else if (ind === 'stochrsi') {
+                        results.stochrsi = calculateStochRSI(candles, 14, 14, 3, 3);
+                    } else if (ind === 'cci') {
+                        results.cci = calculateCCI(candles, 20);
+                    } else if (ind === 'dmi') {
+                        results.dmi = calculateDMI(candles, 14);
+                    } else if (ind === 'wr') {
+                        results.wr = calculateWR(candles, 14);
+                    } else if (ind === 'obv') {
+                        results.obv = calculateOBV(candles);
+                    } else if (ind === 'trix') {
+                        results.trix = calculateTRIX(candles, 12);
+                    } else if (ind === 'roc') {
+                        results.roc = calculateROC(candles, 12);
+                    } else if (ind === 'mtm') {
+                        results.mtm = calculateMTM(candles, 12);
+                    } else if (ind === 'dma') {
+                        results.dma = calculateDMA(candles, 10, 50);
+                    } else if (ind === 'vr') {
+                        results.vr = calculateVR(candles, 26);
+                    } else if (ind === 'brar') {
+                        results.brar = calculateBRAR(candles, 26);
+                    } else if (ind === 'psy') {
+                        results.psy = calculatePSY(candles, 12);
+                    }
+                } catch (err) {
+                    console.error('Worker calculation error:', ind, err);
+                }
             }
+            self.postMessage({ id, type: 'RESULT', results });
         }
+    };
+
+    function calculateSMA(candles, period) {
+        const result = [];
+        for (let i = 0; i < candles.length; i++) {
+            if (i < period - 1) continue;
+            let sum = 0;
+            for (let j = 0; j < period; j++) sum += candles[i - j].close;
+            result.push({ time: candles[i].time, value: sum / period });
+        }
+        return result;
     }
 
-    // 切换设置模态框
-    function toggleSettings() {
-        const modal = document.getElementById('settings-modal');
-        if (modal.classList.contains('show')) {
-            modal.classList.remove('show');
-        } else {
-            modal.classList.add('show');
+    function calculateEMA(candles, period) {
+        const result = [];
+        const k = 2 / (period + 1);
+        let ema = candles[0].close;
+        result.push({ time: candles[0].time, value: ema });
+        for (let i = 1; i < candles.length; i++) {
+            ema = (candles[i].close - ema) * k + ema;
+            result.push({ time: candles[i].time, value: ema });
         }
+        return result;
     }
 
-    // 更改颜色方案
-    function changeColorScheme(scheme) {
-        settings.colorScheme = scheme;
-        localStorage.setItem('geneticgrid_color_scheme', scheme);
-        applyColorScheme();
+    function calculateBollingerBands(candles, period, stdDevMultiplier) {
+        const upper = [];
+        const middle = [];
+        const lower = [];
+        for (let i = 0; i < candles.length; i++) {
+            if (i < period - 1) continue;
+            let sum = 0;
+            for (let j = 0; j < period; j++) sum += candles[i - j].close;
+            const sma = sum / period;
+            let sumSquaredDiff = 0;
+            for (let j = 0; j < period; j++) sumSquaredDiff += Math.pow(candles[i - j].close - sma, 2);
+            const stdDev = Math.sqrt(sumSquaredDiff / period);
+            middle.push({ time: candles[i].time, value: sma });
+            upper.push({ time: candles[i].time, value: sma + stdDev * stdDevMultiplier });
+            lower.push({ time: candles[i].time, value: sma - stdDev * stdDevMultiplier });
+        }
+        return { upper, middle, lower };
     }
 
-    // 初始化时应用设置
-    document.addEventListener('DOMContentLoaded', () => {
-        applyColorScheme();
-        
-        // 绑定设置按钮事件
-        document.getElementById('settings-btn').addEventListener('click', toggleSettings);
-        
-        // 点击遮罩层关闭
-        document.getElementById('settings-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'settings-modal') {
-                toggleSettings();
-            }
-        });
-    });
-
-    // 数据缓存
-    let allCandles = [];
-    let isLoadingMore = false;
-    let isLoadingNewer = false;
-    let oldestTimestamp = null;
-    let newestTimestamp = null;
-    let hasMoreData = true;
-    let hasNewerData = true;
-    
-    // Tooltip 锁定状态
-    let isTooltipLocked = false;
-    let lockedCandleTime = null;
-
-    // 初始化图表
-    function initChart() {
-        const container = document.getElementById('chart-container');
-        
-        // 只移除图表，保留 tooltip
-        const existingTooltip = document.getElementById('candle-tooltip');
-        container.innerHTML = '';
-        
-        // 重新添加 tooltip
-        if (!existingTooltip) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'candle-tooltip';
-            tooltip.id = 'candle-tooltip';
-            tooltip.style.display = 'none';
-            tooltip.innerHTML = `
-                <div class="tooltip-time" id="tooltip-time"></div>
-                <div class="tooltip-row" id="row-open">
-                    <span class="tooltip-label">开盘</span>
-                    <span class="tooltip-value" id="tooltip-open">--</span>
-                </div>
-                <div class="tooltip-row" id="row-high">
-                    <span class="tooltip-label">最高</span>
-                    <span class="tooltip-value" id="tooltip-high">--</span>
-                </div>
-                <div class="tooltip-row" id="row-low">
-                    <span class="tooltip-label">最低</span>
-                    <span class="tooltip-value" id="tooltip-low">--</span>
-                </div>
-                <div class="tooltip-row">
-                    <span class="tooltip-label">收盘</span>
-                    <span class="tooltip-value" id="tooltip-close">--</span>
-                </div>
-                <div class="tooltip-row">
-                    <span class="tooltip-label">涨跌</span>
-                    <span class="tooltip-value" id="tooltip-change">--</span>
-                </div>
-                <div class="tooltip-row">
-                    <span class="tooltip-label">成交量</span>
-                    <span class="tooltip-value" id="tooltip-volume">--</span>
-                </div>
-            `;
-            container.appendChild(tooltip);
-        } else {
-            container.appendChild(existingTooltip);
-        }
-
-        // 添加无数据遮罩层
-        const noDataOverlay = document.createElement('div');
-        noDataOverlay.id = 'no-data-overlay';
-        noDataOverlay.style.cssText = 'position: absolute; left: 0; top: 0; bottom: 28px; width: 0; background: rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.2); display: none; pointer-events: none; z-index: 5; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.5); font-size: 13px; overflow: hidden; white-space: nowrap; backdrop-filter: blur(1px);';
-        noDataOverlay.innerText = '无数据';
-        container.appendChild(noDataOverlay);
-        
-        // 重置数据状态
-        allCandles = [];
-        oldestTimestamp = null;
-        newestTimestamp = null;
-        hasMoreData = true;
-        hasNewerData = true;
-        isLoadingMore = false;
-        isLoadingNewer = false;
-
-        // 重置指标 Series 引用，因为 chart 将被重建
-        indicators.vol.series = null;
-        indicators.ma.series = [];
-        indicators.ema.series = [];
-        indicators.boll.series = [];
-
-        chart = LightweightCharts.createChart(container, {
-            layout: {
-                background: { type: 'solid', color: '#131722' },
-                textColor: '#d1d4dc',
-            },
-            grid: {
-                vertLines: { color: '#1e222d' },
-                horzLines: { color: '#1e222d' },
-            },
-            crosshair: {
-                mode: LightweightCharts.CrosshairMode.Normal,
-            },
-            rightPriceScale: {
-                borderColor: '#2a2e39',
-            },
-            timeScale: {
-                borderColor: '#2a2e39',
-                timeVisible: true,
-                secondsVisible: false,
-            },
-        });
-
-        const colors = getColors();
-
-        // 根据 currentBar 决定使用 K线图还是折线图
-        if (currentBar === 'tick') {
-            // 分时图使用 AreaSeries
-            candleSeries = chart.addAreaSeries({
-                lineColor: '#2962FF',
-                topColor: 'rgba(41, 98, 255, 0.3)',
-                bottomColor: 'rgba(41, 98, 255, 0)',
-                lineWidth: 2,
-            });
-        } else {
-            // K线序列
-            candleSeries = chart.addCandlestickSeries({
-                upColor: colors.up,
-                downColor: colors.down,
-                borderDownColor: colors.down,
-                borderUpColor: colors.up,
-                wickDownColor: colors.down,
-                wickUpColor: colors.up,
-            });
-        }
-
-        // 成交量序列
-        volumeSeries = chart.addHistogramSeries({
-            color: colors.up,
-            priceFormat: {
-                type: 'volume',
-            },
-            priceScaleId: '',
-        });
-        volumeSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: 0.8,
-                bottom: 0,
-            },
-        });
-        // 应用 VOL 状态
-        volumeSeries.applyOptions({ visible: indicators.vol.enabled });
-        indicators.vol.series = volumeSeries;
-        
-        // 创建用于标记选中蜡烛的系列
-        markerSeries = chart.addLineSeries({
-            color: 'transparent',
-            lineWidth: 0,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            crosshairMarkerVisible: false,
-        });
-        
-        // 创建用于高亮选中蜡烛的系列
-        if (currentBar !== 'tick') {
-            // K线图：白色边框蜡烛
-            highlightSeries = chart.addCandlestickSeries({
-                upColor: 'transparent',
-                downColor: 'transparent',
-                borderUpColor: '#ffffff',
-                borderDownColor: '#ffffff',
-                wickUpColor: '#ffffff',
-                wickDownColor: '#ffffff',
-                borderVisible: true,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-        } else {
-            // 分时图：白色垂直线 (使用 Histogram 模拟)
-            highlightSeries = chart.addHistogramSeries({
-                color: 'rgba(255, 255, 255, 0.3)',
-                priceFormat: { type: 'custom', formatter: () => '' },
-                priceScaleId: 'highlight_overlay',
-                lastValueVisible: false,
-                priceLineVisible: false,
-            });
-            // 配置独立轴使其充满高度
-            chart.priceScale('highlight_overlay').applyOptions({
-                scaleMargins: { top: 0, bottom: 0 },
-                visible: false
-            });
-        }
-
-        // 自适应大小
-        new ResizeObserver(entries => {
-            if (entries.length === 0 || entries[0].target !== container) return;
-            const { width, height } = entries[0].contentRect;
-            chart.applyOptions({ width, height });
-        }).observe(container);
-        
-        // 监听可见范围变化，加载更多历史数据
-        chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
-        
-        // 监听十字线移动，显示悬停信息
-        chart.subscribeCrosshairMove(onCrosshairMove);
-        
-        // 监听点击事件，锁定/解锁tooltip
-        chart.subscribeClick(onChartClick);
-    }
-    
-    // 点击图表时锁定/解锁tooltip
-    function onChartClick(param) {
-        if (!param || !param.time) {
-            // 点击空白区域，解锁tooltip
-            isTooltipLocked = false;
-            lockedCandleTime = null;
-            const tooltip = document.getElementById('candle-tooltip');
-            if (tooltip) {
-                tooltip.classList.remove('locked');
-            }
-            // 清除高亮
-            if (highlightSeries) {
-                highlightSeries.setData([]);
-            }
-            return;
-        }
-        
-        const candleData = param.seriesData.get(candleSeries);
-        if (!candleData) {
-            return;
-        }
-        
-        // 如果点击的是已锁定的蜡烛，解锁
-        if (isTooltipLocked && lockedCandleTime === param.time) {
-            isTooltipLocked = false;
-            lockedCandleTime = null;
-            const tooltip = document.getElementById('candle-tooltip');
-            if (tooltip) {
-                tooltip.classList.remove('locked');
-            }
-            // 清除高亮
-            if (highlightSeries) {
-                highlightSeries.setData([]);
-            }
-        } else {
-            // 锁定到新的蜡烛
-            isTooltipLocked = true;
-            lockedCandleTime = param.time;
-            const tooltip = document.getElementById('candle-tooltip');
-            if (tooltip) {
-                tooltip.classList.add('locked');
-            }
-            // 添加高亮
-            if (highlightSeries) {
-                if (currentBar !== 'tick') {
-                    highlightSeries.setData([{
-                        time: param.time,
-                        open: candleData.open,
-                        high: candleData.high,
-                        low: candleData.low,
-                        close: candleData.close
-                    }]);
+    function calculateSAR(candles) {
+        const result = [];
+        if (candles.length < 2) return result;
+        let af = 0.02, maxAf = 0.2, isLong = true;
+        let sar = candles[0].low, ep = candles[0].high;
+        for (let i = 1; i < candles.length; i++) {
+            const prevSar = sar;
+            sar = prevSar + af * (ep - prevSar);
+            if (isLong) {
+                if (candles[i].low < sar) {
+                    isLong = false; sar = ep; ep = candles[i].low; af = 0.02;
                 } else {
-                    // 分时图高亮：一条满高的线
-                    highlightSeries.setData([{
-                        time: param.time,
-                        value: 1,
-                        color: 'rgba(255, 255, 255, 0.3)'
-                    }]);
+                    if (candles[i].high > ep) { ep = candles[i].high; af = Math.min(af + 0.02, maxAf); }
                 }
-            }
-            // 更新tooltip内容
-            updateTooltipContent(param);
-        }
-    }
-    
-    // 十字线移动时显示 K 线信息
-    function onCrosshairMove(param) {
-        // 如果tooltip已锁定，不响应悬停
-        if (isTooltipLocked) {
-            return;
-        }
-        
-        const tooltip = document.getElementById('candle-tooltip');
-        
-        // 检查 tooltip 元素是否存在
-        if (!tooltip) {
-            return;
-        }
-        
-        if (!param || !param.time || param.point === undefined || 
-            param.point.x < 0 || param.point.y < 0) {
-            tooltip.style.display = 'none';
-            return;
-        }
-        
-        updateTooltipContent(param);
-    }
-    
-    // 更新tooltip内容的通用函数
-    function updateTooltipContent(param) {
-        const tooltip = document.getElementById('candle-tooltip');
-        if (!tooltip) return;
-        
-        const candleData = param.seriesData.get(candleSeries);
-        const volumeData = param.seriesData.get(volumeSeries);
-        
-        if (!candleData) {
-            if (!isTooltipLocked) {
-                tooltip.style.display = 'none';
-            }
-            return;
-        }
-        
-        // 格式化时间
-        const date = new Date(param.time * 1000);
-        const timeStr = date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: currentBar === 'tick' ? '2-digit' : undefined
-        });
-        
-        // 获取数据
-        let open, high, low, close;
-        if (currentBar === 'tick') {
-            // 分时图只有 value (即 close)
-            close = candleData.value;
-            // 尝试从原始数据中查找对应的 open (如果有的话，但这里只有 value)
-            // 实际上，分时图通常只显示当前价格。
-            // 为了计算涨跌幅，我们需要前一个点的价格，或者当天的开盘价。
-            // 这里简化处理，只显示价格。
-            open = close; // 占位
-            high = close;
-            low = close;
-        } else {
-            open = candleData.open;
-            high = candleData.high;
-            low = candleData.low;
-            close = candleData.close;
-        }
-        
-        // 计算涨跌幅 (对于分时图，这里计算的是相对于前一个点的变化，或者如果能获取到 open24h 更好)
-        // 但在这里我们只能获取到当前点的数据。
-        // 对于 K 线，change 是 close - open。
-        // 对于分时图，我们暂时无法计算准确的涨跌幅（除非我们有前一个点的数据）。
-        // 简单起见，分时图不显示涨跌幅，或者显示 0。
-        let change = 0;
-        let changePercent = "0.00";
-        let isUp = true;
-        
-        if (currentBar !== 'tick') {
-            change = close - open;
-            changePercent = ((change / open) * 100).toFixed(2);
-            isUp = change >= 0;
-        }
-        
-        const colorClass = isUp ? 'up' : 'down';
-        
-        // 格式化数字
-        const formatNum = (num) => {
-            if (num >= 1000) return num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            if (num >= 1) return num.toFixed(4);
-            return num.toPrecision(4);
-        };
-        
-        const formatVolume = (vol) => {
-            if (vol >= 1e9) return (vol / 1e9).toFixed(2) + 'B';
-            if (vol >= 1e6) return (vol / 1e6).toFixed(2) + 'M';
-            if (vol >= 1e3) return (vol / 1e3).toFixed(2) + 'K';
-            return vol.toFixed(2);
-        };
-        
-        // 获取所有 tooltip 子元素并检查是否存在
-        const timeEl = document.getElementById('tooltip-time');
-        const openEl = document.getElementById('tooltip-open');
-        const highEl = document.getElementById('tooltip-high');
-        const lowEl = document.getElementById('tooltip-low');
-        const closeEl = document.getElementById('tooltip-close');
-        const changeEl = document.getElementById('tooltip-change');
-        const volumeEl = document.getElementById('tooltip-volume');
-        
-        // 行元素
-        const rowOpen = document.getElementById('row-open');
-        const rowHigh = document.getElementById('row-high');
-        const rowLow = document.getElementById('row-low');
-        
-        // 如果任何元素不存在，直接返回
-        if (!timeEl || !openEl || !highEl || !lowEl || !closeEl || !changeEl || !volumeEl) {
-            return;
-        }
-        
-        // 更新 tooltip 内容
-        timeEl.textContent = timeStr;
-        
-        if (currentBar === 'tick') {
-            // 分时图隐藏 OHLC
-            if (rowOpen) rowOpen.style.display = 'none';
-            if (rowHigh) rowHigh.style.display = 'none';
-            if (rowLow) rowLow.style.display = 'none';
-            
-            // 更改标签
-            const closeLabel = closeEl.previousElementSibling;
-            if (closeLabel) closeLabel.textContent = '价格';
-            
-            // 隐藏涨跌幅 (因为没有参照)
-            const changeRow = changeEl.parentElement;
-            if (changeRow) changeRow.style.display = 'none';
-            
-        } else {
-            if (rowOpen) rowOpen.style.display = 'flex';
-            if (rowHigh) rowHigh.style.display = 'flex';
-            if (rowLow) rowLow.style.display = 'flex';
-            
-            const closeLabel = closeEl.previousElementSibling;
-            if (closeLabel) closeLabel.textContent = '收盘';
-            
-            const changeRow = changeEl.parentElement;
-            if (changeRow) changeRow.style.display = 'flex';
-            
-            openEl.textContent = formatNum(open);
-            highEl.textContent = formatNum(high);
-            lowEl.textContent = formatNum(low);
-            
-            changeEl.textContent = `${isUp ? '+' : ''}${changePercent}%`;
-            changeEl.className = `tooltip-value ${colorClass}`;
-        }
-        
-        closeEl.textContent = formatNum(close);
-        closeEl.className = `tooltip-value ${colorClass}`;
-        
-        const volume = volumeData ? volumeData.value : (candleData.volume || 0);
-        volumeEl.textContent = formatVolume(volume);
-        
-        tooltip.style.display = 'block';
-    }
-    
-    // 可见范围变化时检查是否需要加载更多数据
-    function onVisibleRangeChange(logicalRange) {
-        if (!logicalRange) return;
-        
-        const dataLength = allCandles.length;
-        if (dataLength === 0) return;
-        
-        // 检查左侧（历史数据）
-        if (hasMoreData && !isLoadingMore) {
-            let needed = 0;
-            // 如果 from < 0，说明用户已经拖到了数据之外，需要加载 abs(from) + 缓冲
-            if (logicalRange.from < 0) {
-                needed = Math.abs(Math.floor(logicalRange.from)) + 1000; 
-            } 
-            // 如果 from < 1000，说明接近边界，需要预加载
-            else if (logicalRange.from < 1000) {
-                needed = 1000; 
-            }
-            
-            if (needed > 0) {
-                loadMoreHistory(needed);
-            }
-        }
-        
-        // 检查右侧（更新数据）
-        if (logicalRange.to > dataLength - 500 && hasNewerData && !isLoadingNewer) {
-            loadMoreNewerUntilEnough(logicalRange);
-        }
-
-        updateNoDataOverlay();
-    }
-
-    // 更新无数据遮罩层
-    function updateNoDataOverlay() {
-        const overlay = document.getElementById('no-data-overlay');
-        if (!overlay || !chart) return;
-
-        if (!hasMoreData && allCandles.length > 0) {
-            const firstTime = allCandles[0].time;
-            const x = chart.timeScale().timeToCoordinate(firstTime);
-            
-            if (x !== null && x > 0) {
-                overlay.style.display = 'flex';
-                overlay.style.width = `${x}px`;
             } else {
-                overlay.style.display = 'none';
-            }
-        } else {
-            overlay.style.display = 'none';
-        }
-    }
-    
-    // 加载指定数量的历史数据
-    async function loadMoreHistory(targetCount) {
-        if (isLoadingMore || !hasMoreData) return;
-        
-        isLoadingMore = true;
-        let loadedCount = 0;
-        const BATCH_LIMIT = 2000; // 单次请求最大限制
-        
-        try {
-            let newCandlesAccumulator = [];
-            
-            // 循环请求直到满足目标数量或没有更多数据
-            while (hasMoreData && loadedCount < targetCount) {
-                const beforeTs = oldestTimestamp * 1000;
-                // 动态计算本次请求数量
-                const currentLimit = Math.min(targetCount - loadedCount, BATCH_LIMIT);
-                
-                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=${currentLimit}&source=${currentSource}&before=${beforeTs}`;
-                const response = await fetch(url);
-                const result = await response.json();
-                
-                if (result.code === 0 && result.data && result.data.length > 0) {
-                    const fetchedCandles = result.data;
-                    
-                    // 累积数据 (注意顺序：新获取的在前面，因为它们更早)
-                    newCandlesAccumulator = [...fetchedCandles, ...newCandlesAccumulator];
-                    
-                    // 更新 oldestTimestamp 用于下一次循环
-                    oldestTimestamp = fetchedCandles[0].time;
-                    loadedCount += fetchedCandles.length;
-                    
-                    // 如果返回的数据少于请求的数量，说明没有更多数据了
-                    if (fetchedCandles.length < currentLimit) {
-                        hasMoreData = false;
-                        break;
-                    }
+                if (candles[i].high > sar) {
+                    isLong = true; sar = ep; ep = candles[i].high; af = 0.02;
                 } else {
-                    hasMoreData = false;
-                    break;
+                    if (candles[i].low < ep) { ep = candles[i].low; af = Math.min(af + 0.02, maxAf); }
                 }
             }
-            
-            // 批量更新图表
-            if (newCandlesAccumulator.length > 0) {
-                const existingTimes = new Set(allCandles.map(c => c.time));
-                const uniqueNewCandles = newCandlesAccumulator.filter(c => !existingTimes.has(c.time));
-                
-                if (uniqueNewCandles.length > 0) {
-                    allCandles = [...uniqueNewCandles, ...allCandles];
-                    allCandles.sort((a, b) => a.time - b.time);
-                    oldestTimestamp = allCandles[0].time;
-                    
-                    updateChartData();
-                    console.log(`历史数据加载完成，本次共加载 ${uniqueNewCandles.length} 条`);
-                }
-            }
-        } catch (error) {
-            console.error('加载历史数据失败:', error);
-        } finally {
-            isLoadingMore = false;
+            result.push({ time: candles[i].time, value: sar });
         }
+        return result;
     }
-    
-    // 持续加载更新数据直到缓冲区足够
-    async function loadMoreNewerUntilEnough(logicalRange) {
-        if (isLoadingNewer || !hasNewerData) return;
+
+    function calculateSuperTrend(candles, period = 10, multiplier = 3) {
+        const result = [];
+        if (candles.length < period) return result;
+        const trs = [];
+        for(let i = 1; i < candles.length; i++) {
+            const high = candles[i].high, low = candles[i].low, prevClose = candles[i-1].close;
+            trs.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+        }
+        let atr = trs.slice(0, period).reduce((a,b) => a+b, 0) / period;
+        let upperBand = (candles[period].high + candles[period].low) / 2 + multiplier * atr;
+        let lowerBand = (candles[period].high + candles[period].low) / 2 - multiplier * atr;
+        let inUptrend = true;
+        for (let i = period; i < candles.length; i++) {
+            const currHigh = candles[i].high, currLow = candles[i].low, currClose = candles[i].close, prevClose = candles[i-1].close;
+            if (i > period) {
+                const tr = Math.max(currHigh - currLow, Math.abs(currHigh - prevClose), Math.abs(currLow - prevClose));
+                atr = (atr * (period - 1) + tr) / period;
+            }
+            let currUpperBand = (currHigh + currLow) / 2 + multiplier * atr;
+            let currLowerBand = (currHigh + currLow) / 2 - multiplier * atr;
+            if (inUptrend) {
+                if (currLowerBand < lowerBand) currLowerBand = lowerBand;
+                if (currClose < lowerBand) { inUptrend = false; upperBand = currUpperBand; } else { lowerBand = currLowerBand; }
+            } else {
+                if (currUpperBand > upperBand) currUpperBand = upperBand;
+                if (currClose > upperBand) { inUptrend = true; lowerBand = currLowerBand; } else { upperBand = currUpperBand; }
+            }
+            result.push({ time: candles[i].time, value: inUptrend ? lowerBand : upperBand, color: inUptrend ? '#26a69a' : '#ef5350' });
+        }
+        return result;
+    }
+
+    function calculateSupportResistance(candles) {
+        const support = [], resistance = [];
+        for (let i = 2; i < candles.length - 2; i++) {
+            const isHigh = candles[i].high > candles[i-1].high && candles[i].high > candles[i-2].high && candles[i].high > candles[i+1].high && candles[i].high > candles[i+2].high;
+            const isLow = candles[i].low < candles[i-1].low && candles[i].low < candles[i-2].low && candles[i].low < candles[i+1].low && candles[i].low < candles[i+2].low;
+            if (isHigh) for (let j = 0; j < 50 && i+j < candles.length; j++) resistance.push({ time: candles[i+j].time, value: candles[i].high });
+            if (isLow) for (let j = 0; j < 50 && i+j < candles.length; j++) support.push({ time: candles[i+j].time, value: candles[i].low });
+        }
+        return { support, resistance };
+    }
+
+    function calculateMACD(candles, fastPeriod, slowPeriod, signalPeriod) {
+        const emaFast = calculateEMA(candles, fastPeriod);
+        const emaSlow = calculateEMA(candles, slowPeriod);
+        const difData = [], deaData = [], histogramData = [];
+        const minLen = Math.min(emaFast.length, emaSlow.length);
+        const offsetFast = emaFast.length - minLen, offsetSlow = emaSlow.length - minLen;
+        const difValues = [];
+        for (let i = 0; i < minLen; i++) {
+            const val = emaFast[i + offsetFast].value - emaSlow[i + offsetSlow].value;
+            const time = emaFast[i + offsetFast].time;
+            difValues.push({ time, value: val });
+            difData.push({ time, value: val });
+        }
+        let dea = difValues[0].value;
+        const k = 2 / (signalPeriod + 1);
+        deaData.push({ time: difValues[0].time, value: dea });
+        histogramData.push({ time: difValues[0].time, value: difValues[0].value - dea, color: (difValues[0].value - dea) >= 0 ? '#26a69a' : '#ef5350' });
+        for (let i = 1; i < difValues.length; i++) {
+            dea = (difValues[i].value - dea) * k + dea;
+            deaData.push({ time: difValues[i].time, value: dea });
+            const hist = difValues[i].value - dea;
+            histogramData.push({ time: difValues[i].time, value: hist, color: hist >= 0 ? '#26a69a' : '#ef5350' });
+        }
+        return { dif: difData, dea: deaData, histogram: histogramData };
+    }
+
+    function calculateRSI(candles, period) {
+        const result = [];
+        if (candles.length < period + 1) return result;
+        let gains = 0, losses = 0;
+        for (let i = 1; i <= period; i++) {
+            const change = candles[i].close - candles[i-1].close;
+            if (change > 0) gains += change; else losses -= change;
+        }
+        let avgGain = gains / period, avgLoss = losses / period;
+        for (let i = period + 1; i < candles.length; i++) {
+            const change = candles[i].close - candles[i-1].close;
+            let gain = change > 0 ? change : 0, loss = change < 0 ? -change : 0;
+            avgGain = (avgGain * (period - 1) + gain) / period;
+            avgLoss = (avgLoss * (period - 1) + loss) / period;
+            const rs = avgGain / avgLoss;
+            result.push({ time: candles[i].time, value: 100 - (100 / (1 + rs)) });
+        }
+        return result;
+    }
+
+    function calculateKDJ(candles, n, m1, m2) {
+        const kData = [], dData = [], jData = [];
+        let k = 50, d = 50;
+        for (let i = 0; i < candles.length; i++) {
+            if (i < n - 1) continue;
+            let low = candles[i].low, high = candles[i].high;
+            for (let j = 0; j < n; j++) {
+                if (candles[i-j].low < low) low = candles[i-j].low;
+                if (candles[i-j].high > high) high = candles[i-j].high;
+            }
+            const rsv = (candles[i].close - low) / (high - low) * 100;
+            k = (m1 - 1) / m1 * k + 1 / m1 * rsv;
+            d = (m2 - 1) / m2 * d + 1 / m2 * k;
+            kData.push({ time: candles[i].time, value: k });
+            dData.push({ time: candles[i].time, value: d });
+            jData.push({ time: candles[i].time, value: 3 * k - 2 * d });
+        }
+        return { k: kData, d: dData, j: jData };
+    }
+
+    function calculateCCI(candles, period) {
+        const result = [];
+        if (candles.length < period) return result;
+        const tps = candles.map(c => (c.high + c.low + c.close) / 3);
+        for (let i = period - 1; i < candles.length; i++) {
+            let sumTp = 0;
+            for (let j = 0; j < period; j++) sumTp += tps[i-j];
+            const maTp = sumTp / period;
+            let sumMd = 0;
+            for (let j = 0; j < period; j++) sumMd += Math.abs(tps[i-j] - maTp);
+            const md = sumMd / period;
+            result.push({ time: candles[i].time, value: (tps[i] - maTp) / (0.015 * md) });
+        }
+        return result;
+    }
+
+    function calculateWR(candles, period) {
+        const result = [];
+        for (let i = period - 1; i < candles.length; i++) {
+            let highest = -Infinity, lowest = Infinity;
+            for (let j = 0; j < period; j++) {
+                if (candles[i-j].high > highest) highest = candles[i-j].high;
+                if (candles[i-j].low < lowest) lowest = candles[i-j].low;
+            }
+            result.push({ time: candles[i].time, value: (highest - candles[i].close) / (highest - lowest) * -100 });
+        }
+        return result;
+    }
+
+    function calculateOBV(candles) {
+        const result = [];
+        let obv = 0;
+        result.push({ time: candles[0].time, value: obv });
+        for (let i = 1; i < candles.length; i++) {
+            if (candles[i].close > candles[i-1].close) obv += candles[i].volume;
+            else if (candles[i].close < candles[i-1].close) obv -= candles[i].volume;
+            result.push({ time: candles[i].time, value: obv });
+        }
+        return result;
+    }
+
+    function calculateROC(candles, period) {
+        const result = [];
+        for (let i = period; i < candles.length; i++) {
+            result.push({ time: candles[i].time, value: ((candles[i].close - candles[i-period].close) / candles[i-period].close) * 100 });
+        }
+        return result;
+    }
+
+    function calculateMTM(candles, period) {
+        const result = [];
+        for (let i = period; i < candles.length; i++) {
+            result.push({ time: candles[i].time, value: candles[i].close - candles[i-period].close });
+        }
+        return result;
+    }
+
+    function calculatePSY(candles, period) {
+        const result = [];
+        for (let i = period; i < candles.length; i++) {
+            let upCount = 0;
+            for (let j = 0; j < period; j++) {
+                if (candles[i-j].close > candles[i-j-1].close) upCount++;
+            }
+            result.push({ time: candles[i].time, value: (upCount / period) * 100 });
+        }
+        return result;
+    }
+
+    function calculateDMI(candles, period) { return { pdi: [], mdi: [], adx: [] }; }
+    function calculateStochRSI(candles, rsiPeriod, stochPeriod, kPeriod, dPeriod) { return { k: [], d: [] }; }
+    function calculateTRIX(candles, period) { return []; }
+    function calculateDMA(candles, shortPeriod, longPeriod) { return { ddd: [], ama: [] }; }
+    function calculateVR(candles, period) { return []; }
+    function calculateBRAR(candles, period) { return { br: [], ar: [] }; }
+`;
+
+createApp({
+    delimiters: ['[[', ']]'],
+    setup() {
+        const currentSymbol = ref('{{ inst_id }}');
+        const currentBar = ref('{{ bar }}');
+        const currentSource = ref('{{ source }}');
+        const isAutoRefresh = ref(true);
+        const isLoading = ref(true);
+        const chartRef = ref(null);
         
-        isLoadingNewer = true;
-        let loadedCount = 0;
-        const targetBuffer = 2000;
+        const ticker = reactive({
+            last: '--', open24h: '--', high24h: '--', low24h: '--', vol24h: '--', changePercent: '--', isUp: true
+        });
+
+        const error = reactive({ show: false, message: '' });
+        const chartError = reactive({ show: false, message: '', detail: '' });
+
+        const indicators = reactive({
+            vol: { enabled: true, series: null },
+            ma: { enabled: false, series: [] },
+            ema: { enabled: false, series: [] },
+            boll: { enabled: false, series: [] },
+            sar: { enabled: false, series: [] },
+            supertrend: { enabled: false, series: [] },
+            sr: { enabled: false, series: [] },
+            activeSubIndicator: 'none',
+            subSeries: []
+        });
+
+        const settings = reactive({
+            colorScheme: localStorage.getItem('geneticgrid_color_scheme') || 'green-up',
+            showModal: false
+        });
         
-        try {
-            while (hasNewerData && loadedCount < targetBuffer) {
-                const afterTs = newestTimestamp * 1000;
-                const url = `/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=500&source=${currentSource}&after=${afterTs}`;
-                const response = await fetch(url);
+        const moreTimeframe = ref('');
+        const customInterval = ref('');
+        const showCustomInterval = ref(false);
+
+        const mainIndicatorsConfig = {
+            ma: { label: 'MA (移动平均线)', title: 'Moving Average' },
+            ema: { label: 'EMA (指数移动平均)', title: 'Exponential Moving Average' },
+            boll: { label: 'BOLL (布林带)', title: 'Bollinger Bands' },
+            sar: { label: 'SAR (抛物线转向)', title: 'Parabolic SAR' },
+            supertrend: { label: 'SuperTrend', title: 'SuperTrend' },
+            sr: { label: 'S/R (支撑压力)', title: 'Support & Resistance' }
+        };
+
+        const subIndicatorsConfig = {
+            none: { label: '无' },
+            macd: { label: 'MACD', title: 'Moving Average Convergence Divergence' },
+            kdj: { label: 'KDJ', title: 'Stochastic Oscillator' },
+            rsi: { label: 'RSI', title: 'Relative Strength Index' },
+            stochrsi: { label: 'StochRSI', title: 'Stochastic RSI' },
+            cci: { label: 'CCI', title: 'Commodity Channel Index' },
+            dmi: { label: 'DMI', title: 'Directional Movement Index' },
+            wr: { label: 'WR', title: 'Williams %R' },
+            obv: { label: 'OBV', title: 'On Balance Volume' },
+            trix: { label: 'TRIX', title: 'Triple Exponential Average' },
+            roc: { label: 'ROC', title: 'Rate of Change' },
+            mtm: { label: 'MTM', title: 'Momentum' },
+            dma: { label: 'DMA', title: 'Different of Moving Average' },
+            vr: { label: 'VR', title: 'Volume Ratio' },
+            brar: { label: 'BRAR', title: 'BRAR' },
+            psy: { label: 'PSY', title: 'Psychological Line' }
+        };
+
+        let chart = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let highlightSeries = null;
+        let allCandles = [];
+        let oldestTimestamp = null;
+        let newestTimestamp = null;
+        let hasMoreData = true;
+        let hasNewerData = true;
+        let isLoadingMore = false;
+        let isLoadingNewer = false;
+        let indicatorWorker = null;
+        let workerTaskCounter = 0;
+        let refreshInterval = null;
+        let isTooltipLocked = false;
+        let lockedCandleTime = null;
+
+        const initWorker = () => {
+            const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
+            indicatorWorker = new Worker(URL.createObjectURL(blob));
+            indicatorWorker.onmessage = function(e) {
+                const { id, type, results } = e.data;
+                if (type === 'RESULT') applyIndicatorResults(results);
+            };
+        };
+
+        const getColors = () => {
+            const GREEN = '#26a69a', RED = '#ef5350', GREEN_TRANSPARENT = '#26a69a80', RED_TRANSPARENT = '#ef535080';
+            return settings.colorScheme === 'green-up' 
+                ? { up: GREEN, down: RED, upTransparent: GREEN_TRANSPARENT, downTransparent: RED_TRANSPARENT }
+                : { up: RED, down: GREEN, upTransparent: RED_TRANSPARENT, downTransparent: GREEN_TRANSPARENT };
+        };
+
+        const initChart = () => {
+            if (!chartRef.value) return;
+            if (chart) { chart.remove(); chart = null; }
+            
+            allCandles = []; oldestTimestamp = null; newestTimestamp = null;
+            hasMoreData = true; hasNewerData = true; isLoadingMore = false; isLoadingNewer = false;
+            indicators.vol.series = null; indicators.ma.series = []; indicators.ema.series = [];
+            indicators.boll.series = []; indicators.sar.series = []; indicators.supertrend.series = [];
+            indicators.sr.series = []; indicators.subSeries = [];
+
+            chart = LightweightCharts.createChart(chartRef.value, {
+                layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderColor: '#2a2e39' },
+                timeScale: { borderColor: '#2a2e39', timeVisible: true, secondsVisible: false },
+                width: chartRef.value.clientWidth, height: chartRef.value.clientHeight
+            });
+
+            const colors = getColors();
+            if (currentBar.value === 'tick') {
+                candleSeries = chart.addAreaSeries({ lineColor: '#2962FF', topColor: 'rgba(41, 98, 255, 0.3)', bottomColor: 'rgba(41, 98, 255, 0)', lineWidth: 2 });
+            } else {
+                candleSeries = chart.addCandlestickSeries({ upColor: colors.up, downColor: colors.down, borderDownColor: colors.down, borderUpColor: colors.up, wickDownColor: colors.down, wickUpColor: colors.up });
+            }
+
+            volumeSeries = chart.addHistogramSeries({ color: colors.up, priceFormat: { type: 'volume' }, priceScaleId: '' });
+            volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+            volumeSeries.applyOptions({ visible: indicators.vol.enabled });
+            indicators.vol.series = volumeSeries;
+
+            highlightSeries = currentBar.value !== 'tick' 
+                ? chart.addCandlestickSeries({ upColor: 'transparent', downColor: 'transparent', borderUpColor: '#ffffff', borderDownColor: '#ffffff', wickUpColor: '#ffffff', wickDownColor: '#ffffff', borderVisible: true, priceLineVisible: false, lastValueVisible: false })
+                : chart.addHistogramSeries({ color: 'rgba(255, 255, 255, 0.3)', priceFormat: { type: 'custom', formatter: () => '' }, priceScaleId: 'highlight_overlay', lastValueVisible: false, priceLineVisible: false });
+            
+            if (currentBar.value === 'tick') chart.priceScale('highlight_overlay').applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+
+            new ResizeObserver(entries => {
+                if (entries.length === 0 || !chart) return;
+                const { width, height } = entries[0].contentRect;
+                chart.applyOptions({ width, height });
+            }).observe(chartRef.value);
+
+            chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
+            chart.subscribeCrosshairMove(onCrosshairMove);
+            chart.subscribeClick(onChartClick);
+        };
+
+        const loadCandlesticks = async (shouldFit = true) => {
+            isLoading.value = true;
+            try {
+                const limit = 500;
+                const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol.value}&bar=${currentBar.value}&limit=${limit}&source=${currentSource.value}`);
                 const result = await response.json();
-                
+                if (result.code === 0 && result.data) {
+                    chartError.show = false;
+                    const candles = result.data;
+                    allCandles = candles;
+                    if (candles.length > 0) {
+                        oldestTimestamp = candles[0].time;
+                        newestTimestamp = candles[candles.length - 1].time;
+                        hasMoreData = candles.length >= limit;
+                        hasNewerData = true;
+                    } else hasMoreData = false;
+                    updateChartData();
+                    if (shouldFit) chart.timeScale().fitContent();
+                    ensureEnoughHistoryData();
+                } else showChartError('K线数据加载失败', result.error || '未知错误');
+            } catch (err) { showChartError('无法连接到服务器', err.message); } 
+            finally { isLoading.value = false; }
+        };
+
+        const updateChartData = () => {
+            if (!chart || !candleSeries) return;
+            const colors = getColors();
+            if (currentBar.value === 'tick') {
+                const lineData = allCandles.map(c => ({ time: c.time, value: c.close !== undefined ? c.close : (c.price || c.value || 0) }));
+                candleSeries.setData(lineData);
+            } else candleSeries.setData(allCandles);
+            
+            if (indicators.vol.enabled && indicators.vol.series) {
+                const volumeData = allCandles.map((c, i, arr) => {
+                    let isUp = true;
+                    if (c.open !== undefined && c.close !== undefined) isUp = c.close >= c.open;
+                    else if (i > 0) {
+                        const prev = arr[i-1];
+                        const curr = c.close || c.price || c.value || 0;
+                        const prevP = prev.close || prev.price || prev.value || 0;
+                        isUp = curr >= prevP;
+                    }
+                    return { time: c.time, value: c.volume, color: isUp ? colors.upTransparent : colors.downTransparent };
+                });
+                indicators.vol.series.setData(volumeData);
+            }
+            triggerWorkerCalculation();
+            updateNoDataOverlay();
+        };
+
+        const triggerWorkerCalculation = () => {
+            if (!indicatorWorker) initWorker();
+            const activeIndicators = [];
+            Object.keys(indicators).forEach(key => {
+                if (key !== 'activeSubIndicator' && key !== 'subSeries' && indicators[key].enabled) activeIndicators.push(key);
+            });
+            if (indicators.activeSubIndicator !== 'none') activeIndicators.push(indicators.activeSubIndicator);
+            if (activeIndicators.length > 0 && allCandles.length > 0) {
+                workerTaskCounter++;
+                indicatorWorker.postMessage({ id: workerTaskCounter, type: 'CALCULATE', data: { candles: allCandles, indicators: activeIndicators } });
+            }
+        };
+
+        const applyIndicatorResults = (results) => {
+            ['ma', 'ema', 'boll', 'sar', 'supertrend', 'sr'].forEach(name => {
+                if (results[name] && indicators[name].enabled) {
+                    if (indicators[name].series.length === 0) createMainIndicatorSeries(name);
+                    if (name === 'boll') {
+                        indicators.boll.series[0].setData(results.boll.upper);
+                        indicators.boll.series[1].setData(results.boll.middle);
+                        indicators.boll.series[2].setData(results.boll.lower);
+                    } else if (name === 'sr') {
+                        indicators.sr.series[0].setData(results.sr.support);
+                        indicators.sr.series[1].setData(results.sr.resistance);
+                    } else if (name === 'ema') {
+                        indicators.ema.series[0].setData(results.ema[0]);
+                        indicators.ema.series[1].setData(results.ema[1]);
+                        indicators.ema.series[2].setData(results.ema[2]);
+                    } else if (name === 'ma') {
+                        indicators.ma.series[0].setData(results.ma[0]);
+                        indicators.ma.series[1].setData(results.ma[1]);
+                        indicators.ma.series[2].setData(results.ma[2]);
+                    } else indicators[name].series[0].setData(results[name]);
+                }
+            });
+
+            if (indicators.activeSubIndicator !== 'none' && results[indicators.activeSubIndicator]) {
+                const name = indicators.activeSubIndicator;
+                const res = results[name];
+                if (indicators.subSeries.length === 0) createSubIndicatorSeries(name);
+                if (name === 'macd') {
+                    indicators.subSeries[0].setData(res.histogram);
+                    indicators.subSeries[1].setData(res.dif);
+                    indicators.subSeries[2].setData(res.dea);
+                } else if (name === 'kdj') {
+                    indicators.subSeries[0].setData(res.k);
+                    indicators.subSeries[1].setData(res.d);
+                    indicators.subSeries[2].setData(res.j);
+                } else if (name === 'stochrsi') {
+                    indicators.subSeries[0].setData(res.k);
+                    indicators.subSeries[1].setData(res.d);
+                } else if (name === 'dmi') {
+                    indicators.subSeries[0].setData(res.pdi);
+                    indicators.subSeries[1].setData(res.mdi);
+                    indicators.subSeries[2].setData(res.adx);
+                } else if (name === 'dma') {
+                    indicators.subSeries[0].setData(res.ddd);
+                    indicators.subSeries[1].setData(res.ama);
+                } else if (name === 'brar') {
+                    indicators.subSeries[0].setData(res.ar);
+                    indicators.subSeries[1].setData(res.br);
+                } else indicators.subSeries[0].setData(res);
+            }
+        };
+
+        const createMainIndicatorSeries = (name) => {
+            if (name === 'ma') indicators.ma.series = [chart.addLineSeries({ color: '#E6E600', lineWidth: 1, title: 'MA7' }), chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'MA25' }), chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MA99' })];
+            else if (name === 'ema') indicators.ema.series = [chart.addLineSeries({ color: '#FF9800', lineWidth: 1, title: 'EMA7' }), chart.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'EMA25' }), chart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'EMA99' })];
+            else if (name === 'boll') indicators.boll.series = [chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Upper' }), chart.addLineSeries({ color: '#F44336', lineWidth: 1, title: 'BOLL Mid' }), chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Lower' })];
+            else if (name === 'sar') indicators.sar.series = [chart.addLineSeries({ color: '#2962FF', lineWidth: 1, lineStyle: 2, title: 'SAR' })];
+            else if (name === 'supertrend') indicators.supertrend.series = [chart.addLineSeries({ color: '#2962FF', lineWidth: 2, title: 'SuperTrend' })];
+            else if (name === 'sr') indicators.sr.series = [chart.addLineSeries({ color: '#26a69a', lineWidth: 2, title: 'Support' }), chart.addLineSeries({ color: '#ef5350', lineWidth: 2, title: 'Resistance' })];
+        };
+
+        const createSubIndicatorSeries = (name) => {
+            const subScaleId = 'sub';
+            chart.priceScale(subScaleId).applyOptions({ scaleMargins: { top: 0.65, bottom: 0 } });
+            if (name === 'macd') indicators.subSeries = [chart.addHistogramSeries({ priceScaleId: subScaleId, color: '#26a69a', lineWidth: 1, priceFormat: { type: 'volume' }, title: 'MACD Hist' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'DIF' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'DEA' })];
+            else if (name === 'kdj') indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#E91E63', lineWidth: 1, title: 'J' })];
+            else if (name === 'stochrsi') indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' })];
+            else if (name === 'dmi') indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#26a69a', lineWidth: 1, title: '+DI' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#ef5350', lineWidth: 1, title: '-DI' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'ADX' })];
+            else if (name === 'dma') indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#9C27B0', lineWidth: 1, title: 'DDD' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'AMA' })];
+            else if (name === 'brar') indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'AR' }), chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'BR' })];
+            else indicators.subSeries = [chart.addLineSeries({ priceScaleId: subScaleId, color: '#9C27B0', lineWidth: 1, title: name.toUpperCase() })];
+        };
+
+        const toggleMainIndicator = (name) => {
+            if (name === 'vol') { if (indicators.vol.series) indicators.vol.series.applyOptions({ visible: indicators.vol.enabled }); }
+            else {
+                if (indicators[name].enabled) { if (indicators[name].series.length === 0) createMainIndicatorSeries(name); triggerWorkerCalculation(); }
+                else { indicators[name].series.forEach(s => chart.removeSeries(s)); indicators[name].series = []; }
+            }
+        };
+
+        const switchSubIndicator = (name) => {
+            if (indicators.subSeries.length > 0) { indicators.subSeries.forEach(s => chart.removeSeries(s)); indicators.subSeries = []; }
+            indicators.activeSubIndicator = name;
+            if (name === 'none') chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
+            else { chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.4 } }); createSubIndicatorSeries(name); triggerWorkerCalculation(); }
+        };
+
+        const refreshData = (fitContent = false) => {
+            if (!fitContent && allCandles.length > 0) updateLatestData();
+            else loadCandlesticks(fitContent);
+            loadTicker();
+        };
+
+        const updateLatestData = async () => {
+            if (allCandles.length === 0) return;
+            const lastCandle = allCandles[allCandles.length - 1];
+            const lastTime = lastCandle.time;
+            try {
+                const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol.value}&bar=${currentBar.value}&limit=5&source=${currentSource.value}`);
+                const result = await response.json();
                 if (result.code === 0 && result.data && result.data.length > 0) {
                     const newCandles = result.data;
-                    
-                    const existingTimes = new Set(allCandles.map(c => c.time));
-                    const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time));
-                    
-                    if (uniqueNewCandles.length > 0) {
-                        allCandles = [...allCandles, ...uniqueNewCandles];
-                        allCandles.sort((a, b) => a.time - b.time);
-                        newestTimestamp = allCandles[allCandles.length - 1].time;
-                        loadedCount += uniqueNewCandles.length;
-                        
-                        updateChartData();
-                    } else {
-                        hasNewerData = false;
-                        break;
-                    }
-                    
-                    if (newCandles.length < 500) {
-                        hasNewerData = false;
-                        break;
-                    }
-                } else {
-                    hasNewerData = false;
-                    break;
-                }
-            }
-            
-            console.log(`最新数据加载完成，共加载 ${loadedCount} 条，总数据量 ${allCandles.length} 条`);
-        } catch (error) {
-            console.error('持续加载更新数据失败:', error);
-        } finally {
-            isLoadingNewer = false;
-        }
-    }
-    
-    // 更新图表数据的通用函数
-    function updateChartData() {
-        const colors = getColors();
-        
-        if (currentBar === 'tick') {
-            // 分时图数据转换
-            const lineData = allCandles.map(c => ({
-                time: c.time,
-                value: c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0))
-            }));
-            candleSeries.setData(lineData);
-        } else {
-            candleSeries.setData(allCandles);
-        }
-        
-        // 更新成交量
-        if (indicators.vol.enabled && indicators.vol.series) {
-            const volumeData = allCandles.map((c, i, arr) => {
-                let isUp = true;
-                if (c.open !== undefined && c.close !== undefined) {
-                    isUp = c.close >= c.open;
-                } else if (i > 0) {
-                    const prev = arr[i-1];
-                    const currPrice = c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0));
-                    const prevPrice = prev.close !== undefined ? prev.close : (prev.price !== undefined ? prev.price : (prev.value !== undefined ? prev.value : 0));
-                    if (currPrice !== undefined && prevPrice !== undefined) {
-                        isUp = currPrice >= prevPrice;
-                    }
-                }
-                return {
-                    time: c.time,
-                    value: c.volume,
-                    color: isUp ? colors.upTransparent : colors.downTransparent,
-                };
-            });
-            indicators.vol.series.setData(volumeData);
-        }
-
-        // 触发 Worker 计算
-        triggerWorkerCalculation();
-        
-        // 更新遮罩层
-        updateNoDataOverlay();
-    }
-
-    // 切换主图指标
-    function toggleMainIndicator(name) {
-        const checkbox = document.getElementById(`ind-${name}`);
-        if (!checkbox) {
-            console.error(`Checkbox ind-${name} not found`);
-            return;
-        }
-        indicators[name].enabled = checkbox.checked;
-        console.log(`Toggled main indicator ${name}: ${indicators[name].enabled}`);
-        
-        if (name === 'vol') {
-            if (indicators.vol.enabled) {
-                if (indicators.vol.series) {
-                    indicators.vol.series.applyOptions({ visible: true });
-                    // 重新填充数据
-                    const colors = getColors();
-                    const volumeData = allCandles.map((c, i, arr) => {
-                        let isUp = true;
-                        if (c.open !== undefined && c.close !== undefined) {
-                            isUp = c.close >= c.open;
-                        } else if (i > 0) {
-                            const prev = arr[i-1];
-                            const currPrice = c.close !== undefined ? c.close : (c.price !== undefined ? c.price : (c.value !== undefined ? c.value : 0));
-                            const prevPrice = prev.close !== undefined ? prev.close : (prev.price !== undefined ? prev.price : (prev.value !== undefined ? prev.value : 0));
-                            if (currPrice !== undefined && prevPrice !== undefined) {
-                                isUp = currPrice >= prevPrice;
+                    let hasChanges = false;
+                    for (const newCandle of newCandles) {
+                        if (newCandle.time === lastTime) {
+                            if (newCandle.close !== lastCandle.close || newCandle.volume !== lastCandle.volume) {
+                                allCandles[allCandles.length - 1] = newCandle;
+                                if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close });
+                                else candleSeries.update(newCandle);
+                                hasChanges = true;
                             }
+                        } else if (newCandle.time > lastTime) {
+                            allCandles.push(newCandle);
+                            newestTimestamp = newCandle.time;
+                            if (currentBar.value === 'tick') candleSeries.update({ time: newCandle.time, value: newCandle.close });
+                            else candleSeries.update(newCandle);
+                            hasChanges = true;
                         }
-                        return {
-                            time: c.time,
-                            value: c.volume,
-                            color: isUp ? colors.upTransparent : colors.downTransparent,
-                        };
-                    });
-                    indicators.vol.series.setData(volumeData);
+                    }
+                    if (hasChanges) { triggerWorkerCalculation(); updateNoDataOverlay(); }
                 }
-            } else {
-                if (indicators.vol.series) {
-                    indicators.vol.series.applyOptions({ visible: false });
+            } catch (e) { console.error(e); }
+        };
+
+        const loadTicker = async () => {
+            try {
+                const response = await fetch(`/api/ticker/?symbol=${currentSymbol.value}&source=${currentSource.value}`);
+                const result = await response.json();
+                if (result.code === 0 && result.data) {
+                    const t = result.data;
+                    const last = parseFloat(t.last);
+                    const open = parseFloat(t.open24h);
+                    ticker.last = last.toLocaleString();
+                    ticker.changePercent = ((last - open) / open * 100).toFixed(2);
+                    ticker.isUp = last >= open;
+                    ticker.high24h = parseFloat(t.high24h).toLocaleString();
+                    ticker.low24h = parseFloat(t.low24h).toLocaleString();
+                    ticker.vol24h = parseFloat(t.vol24h).toLocaleString();
                 }
-            }
-        } else {
-            if (indicators[name].enabled) {
-                removeMainIndicatorSeries(name);
-                createMainIndicatorSeries(name);
-                calculateAndSetMainIndicatorData(name);
-            } else {
-                removeMainIndicatorSeries(name);
-            }
-        }
-    }
+            } catch (e) { console.error(e); }
+        };
 
-    // 切换副图指标
-    function switchSubIndicator(name) {
-        console.log(`Switching sub indicator to ${name}`);
-        // 清除旧的副图指标
-        if (indicators.subSeries.length > 0) {
-            indicators.subSeries.forEach(s => chart.removeSeries(s));
-            indicators.subSeries = [];
-        }
-        
-        indicators.activeSubIndicator = name;
-        
-        if (name === 'none') {
-            // 恢复主图全屏 (保留底部 VOL 空间)
-            chart.priceScale('right').applyOptions({
-                scaleMargins: {
-                    top: 0.1,
-                    bottom: 0.2, // 留给 VOL
-                },
-            });
-        } else {
-            // 调整主图空间，给副图腾位置
-            chart.priceScale('right').applyOptions({
-                scaleMargins: {
-                    top: 0.05,
-                    bottom: 0.4, // 留出 40% 给副图 + VOL
-                },
-            });
-            
-            createSubIndicatorSeries(name);
-            calculateAndSetSubIndicatorData(name);
-        }
-    }
-
-    // 创建主图指标 Series
-    function createMainIndicatorSeries(name) {
-        if (name === 'ma') {
-            const ma7 = chart.addLineSeries({ color: '#E6E600', lineWidth: 1, title: 'MA7' });
-            const ma25 = chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'MA25' });
-            const ma99 = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MA99' });
-            indicators.ma.series = [ma7, ma25, ma99];
-        } else if (name === 'ema') {
-            const ema7 = chart.addLineSeries({ color: '#FF9800', lineWidth: 1, title: 'EMA7' });
-            const ema25 = chart.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'EMA25' });
-            const ema99 = chart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'EMA99' });
-            indicators.ema.series = [ema7, ema25, ema99];
-        } else if (name === 'boll') {
-            const upper = chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Upper' });
-            const middle = chart.addLineSeries({ color: '#F44336', lineWidth: 1, title: 'BOLL Mid' });
-            const lower = chart.addLineSeries({ color: '#4CAF50', lineWidth: 1, title: 'BOLL Lower' });
-            indicators.boll.series = [upper, middle, lower];
-        } else if (name === 'sar') {
-            const sarSeries = chart.addLineSeries({ 
-                color: '#2962FF', 
-                lineWidth: 1, 
-                lineStyle: 2, // Dashed
-                title: 'SAR' 
-            });
-            indicators.sar.series = [sarSeries];
-        } else if (name === 'supertrend') {
-            const stSeries = chart.addLineSeries({ color: '#2962FF', lineWidth: 2, title: 'SuperTrend' });
-            indicators.supertrend.series = [stSeries];
-        } else if (name === 'sr') {
-            const support = chart.addLineSeries({ color: '#26a69a', lineWidth: 2, title: 'Support' });
-            const resistance = chart.addLineSeries({ color: '#ef5350', lineWidth: 2, title: 'Resistance' });
-            indicators.sr.series = [support, resistance];
-        }
-    }
-
-    // 创建副图指标 Series
-    function createSubIndicatorSeries(name) {
-        const subScaleId = 'sub';
-        
-        // 配置副图 Scale
-        chart.priceScale(subScaleId).applyOptions({
-            scaleMargins: {
-                top: 0.65, // 副图从 65% 开始
-                bottom: 0,
-            },
-        });
-
-        if (name === 'macd') {
-            const macdHist = chart.addHistogramSeries({
-                priceScaleId: subScaleId,
-                color: '#26a69a',
-                lineWidth: 1,
-                priceFormat: { type: 'volume' },
-                title: 'MACD Hist'
-            });
-            const dif = chart.addLineSeries({
-                priceScaleId: subScaleId,
-                color: '#2962FF',
-                lineWidth: 1,
-                title: 'DIF'
-            });
-            const dea = chart.addLineSeries({
-                priceScaleId: subScaleId,
-                color: '#FF6D00',
-                lineWidth: 1,
-                title: 'DEA'
-            });
-            indicators.subSeries = [macdHist, dif, dea];
-        } else if (name === 'kdj') {
-            const k = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' });
-            const d = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' });
-            const j = chart.addLineSeries({ priceScaleId: subScaleId, color: '#E91E63', lineWidth: 1, title: 'J' });
-            indicators.subSeries = [k, d, j];
-        } else if (name === 'rsi' || name === 'psy') {
-            const line = chart.addLineSeries({ priceScaleId: subScaleId, color: '#9C27B0', lineWidth: 1, title: name.toUpperCase() });
-            indicators.subSeries = [line];
-        } else if (name === 'stochrsi') {
-            const k = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'K' });
-            const d = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'D' });
-            indicators.subSeries = [k, d];
-        } else if (name === 'dmi') {
-            const pdi = chart.addLineSeries({ priceScaleId: subScaleId, color: '#26a69a', lineWidth: 1, title: '+DI' });
-            const mdi = chart.addLineSeries({ priceScaleId: subScaleId, color: '#ef5350', lineWidth: 1, title: '-DI' });
-            const adx = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'ADX' });
-            indicators.subSeries = [pdi, mdi, adx];
-        } else {
-            // 通用单线指标
-            const line = chart.addLineSeries({ 
-                priceScaleId: subScaleId, 
-                color: '#9C27B0', 
-                lineWidth: 1, 
-                title: name.toUpperCase() 
-            });
-            indicators.subSeries = [line];
-            
-            if (name === 'dma') {
-                const ama = chart.addLineSeries({ priceScaleId: subScaleId, color: '#FF6D00', lineWidth: 1, title: 'AMA' });
-                indicators.subSeries.push(ama);
-            } else if (name === 'brar') {
-                line.applyOptions({ title: 'AR', color: '#FF6D00' });
-                const br = chart.addLineSeries({ priceScaleId: subScaleId, color: '#2962FF', lineWidth: 1, title: 'BR' });
-                indicators.subSeries.push(br);
-            }
-        }
-    }
-
-    // 移除主图指标 Series
-    function removeMainIndicatorSeries(name) {
-        if (indicators[name].series) {
-            indicators[name].series.forEach(s => chart.removeSeries(s));
-            indicators[name].series = [];
-        }
-    }
-
-    // 更新所有开启的主图指标
-    function updateMainIndicators() {
-        ['ma', 'ema', 'boll', 'sar', 'supertrend', 'sr'].forEach(name => {
-            if (indicators[name].enabled) {
-                if (indicators[name].series.length === 0) {
-                    createMainIndicatorSeries(name);
-                }
-                calculateAndSetMainIndicatorData(name);
-            }
-        });
-    }
-    
-    // 更新副图指标
-    function updateSubIndicator() {
-        if (indicators.activeSubIndicator !== 'none') {
-            if (indicators.subSeries.length === 0) {
-                createSubIndicatorSeries(indicators.activeSubIndicator);
-            }
-            calculateAndSetSubIndicatorData(indicators.activeSubIndicator);
-        }
-    }
-
-    // 计算并设置主图指标数据
-    function calculateAndSetMainIndicatorData(name) {
-        if (!allCandles || allCandles.length === 0) return;
-        triggerWorkerCalculation();
-    }
-    
-    // 计算并设置副图指标数据
-    function calculateAndSetSubIndicatorData(name) {
-        if (!allCandles || allCandles.length === 0) return;
-        triggerWorkerCalculation();
-    }
-
-
-
-
-
-    // 显示错误
-    function showError(message) {
-        document.getElementById('error-message').textContent = message;
-        document.getElementById('error-banner').classList.add('show');
-    }
-
-    // 隐藏错误
-    function hideError() {
-        document.getElementById('error-banner').classList.remove('show');
-    }
-
-    // 显示图表区域错误
-    function showChartError(message, detail) {
-        const container = document.getElementById('chart-container');
-        container.innerHTML = `
-            <div class="chart-error">
-                <div class="error-icon">❌</div>
-                <div class="error-title">${message}</div>
-                <div class="error-detail">${detail}</div>
-                <button class="retry-btn" onclick="retryLoad()">🔄 重试</button>
-            </div>
-        `;
-    }
-
-    // 重试加载
-    function retryLoad() {
-        hideError();
-        initChart();
-        refreshData(true);
-    }
-
-    // 加载 K 线数据
-    async function loadCandlesticks(shouldFit = true) {
-        try {
-            // 增加初始加载数量到 500，避免初始数据过少导致左侧空白
-            const limit = 500;
-            const response = await fetch(`/api/candlesticks/?symbol=${currentSymbol}&bar=${currentBar}&limit=${limit}&source=${currentSource}`);
-            const result = await response.json();
-            
-            if (result.code === 0 && result.data) {
-                hideError();
-                const candles = result.data;
-                
-                // 保存到缓存
-                allCandles = candles;
-                if (candles.length > 0) {
-                    oldestTimestamp = candles[0].time;
-                    newestTimestamp = candles[candles.length - 1].time;
-                    // 如果返回的数据少于请求的数量，说明没有更多历史数据了
-                    hasMoreData = candles.length >= limit;
-                    hasNewerData = true;
-                } else {
-                    hasMoreData = false;
-                }
-                
+        const showChartError = (msg, detail) => { chartError.show = true; chartError.message = msg; chartError.detail = detail; };
+        const retryLoad = () => { chartError.show = false; initChart(); refreshData(true); };
+        const hideError = () => { error.show = false; };
+        const toggleSettings = () => { settings.showModal = !settings.showModal; };
+        const changeColorScheme = (scheme) => {
+            settings.colorScheme = scheme;
+            localStorage.setItem('geneticgrid_color_scheme', scheme);
+            if (chart) {
+                const colors = getColors();
+                const root = document.documentElement;
+                root.style.setProperty('--up-color', colors.up);
+                root.style.setProperty('--down-color', colors.down);
+                if (currentBar.value !== 'tick') candleSeries.applyOptions({ upColor: colors.up, downColor: colors.down, borderDownColor: colors.down, borderUpColor: colors.up, wickDownColor: colors.down, wickUpColor: colors.up });
                 updateChartData();
-
-                if (shouldFit) {
-                    chart.timeScale().fitContent();
-                }
-
-                // 兜底机制：如果数据量较少，自动尝试加载更多历史数据
-                ensureEnoughHistoryData();
-
-            } else {
-                // API 返回错误
-                const errorMsg = result.error || 'K线数据加载失败';
-                showError(`K线数据错误: ${errorMsg}`);
-                showChartError('K线数据加载失败', errorMsg);
             }
-        } catch (error) {
-            console.error('加载K线失败:', error);
-            showError(`网络错误: ${error.message}`);
-            showChartError('无法连接到服务器', error.message);
-        }
-    }
-
-    // 兜底机制：确保有足够的历史数据
-    function ensureEnoughHistoryData() {
-        if (isLoadingMore || !hasMoreData) return;
+        };
         
-        // 如果当前数据量少于 1000 条，且还有更多数据，则自动加载
-        // 这可以防止左侧出现大片空白
-        if (allCandles.length < 1000) {
-            console.log('数据量不足，触发兜底加载...');
-            loadMoreHistory(1000);
-        }
-    }
+        const setBar = (bar) => { currentBar.value = bar; moreTimeframe.value = ''; showCustomInterval.value = false; initChart(); refreshData(true); };
+        const handleMoreTimeframes = () => {
+            if (moreTimeframe.value === 'custom') { showCustomInterval.value = true; nextTick(() => document.getElementById('custom-interval').focus()); }
+            else { showCustomInterval.value = false; currentBar.value = moreTimeframe.value; initChart(); refreshData(true); }
+        };
+        const applyCustomInterval = () => {
+            const val = customInterval.value.trim().toUpperCase();
+            if (val && val.match(/^(\d+)([SMHDW])$/)) { currentBar.value = val.toLowerCase(); initChart(); refreshData(true); }
+            else alert('格式错误！');
+        };
+        const toggleAutoRefresh = () => { isAutoRefresh.value = !isAutoRefresh.value; };
 
-    // 加载行情
-    async function loadTicker() {
-        try {
-            const response = await fetch(`/api/ticker/?symbol=${currentSymbol}&source=${currentSource}`);
-            const result = await response.json();
+        const onVisibleRangeChange = (range) => {
+            if (!range || allCandles.length === 0) return;
+            if (hasMoreData && !isLoadingMore && range.from < 0) loadMoreHistory(Math.abs(Math.floor(range.from)) + 1000);
+            else if (hasMoreData && !isLoadingMore && range.from < 1000) loadMoreHistory(1000);
+            if (range.to > allCandles.length - 500 && hasNewerData && !isLoadingNewer) loadMoreNewerUntilEnough(range);
+            updateNoDataOverlay();
+        };
+        
+        const loadMoreHistory = async (count) => {
+            if (isLoadingMore || !hasMoreData) return;
+            isLoadingMore = true;
+            try {
+                const before = oldestTimestamp * 1000;
+                const limit = Math.min(count, 2000);
+                const res = await fetch(`/api/candlesticks/?symbol=${currentSymbol.value}&bar=${currentBar.value}&limit=${limit}&source=${currentSource.value}&before=${before}`);
+                const result = await res.json();
+                if (result.code === 0 && result.data && result.data.length > 0) {
+                    const newC = result.data;
+                    allCandles = [...newC, ...allCandles];
+                    allCandles.sort((a, b) => a.time - b.time);
+                    oldestTimestamp = allCandles[0].time;
+                    updateChartData();
+                } else hasMoreData = false;
+            } catch (e) { console.error(e); }
+            finally { isLoadingMore = false; }
+        };
+        
+        const loadMoreNewerUntilEnough = async () => {
+            if (isLoadingNewer || !hasNewerData) return;
+            isLoadingNewer = true;
+            let loadedCount = 0;
+            try {
+                while (hasNewerData && loadedCount < 2000) {
+                    const afterTs = newestTimestamp * 1000;
+                    const res = await fetch(`/api/candlesticks/?symbol=${currentSymbol.value}&bar=${currentBar.value}&limit=500&source=${currentSource.value}&after=${afterTs}`);
+                    const result = await res.json();
+                    if (result.code === 0 && result.data && result.data.length > 0) {
+                        const newC = result.data;
+                        const existingTimes = new Set(allCandles.map(c => c.time));
+                        const unique = newC.filter(c => !existingTimes.has(c.time));
+                        if (unique.length > 0) {
+                            allCandles = [...allCandles, ...unique];
+                            allCandles.sort((a, b) => a.time - b.time);
+                            newestTimestamp = allCandles[allCandles.length - 1].time;
+                            loadedCount += unique.length;
+                            updateChartData();
+                        } else { hasNewerData = false; break; }
+                        if (newC.length < 500) { hasNewerData = false; break; }
+                    } else { hasNewerData = false; break; }
+                }
+            } catch (e) { console.error(e); }
+            finally { isLoadingNewer = false; }
+        };
+
+        const ensureEnoughHistoryData = () => { if (allCandles.length < 1000) loadMoreHistory(1000); };
+        const updateNoDataOverlay = () => {
+            const overlay = document.getElementById('no-data-overlay');
+            if (!overlay || !chart) return;
+            if (!hasMoreData && allCandles.length > 0) {
+                const x = chart.timeScale().timeToCoordinate(allCandles[0].time);
+                if (x !== null && x > 0) { overlay.style.display = 'flex'; overlay.style.width = `${x}px`; }
+                else overlay.style.display = 'none';
+            } else overlay.style.display = 'none';
+        };
+        
+        const onCrosshairMove = (param) => {
+            const tooltip = document.getElementById('candle-tooltip');
+            if (!tooltip) return;
+            if (isTooltipLocked) return;
+            if (!param || !param.time || param.point === undefined || param.point.x < 0 || param.point.y < 0) { tooltip.style.display = 'none'; return; }
+            updateTooltipContent(param);
+        };
+        
+        const onChartClick = (param) => {
+            if (!param || !param.time) {
+                isTooltipLocked = false; lockedCandleTime = null;
+                document.getElementById('candle-tooltip').classList.remove('locked');
+                if (highlightSeries) highlightSeries.setData([]);
+                return;
+            }
+            const candleData = param.seriesData.get(candleSeries);
+            if (!candleData) return;
+            if (isTooltipLocked && lockedCandleTime === param.time) {
+                isTooltipLocked = false; lockedCandleTime = null;
+                document.getElementById('candle-tooltip').classList.remove('locked');
+                if (highlightSeries) highlightSeries.setData([]);
+            } else {
+                isTooltipLocked = true; lockedCandleTime = param.time;
+                document.getElementById('candle-tooltip').classList.add('locked');
+                if (highlightSeries) {
+                    if (currentBar.value !== 'tick') highlightSeries.setData([{ time: param.time, open: candleData.open, high: candleData.high, low: candleData.low, close: candleData.close }]);
+                    else highlightSeries.setData([{ time: param.time, value: 1, color: 'rgba(255, 255, 255, 0.3)' }]);
+                }
+                updateTooltipContent(param);
+            }
+        };
+        
+        const updateTooltipContent = (param) => {
+            const tooltip = document.getElementById('candle-tooltip');
+            if (!tooltip) return;
+            const candleData = param.seriesData.get(candleSeries);
+            const volumeData = param.seriesData.get(volumeSeries);
+            if (!candleData) { if (!isTooltipLocked) tooltip.style.display = 'none'; return; }
             
-            if (result.code === 0 && result.data) {
-                const ticker = result.data;
-                const lastPrice = parseFloat(ticker.last);
-                const open24h = parseFloat(ticker.open24h);
-                const changePercent = ((lastPrice - open24h) / open24h * 100).toFixed(2);
-                const isUp = lastPrice >= open24h;
-
-                document.getElementById('last-price').textContent = lastPrice.toLocaleString();
-                document.getElementById('last-price').className = `ticker-value ${isUp ? 'up' : 'down'}`;
-
-                document.getElementById('change-24h').textContent = `${isUp ? '+' : ''}${changePercent}%`;
-                document.getElementById('change-24h').className = `ticker-value ${isUp ? 'up' : 'down'}`;
-
-                document.getElementById('high-24h').textContent = parseFloat(ticker.high24h).toLocaleString();
-                document.getElementById('low-24h').textContent = parseFloat(ticker.low24h).toLocaleString();
-                document.getElementById('volume-24h').textContent = parseFloat(ticker.vol24h).toLocaleString();
+            const date = new Date(param.time * 1000);
+            const timeStr = date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: currentBar.value === 'tick' ? '2-digit' : undefined });
+            
+            let open, high, low, close;
+            if (currentBar.value === 'tick') { close = candleData.value; open = close; high = close; low = close; }
+            else { open = candleData.open; high = candleData.high; low = candleData.low; close = candleData.close; }
+            
+            let change = 0, changePercent = "0.00", isUp = true;
+            if (currentBar.value !== 'tick') { change = close - open; changePercent = ((change / open) * 100).toFixed(2); isUp = change >= 0; }
+            const colorClass = isUp ? 'up' : 'down';
+            const formatNum = (num) => num >= 1000 ? num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : (num >= 1 ? num.toFixed(4) : num.toPrecision(4));
+            const formatVolume = (vol) => vol >= 1e9 ? (vol / 1e9).toFixed(2) + 'B' : (vol >= 1e6 ? (vol / 1e6).toFixed(2) + 'M' : (vol >= 1e3 ? (vol / 1e3).toFixed(2) + 'K' : vol.toFixed(2)));
+            
+            const timeEl = document.getElementById('tooltip-time');
+            const openEl = document.getElementById('tooltip-open');
+            const highEl = document.getElementById('tooltip-high');
+            const lowEl = document.getElementById('tooltip-low');
+            const closeEl = document.getElementById('tooltip-close');
+            const changeEl = document.getElementById('tooltip-change');
+            const volumeEl = document.getElementById('tooltip-volume');
+            const rowOpen = document.getElementById('row-open');
+            const rowHigh = document.getElementById('row-high');
+            const rowLow = document.getElementById('row-low');
+            
+            if (!timeEl || !openEl || !highEl || !lowEl || !closeEl || !changeEl || !volumeEl) return;
+            timeEl.textContent = timeStr;
+            
+            if (currentBar.value === 'tick') {
+                if (rowOpen) rowOpen.style.display = 'none';
+                if (rowHigh) rowHigh.style.display = 'none';
+                if (rowLow) rowLow.style.display = 'none';
+                const closeLabel = closeEl.previousElementSibling;
+                if (closeLabel) closeLabel.textContent = '价格';
+                const changeRow = changeEl.parentElement;
+                if (changeRow) changeRow.style.display = 'none';
             } else {
-                // API 返回错误
-                const errorMsg = result.error || '行情数据加载失败';
-                showError(`行情错误: ${errorMsg}`);
-                // 清空行情显示
-                document.getElementById('last-price').textContent = '--';
-                document.getElementById('change-24h').textContent = '--';
-                document.getElementById('high-24h').textContent = '--';
-                document.getElementById('low-24h').textContent = '--';
-                document.getElementById('volume-24h').textContent = '--';
+                if (rowOpen) rowOpen.style.display = 'flex';
+                if (rowHigh) rowHigh.style.display = 'flex';
+                if (rowLow) rowLow.style.display = 'flex';
+                const closeLabel = closeEl.previousElementSibling;
+                if (closeLabel) closeLabel.textContent = '收盘';
+                const changeRow = changeEl.parentElement;
+                if (changeRow) changeRow.style.display = 'flex';
+                openEl.textContent = formatNum(open);
+                highEl.textContent = formatNum(high);
+                lowEl.textContent = formatNum(low);
+                changeEl.textContent = `${isUp ? '+' : ''}${changePercent}%`;
+                changeEl.className = `tooltip-value ${colorClass}`;
             }
-        } catch (error) {
-            console.error('加载行情失败:', error);
-            showError(`行情网络错误: ${error.message}`);
-        }
-    }
+            closeEl.textContent = formatNum(close);
+            closeEl.className = `tooltip-value ${colorClass}`;
+            const volume = volumeData ? volumeData.value : (candleData.volume || 0);
+            volumeEl.textContent = formatVolume(volume);
+            tooltip.style.display = 'block';
+        };
 
-    // 自动刷新状态
-    let isAutoRefresh = true;
-
-    // 刷新数据
-    function refreshData(fitContent = false) {
-        loadCandlesticks(fitContent);
-        loadTicker();
-    }
-
-    // 事件绑定
-    document.getElementById('symbol-select').addEventListener('change', (e) => {
-        currentSymbol = e.target.value;
-        refreshData(true);
-    });
-
-    document.getElementById('source-select').addEventListener('change', (e) => {
-        currentSource = e.target.value;
-        refreshData(true);
-    });
-
-    document.querySelectorAll('.timeframe-buttons button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentBar = btn.dataset.bar;
-            document.getElementById('more-timeframes').value = '';
-            document.getElementById('custom-interval').style.display = 'none';
+        onMounted(() => {
             initChart();
             refreshData(true);
+            refreshInterval = setInterval(() => { if (isAutoRefresh.value) refreshData(false); }, 2000);
+            changeColorScheme(settings.colorScheme);
         });
-    });
-    
-    // 更多周期下拉菜单
-    document.getElementById('more-timeframes').addEventListener('change', (e) => {
-        const value = e.target.value;
-        if (!value) return;
-        
-        if (value === 'custom') {
-            // 显示自定义输入框
-            document.getElementById('custom-interval').style.display = 'block';
-            document.getElementById('custom-interval').focus();
-        } else {
-            // 选择预设周期
-            document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
-            currentBar = value;
-            document.getElementById('custom-interval').style.display = 'none';
-            initChart();
-            refreshData(true);
-        }
-    });
-    
-    // 自定义周期输入
-    document.getElementById('custom-interval').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const customValue = e.target.value.trim().toUpperCase();
-            if (customValue) {
-                // 验证格式：数字 + 单位 (如: 2H, 7D, 90m)
-                const match = customValue.match(/^(\d+)([SMHDW])$/);
-                if (match) {
-                    document.querySelectorAll('.timeframe-buttons button').forEach(b => b.classList.remove('active'));
-                    currentBar = customValue.toLowerCase();
-                    initChart();
-                    refreshData(true);
-                } else {
-                    alert('格式错误！请使用格式：数字+单位\\n例如：2H (2小时), 7D (7天), 90m (90分钟)\\n单位：s(秒) m(分) H(时) D(日) W(周)');
-                }
-            }
-        }
-    });
 
-    // 手动刷新按钮
-    document.getElementById('refresh-btn').addEventListener('click', () => {
-        refreshData(false); // 手动刷新不重置视图
-    });
-
-    // 自动刷新按钮
-    const autoRefreshBtn = document.getElementById('auto-refresh-btn');
-    if (autoRefreshBtn) {
-        autoRefreshBtn.addEventListener('click', () => {
-            isAutoRefresh = !isAutoRefresh;
-            if (isAutoRefresh) {
-                autoRefreshBtn.classList.add('active');
-                autoRefreshBtn.textContent = '自动: 开';
-            } else {
-                autoRefreshBtn.classList.remove('active');
-                autoRefreshBtn.textContent = '自动: 关';
-            }
+        onUnmounted(() => {
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (chart) chart.remove();
+            if (indicatorWorker) indicatorWorker.terminate();
         });
+
+        return {
+            currentSymbol, currentBar, currentSource, isAutoRefresh, isLoading,
+            ticker, error, chartError, indicators, settings,
+            moreTimeframe, customInterval, showCustomInterval,
+            mainIndicatorsConfig, subIndicatorsConfig,
+            chartRef,
+            refreshData, toggleMainIndicator, switchSubIndicator,
+            toggleSettings, changeColorScheme, hideError, retryLoad,
+            setBar, handleMoreTimeframes, applyCustomInterval, toggleAutoRefresh
+        };
     }
-
-    // 设置初始选中状态
-    document.getElementById('symbol-select').value = currentSymbol;
-    document.getElementById('source-select').value = currentSource;
-    document.querySelectorAll('.timeframe-buttons button').forEach(btn => {
-        if (btn.dataset.bar === currentBar) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-
-    // 初始化
-    initChart();
-    refreshData(true); // 初始化时重置视图
-
-    // 定时刷新（每1秒）
-    setInterval(() => {
-        if (isAutoRefresh) {
-            refreshData(false); // 自动刷新不重置视图
-        }
-    }, 1000);
+}).mount('#app');
 </script>

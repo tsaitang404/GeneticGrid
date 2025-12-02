@@ -1,5 +1,5 @@
-<div class="error-banner" id="error-banner">
+<div class="error-banner" :class="{ show: error.show }">
     <span class="error-icon">⚠️</span>
-    <span class="error-message" id="error-message"></span>
-    <button class="error-close" onclick="hideError()">✕</button>
+    <span class="error-message">[[ error.message ]]</span>
+    <button class="error-close" @click="hideError">✕</button>
 </div>

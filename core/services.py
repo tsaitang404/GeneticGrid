@@ -118,6 +118,12 @@ class BinanceMarketService:
             "volCcy24h": data.get("quoteVolume"),
         }
 
+
+class TradingViewMarketService(BinanceMarketService):
+    """TradingView 数据服务 (目前使用 Binance 数据作为代理)"""
+    pass
+
+
 class CoinGeckoMarketService:
     """CoinGecko 公开行情接口（无需 API Key）"""
     
@@ -297,13 +303,14 @@ class OKXMarketService:
 
 # 数据源工厂
 MARKET_SERVICES = {
+    "tradingview": TradingViewMarketService,
     "binance": BinanceMarketService,
     "coingecko": CoinGeckoMarketService,
     "okx": OKXMarketService,
 }
 
 
-def get_market_service(source: str = "binance"):
+def get_market_service(source: str = "tradingview"):
     """获取指定数据源的行情服务"""
     service_class = MARKET_SERVICES.get(source.lower())
     if not service_class:

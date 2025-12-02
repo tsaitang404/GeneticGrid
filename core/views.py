@@ -12,7 +12,7 @@ def market_view(request):
     """K 线看盘页面"""
     inst_id = request.GET.get('symbol', 'BTC-USDT')
     bar = request.GET.get('bar', '1H')
-    source = request.GET.get('source', 'binance')
+    source = request.GET.get('source', 'tradingview')
     return render(request, 'core/market.html', {
         'inst_id': inst_id,
         'bar': bar,
@@ -26,7 +26,7 @@ def api_candlesticks(request):
     inst_id = request.GET.get('symbol', 'BTC-USDT')
     bar = request.GET.get('bar', '1H')
     limit = int(request.GET.get('limit', 100))
-    source = request.GET.get('source', 'binance')
+    source = request.GET.get('source', 'tradingview')
     before = request.GET.get('before')  # 获取该时间戳之前的数据
     after = request.GET.get('after')    # 获取该时间戳之后的数据
     
