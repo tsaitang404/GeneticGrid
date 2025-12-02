@@ -70,7 +70,53 @@
         #chart-container {
             width: 100%;
             height: calc(100vh - 140px);
+            position: relative;
         }
+        /* 悬停信息面板 */
+        .candle-tooltip {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(30, 34, 45, 0.95);
+            border: 1px solid #363a45;
+            border-radius: 4px;
+            padding: 10px 14px;
+            font-size: 13px;
+            z-index: 100;
+            pointer-events: none;
+            min-width: 180px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .candle-tooltip.locked {
+            border: 2px solid #2962ff;
+            box-shadow: 0 0 10px rgba(41, 98, 255, 0.3);
+        }
+        .candle-tooltip.locked::before {
+            content: '🔒';
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            font-size: 12px;
+        }
+        .candle-tooltip .tooltip-time {
+            color: #787b86;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .candle-tooltip .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+        .candle-tooltip .tooltip-label {
+            color: #787b86;
+        }
+        .candle-tooltip .tooltip-value {
+            font-weight: 500;
+            margin-left: 16px;
+        }
+        .candle-tooltip .tooltip-value.up { color: #26a69a; }
+        .candle-tooltip .tooltip-value.down { color: #ef5350; }
         .timeframe-buttons {
             display: flex;
             gap: 4px;
@@ -237,12 +283,40 @@
 
     <div id="chart-container">
         <div class="loading">加载中...</div>
+        <div class="candle-tooltip" id="candle-tooltip" style="display: none;">
+            <div class="tooltip-time" id="tooltip-time"></div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">开盘</span>
+                <span class="tooltip-value" id="tooltip-open">--</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">最高</span>
+                <span class="tooltip-value" id="tooltip-high">--</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">最低</span>
+                <span class="tooltip-value" id="tooltip-low">--</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">收盘</span>
+                <span class="tooltip-value" id="tooltip-close">--</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">涨跌</span>
+                <span class="tooltip-value" id="tooltip-change">--</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="tooltip-label">成交量</span>
+                <span class="tooltip-value" id="tooltip-volume">--</span>
+            </div>
+        </div>
     </div>
 
     <script>
         let chart = null;
         let candleSeries = null;
         let volumeSeries = null;
+        let highlightSeries = null;
         let currentSymbol = '{{ inst_id }}';
         let currentBar = '{{ bar }}';
         let currentSource = '{{ source }}';
@@ -252,11 +326,56 @@
         let isLoadingMore = false;
         let oldestTimestamp = null;
         let hasMoreData = true;
+        
+        // Tooltip 锁定状态
+        let isTooltipLocked = false;
+        let lockedCandleTime = null;
 
         // 初始化图表
         function initChart() {
             const container = document.getElementById('chart-container');
+            
+            // 只移除图表，保留 tooltip
+            const existingTooltip = document.getElementById('candle-tooltip');
             container.innerHTML = '';
+            
+            // 重新添加 tooltip
+            if (!existingTooltip) {
+                const tooltip = document.createElement('div');
+                tooltip.className = 'candle-tooltip';
+                tooltip.id = 'candle-tooltip';
+                tooltip.style.display = 'none';
+                tooltip.innerHTML = `
+                    <div class="tooltip-time" id="tooltip-time"></div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">开盘</span>
+                        <span class="tooltip-value" id="tooltip-open">--</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">最高</span>
+                        <span class="tooltip-value" id="tooltip-high">--</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">最低</span>
+                        <span class="tooltip-value" id="tooltip-low">--</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">收盘</span>
+                        <span class="tooltip-value" id="tooltip-close">--</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">涨跌</span>
+                        <span class="tooltip-value" id="tooltip-change">--</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">成交量</span>
+                        <span class="tooltip-value" id="tooltip-volume">--</span>
+                    </div>
+                `;
+                container.appendChild(tooltip);
+            } else {
+                container.appendChild(existingTooltip);
+            }
             
             // 重置数据状态
             allCandles = [];
@@ -310,6 +429,28 @@
                     bottom: 0,
                 },
             });
+            
+            // 创建用于标记选中蜡烛的系列
+            markerSeries = chart.addLineSeries({
+                color: 'transparent',
+                lineWidth: 0,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            });
+            
+            // 创建用于高亮选中蜡烛的系列（白色边框）
+            highlightSeries = chart.addCandlestickSeries({
+                upColor: 'transparent',
+                downColor: 'transparent',
+                borderUpColor: '#ffffff',
+                borderDownColor: '#ffffff',
+                wickUpColor: '#ffffff',
+                wickDownColor: '#ffffff',
+                borderVisible: true,
+                priceLineVisible: false,
+                lastValueVisible: false,
+            });
 
             // 自适应大小
             new ResizeObserver(entries => {
@@ -320,6 +461,169 @@
             
             // 监听可见范围变化，加载更多历史数据
             chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
+            
+            // 监听十字线移动，显示悬停信息
+            chart.subscribeCrosshairMove(onCrosshairMove);
+            
+            // 监听点击事件，锁定/解锁tooltip
+            chart.subscribeClick(onChartClick);
+        }
+        
+        // 点击图表时锁定/解锁tooltip
+        function onChartClick(param) {
+            if (!param || !param.time) {
+                // 点击空白区域，解锁tooltip
+                isTooltipLocked = false;
+                lockedCandleTime = null;
+                const tooltip = document.getElementById('candle-tooltip');
+                if (tooltip) {
+                    tooltip.classList.remove('locked');
+                }
+                // 清除高亮
+                if (highlightSeries) {
+                    highlightSeries.setData([]);
+                }
+                return;
+            }
+            
+            const candleData = param.seriesData.get(candleSeries);
+            if (!candleData) {
+                return;
+            }
+            
+            // 如果点击的是已锁定的蜡烛，解锁
+            if (isTooltipLocked && lockedCandleTime === param.time) {
+                isTooltipLocked = false;
+                lockedCandleTime = null;
+                const tooltip = document.getElementById('candle-tooltip');
+                if (tooltip) {
+                    tooltip.classList.remove('locked');
+                }
+                // 清除高亮
+                if (highlightSeries) {
+                    highlightSeries.setData([]);
+                }
+            } else {
+                // 锁定到新的蜡烛
+                isTooltipLocked = true;
+                lockedCandleTime = param.time;
+                const tooltip = document.getElementById('candle-tooltip');
+                if (tooltip) {
+                    tooltip.classList.add('locked');
+                }
+                // 添加白色边框高亮
+                if (highlightSeries) {
+                    highlightSeries.setData([{
+                        time: param.time,
+                        open: candleData.open,
+                        high: candleData.high,
+                        low: candleData.low,
+                        close: candleData.close
+                    }]);
+                }
+                // 更新tooltip内容
+                updateTooltipContent(param);
+            }
+        }
+        
+        // 十字线移动时显示 K 线信息
+        function onCrosshairMove(param) {
+            // 如果tooltip已锁定，不响应悬停
+            if (isTooltipLocked) {
+                return;
+            }
+            
+            const tooltip = document.getElementById('candle-tooltip');
+            
+            // 检查 tooltip 元素是否存在
+            if (!tooltip) {
+                return;
+            }
+            
+            if (!param || !param.time || param.point === undefined || 
+                param.point.x < 0 || param.point.y < 0) {
+                tooltip.style.display = 'none';
+                return;
+            }
+            
+            updateTooltipContent(param);
+        }
+        
+        // 更新tooltip内容的通用函数
+        function updateTooltipContent(param) {
+            const tooltip = document.getElementById('candle-tooltip');
+            if (!tooltip) return;
+            
+            const candleData = param.seriesData.get(candleSeries);
+            const volumeData = param.seriesData.get(volumeSeries);
+            
+            if (!candleData) {
+                if (!isTooltipLocked) {
+                    tooltip.style.display = 'none';
+                }
+                return;
+            }
+            
+            // 格式化时间
+            const date = new Date(param.time * 1000);
+            const timeStr = date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            // 计算涨跌幅
+            const change = candleData.close - candleData.open;
+            const changePercent = ((change / candleData.open) * 100).toFixed(2);
+            const isUp = change >= 0;
+            const colorClass = isUp ? 'up' : 'down';
+            
+            // 格式化数字
+            const formatNum = (num) => {
+                if (num >= 1000) return num.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                if (num >= 1) return num.toFixed(4);
+                return num.toPrecision(4);
+            };
+            
+            const formatVolume = (vol) => {
+                if (vol >= 1e9) return (vol / 1e9).toFixed(2) + 'B';
+                if (vol >= 1e6) return (vol / 1e6).toFixed(2) + 'M';
+                if (vol >= 1e3) return (vol / 1e3).toFixed(2) + 'K';
+                return vol.toFixed(2);
+            };
+            
+            // 获取所有 tooltip 子元素并检查是否存在
+            const timeEl = document.getElementById('tooltip-time');
+            const openEl = document.getElementById('tooltip-open');
+            const highEl = document.getElementById('tooltip-high');
+            const lowEl = document.getElementById('tooltip-low');
+            const closeEl = document.getElementById('tooltip-close');
+            const changeEl = document.getElementById('tooltip-change');
+            const volumeEl = document.getElementById('tooltip-volume');
+            
+            // 如果任何元素不存在，直接返回
+            if (!timeEl || !openEl || !highEl || !lowEl || !closeEl || !changeEl || !volumeEl) {
+                return;
+            }
+            
+            // 更新 tooltip 内容
+            timeEl.textContent = timeStr;
+            openEl.textContent = formatNum(candleData.open);
+            highEl.textContent = formatNum(candleData.high);
+            lowEl.textContent = formatNum(candleData.low);
+            
+            closeEl.textContent = formatNum(candleData.close);
+            closeEl.className = `tooltip-value ${colorClass}`;
+            
+            changeEl.textContent = `${isUp ? '+' : ''}${changePercent}%`;
+            changeEl.className = `tooltip-value ${colorClass}`;
+            
+            const volume = volumeData ? volumeData.value : (candleData.volume || 0);
+            volumeEl.textContent = formatVolume(volume);
+            
+            tooltip.style.display = 'block';
         }
         
         // 可见范围变化时检查是否需要加载更多数据
