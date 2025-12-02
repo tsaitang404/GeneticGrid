@@ -1,0 +1,165 @@
+<div class="header">
+    <h1>🧬 GeneticGrid 看盘</h1>
+    <div class="controls">
+        <select id="symbol-select">
+            <option value="BTC-USDT">BTC/USDT</option>
+            <option value="ETH-USDT">ETH/USDT</option>
+            <option value="SOL-USDT">SOL/USDT</option>
+            <option value="XRP-USDT">XRP/USDT</option>
+            <option value="DOGE-USDT">DOGE/USDT</option>
+            <option value="ADA-USDT">ADA/USDT</option>
+            <option value="AVAX-USDT">AVAX/USDT</option>
+            <option value="LINK-USDT">LINK/USDT</option>
+        </select>
+        <div class="timeframe-buttons">
+            <button data-bar="1m">1分</button>
+            <button data-bar="5m">5分</button>
+            <button data-bar="15m">15分</button>
+            <button data-bar="1H" class="active">1时</button>
+            <button data-bar="4H">4时</button>
+            <button data-bar="1D">日线</button>
+            <select id="more-timeframes" class="timeframe-select">
+                <option value="">更多周期...</option>
+                <option value="tick">分时</option>
+                <option value="1s">1秒</option>
+                <option value="5s">5秒</option>
+                <option value="15s">15秒</option>
+                <option value="30s">30秒</option>
+                <option value="1m">1分</option>
+                <option value="3m">3分</option>
+                <option value="5m">5分</option>
+                <option value="15m">15分</option>
+                <option value="30m">30分</option>
+                <option value="1H">1时</option>
+                <option value="3H">3时</option>
+                <option value="6H">6时</option>
+                <option value="12H">12时</option>
+                <option value="1D">1日</option>
+                <option value="3D">3日</option>
+                <option value="5D">5日</option>
+                <option value="1W">1周</option>
+                <option value="1M">1月</option>
+                <option value="3M">3月</option>
+                <option value="custom">自定义...</option>
+            </select>
+            <input type="text" id="custom-interval" class="custom-interval-input" placeholder="如: 2H, 7D">
+        </div>
+        
+        <div class="dropdown">
+            <button>指标 ▼</button>
+            <div class="dropdown-content">
+                <div class="dropdown-group">
+                    <div class="dropdown-group-title">主图指标 (叠加)</div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-ma" onchange="toggleMainIndicator('ma')"> MA (移动平均线)</label>
+                        <span class="info-icon" title="Moving Average: 简单移动平均线，显示过去N天的平均价格趋势。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-ema" onchange="toggleMainIndicator('ema')"> EMA (指数移动平均)</label>
+                        <span class="info-icon" title="Exponential Moving Average: 指数移动平均线，对近期价格赋予更大权重。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-boll" onchange="toggleMainIndicator('boll')"> BOLL (布林带)</label>
+                        <span class="info-icon" title="Bollinger Bands: 利用标准差计算出的价格通道，反映价格波动率。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-sar" onchange="toggleMainIndicator('sar')"> SAR (抛物线转向)</label>
+                        <span class="info-icon" title="Parabolic SAR: 停损点转向指标，用于判断趋势反转点。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-supertrend" onchange="toggleMainIndicator('supertrend')"> SuperTrend (超级趋势)</label>
+                        <span class="info-icon" title="SuperTrend: 基于ATR的趋势跟踪指标，显示当前趋势方向和支撑/阻力位。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-sr" onchange="toggleMainIndicator('sr')"> Support/Resistance (撑压线)</label>
+                        <span class="info-icon" title="Support & Resistance: 自动识别近期的支撑位和阻力位。">?</span>
+                    </div>
+                </div>
+                
+                <div class="dropdown-group">
+                    <div class="dropdown-group-title">副图指标 (单选)</div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="none" checked onchange="switchSubIndicator('none')"> 无</label>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="macd" onchange="switchSubIndicator('macd')"> MACD (指数平滑异同)</label>
+                        <span class="info-icon" title="MACD: 趋势跟踪动量指标，显示两条移动平均线之间的关系。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="kdj" onchange="switchSubIndicator('kdj')"> KDJ (随机指标)</label>
+                        <span class="info-icon" title="KDJ: 随机震荡指标，用于判断超买超卖。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="rsi" onchange="switchSubIndicator('rsi')"> RSI (相对强弱指数)</label>
+                        <span class="info-icon" title="RSI: 衡量价格变动的速度和变化，判断超买超卖。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="stochrsi" onchange="switchSubIndicator('stochrsi')"> StochRSI (随机RSI)</label>
+                        <span class="info-icon" title="Stochastic RSI: 将随机指标公式应用于RSI值，更灵敏。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="cci" onchange="switchSubIndicator('cci')"> CCI (顺势指标)</label>
+                        <span class="info-icon" title="CCI: 衡量当前价格与其历史平均价格的偏离程度。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="dmi" onchange="switchSubIndicator('dmi')"> DMI (动向指标)</label>
+                        <span class="info-icon" title="DMI: 识别趋势的存在和强度。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="wr" onchange="switchSubIndicator('wr')"> WR (威廉指标)</label>
+                        <span class="info-icon" title="Williams %R: 动量指标，衡量超买超卖水平。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="obv" onchange="switchSubIndicator('obv')"> OBV (能量潮)</label>
+                        <span class="info-icon" title="On-Balance Volume: 通过成交量变化预测价格趋势。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="trix" onchange="switchSubIndicator('trix')"> TRIX (三重指数平滑)</label>
+                        <span class="info-icon" title="TRIX: 过滤短期波动，显示长期趋势。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="roc" onchange="switchSubIndicator('roc')"> ROC (变动率)</label>
+                        <span class="info-icon" title="Rate of Change: 衡量价格变化的百分比。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="mtm" onchange="switchSubIndicator('mtm')"> MTM (动量指标)</label>
+                        <span class="info-icon" title="Momentum: 衡量价格变化的速度。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="dma" onchange="switchSubIndicator('dma')"> DMA (平均线差)</label>
+                        <span class="info-icon" title="DMA: 利用两条不同期间的平均线差值判断趋势。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="vr" onchange="switchSubIndicator('vr')"> VR (成交量比率)</label>
+                        <span class="info-icon" title="Volume Ratio: 通过成交量比率分析市场气氛。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="brar" onchange="switchSubIndicator('brar')"> BRAR (情绪指标)</label>
+                        <span class="info-icon" title="BRAR: 人气意愿指标，反映市场买卖意愿。">?</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <label><input type="radio" name="sub-ind" value="psy" onchange="switchSubIndicator('psy')"> PSY (心理线)</label>
+                        <span class="info-icon" title="Psychological Line: 研究投资者心理波动的情绪指标。">?</span>
+                    </div>
+                </div>
+
+                <div class="dropdown-group">
+                    <div class="dropdown-group-title">其他</div>
+                    <div class="dropdown-item">
+                        <label><input type="checkbox" id="ind-vol" checked onchange="toggleMainIndicator('vol')"> VOL (成交量)</label>
+                        <span class="info-icon" title="Volume: 交易量。">?</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <span class="source-label">数据源:</span>
+        <select id="source-select" class="source-select">
+            <option value="binance">Binance</option>
+            <option value="coingecko">CoinGecko</option>
+            <option value="okx">OKX</option>
+        </select>
+        <button id="refresh-btn">🔄 刷新</button>
+        <button id="settings-btn" title="设置">⚙️</button>
+    </div>
+</div>
