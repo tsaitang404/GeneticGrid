@@ -467,26 +467,44 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const startAutoRefresh = (): void => {
     if (refreshInterval) clearInterval(refreshInterval)
     
-    // Determine refresh interval based on bar
+    // Determine refresh interval based on bar timeframe
     let intervalMs = 5000 // Default 5 seconds
     const bar = options.bar.value.toLowerCase()
     
-    if (bar.includes('m')) {
-      // For minute bars, refresh every 5 seconds
-      intervalMs = 5000
+    // Parse the timeframe
+    if (bar.includes('s')) {
+      // For second bars (1s, 5s, etc.), refresh at half the period or 500ms minimum
+      const seconds = parseInt(bar.replace(/[^0-9]/g, '')) || 1
+      intervalMs = Math.max(500, seconds * 500) // Half period, min 500ms
+    } else if (bar.includes('m')) {
+      // For minute bars, refresh based on the period
+      const minutes = parseInt(bar.replace(/[^0-9]/g, '')) || 1
+      if (minutes === 1) {
+        intervalMs = 2000 // 1m: refresh every 2s
+      } else if (minutes <= 5) {
+        intervalMs = 5000 // 5m: refresh every 5s
+      } else if (minutes <= 15) {
+        intervalMs = 10000 // 15m: refresh every 10s
+      } else {
+        intervalMs = 30000 // 30m+: refresh every 30s
+      }
     } else if (bar.includes('h')) {
-      // For hour bars, refresh every 30 seconds
-      intervalMs = 30000
-    } else if (bar.includes('d') || bar.includes('w')) {
-      // For day/week bars, refresh every minute
-      intervalMs = 60000
+      // For hour bars, refresh every 30-60 seconds
+      const hours = parseInt(bar.replace(/[^0-9]/g, '')) || 1
+      intervalMs = hours >= 4 ? 60000 : 30000
+    } else if (bar.includes('d')) {
+      // For day bars, refresh every 2 minutes
+      intervalMs = 120000
+    } else if (bar.includes('w') || bar.includes('M')) {
+      // For week/month bars, refresh every 5 minutes
+      intervalMs = 300000
     }
     
     refreshInterval = window.setInterval(() => {
       updateLatestData()
     }, intervalMs)
     
-    console.log(`🔄 Auto-refresh started: ${intervalMs}ms interval`)
+    console.log(`🔄 Auto-refresh started: ${bar} → ${intervalMs}ms interval (${(intervalMs / 1000).toFixed(1)}s)`)
   }
 
   // Watch for symbol/bar changes
