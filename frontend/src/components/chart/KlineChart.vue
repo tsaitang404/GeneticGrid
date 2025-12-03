@@ -21,11 +21,9 @@
         v-model="source"
       />
       
-      <RefreshControls
-        :autoRefresh="autoRefresh"
-        @refresh="handleManualRefresh"
-        @toggle-auto-refresh="toggleAutoRefresh"
-      />
+      <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
+        🔄 刷新
+      </button>
       
       <div class="price-info">
         <span class="label">最新价:</span>
@@ -123,7 +121,6 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import SymbolSelector from './SymbolSelector.vue'
 import TimeframeSelector from './TimeframeSelector.vue'
 import SourceSelector from './SourceSelector.vue'
-import RefreshControls from './RefreshControls.vue'
 import IndicatorSelector from '../indicators/IndicatorSelector.vue'
 import DrawingToolbar from '../tools/DrawingToolbar.vue'
 import CandleTooltip from './CandleTooltip.vue'
@@ -162,7 +159,6 @@ const symbol = ref<string>(props.initialSymbol)
 const bar = ref<string>(props.initialBar)
 const source = ref<string>(props.initialSource)
 const isLoading = ref<boolean>(true)
-const autoRefresh = ref<boolean>(true)
 const latestPrice = ref<string>('--')
 const priceChange = ref<string>('--')
 const priceChangeClass = ref<'up' | 'down'>('up')
@@ -180,6 +176,7 @@ const {
   subCharts,
   allCandles,
   hasMoreData,
+  initialize,
   initChart,
   loadCandlesticks,
   updateLatestData,
@@ -231,10 +228,6 @@ const handleManualRefresh = async (): Promise<void> => {
   await updateLatestData()
 }
 
-const toggleAutoRefresh = (): void => {
-  autoRefresh.value = !autoRefresh.value
-}
-
 // Watch for symbol and bar changes to emit events
 watch(symbol, (newSymbol) => {
   emit('symbol-change', newSymbol)
@@ -263,25 +256,17 @@ watch([allCandles, hasMoreData], () => {
 
 // Lifecycle
 onMounted(async () => {
-  initChart()
-  await loadCandlesticks()
+  // Initialize chart with auto-refresh
+  await initialize()
   
   // Trigger indicator calculations after data is loaded
   if (allCandles.value.length > 0) {
     triggerWorkerCalculation()
   }
-  
-  // Auto refresh
-  const refreshInterval = setInterval(() => {
-    if (autoRefresh.value) {
-      updateLatestData()
-    }
-  }, 2000)
-  
-  onUnmounted(() => {
-    clearInterval(refreshInterval)
-    cleanupIndicators()
-  })
+})
+
+onUnmounted(() => {
+  cleanupIndicators()
 })
 </script>
 
@@ -300,6 +285,22 @@ onMounted(async () => {
   padding: 10px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+}
+
+.refresh-btn {
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
 }
 
 .price-info {
