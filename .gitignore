@@ -5,3 +5,18 @@ venv/
 *.pyc
 db.sqlite3
 .env
+staticfiles/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Build output (committed for production)
+# static/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
