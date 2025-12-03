@@ -13,7 +13,7 @@ frontend/dist/
 frontend/.vite/
 
 # Build output (committed for production)
-# static/dist/
+static/dist/
 
 # IDE
 .vscode/
