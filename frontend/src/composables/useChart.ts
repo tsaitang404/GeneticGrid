@@ -87,9 +87,18 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       scaleMargins: { top: 0.8, bottom: 0 }
     })
 
-    // Subscribe to visible range changes for auto-loading
+    // Subscribe to visible range changes for auto-loading and syncing sub-charts
     chart.value.timeScale().subscribeVisibleLogicalRangeChange((range) => {
       onVisibleRangeChange(range)
+      
+      // Sync all sub-charts time scale with main chart
+      if (range) {
+        Object.values(subCharts.value).forEach(subChart => {
+          if (subChart) {
+            subChart.timeScale().setVisibleLogicalRange(range)
+          }
+        })
+      }
     })
 
     // Setup resize observer
