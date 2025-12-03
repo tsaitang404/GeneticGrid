@@ -39,7 +39,7 @@ import { useTicker } from './composables/useTicker'
 
 const initialSymbol = ref<string>('BTCUSDT')
 const initialBar = ref<string>('1h')
-const initialSource = ref<string>('okx')
+const initialSource = ref<string>('tradingview')
 const showSettings = ref<boolean>(false)
 const currency = ref<string>(localStorage.getItem('geneticgrid_currency') || 'USDT')
 
@@ -67,12 +67,23 @@ onMounted(() => {
 
 </script>
 
+<style>
+/* Hide TradingView watermark globally */
+.tv-lightweight-charts [class*="watermark"],
+.tv-lightweight-charts > div > canvas + div,
+.tv-lightweight-charts table tbody tr:last-child td:last-child {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+</style>
+
 <style scoped>
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #131722;
+  background: #0d0d0d;
   color: #d1d4dc;
 }
 
