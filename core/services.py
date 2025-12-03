@@ -41,8 +41,12 @@ class BinanceMarketService:
     def _convert_bar(self, bar: str) -> str:
         """将时间周期转换为 Binance 格式"""
         mapping = {
-            "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"
+            "1s": "1s", "5s": "1s", "15s": "1s", "30s": "1s",  # Binance只支持1s，其他秒级用1s代替
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1h", "1H": "1h", "2h": "2h", "4h": "4h", "4H": "4h",
+            "6h": "6h", "12h": "12h",
+            "1d": "1d", "1D": "1d", "3d": "3d", 
+            "1w": "1w", "1W": "1w", "1M": "1M"
         }
         return mapping.get(bar, "1h")
     

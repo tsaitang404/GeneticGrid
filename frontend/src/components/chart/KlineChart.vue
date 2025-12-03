@@ -168,7 +168,7 @@ const noDataWidth = ref<string>('0px')
 
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
-const availableTimeframes = ref<string[]>(['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
+const availableTimeframes = ref<string[]>(['分时', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
 
 // Use composables
 const {
