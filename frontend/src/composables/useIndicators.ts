@@ -69,6 +69,9 @@ export function useIndicators(
         background: { type: ColorType.Solid, color: '#131722' },
         textColor: '#d1d4dc'
       },
+      watermark: {
+        visible: false
+      },
       grid: {
         vertLines: { color: '#1e222d' },
         horzLines: { color: '#1e222d' }
@@ -86,12 +89,10 @@ export function useIndicators(
 
     subCharts.value[key] = subChart
 
-    // Sync time scale with main chart
-    subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-      if (chart.value && range) {
-        chart.value.timeScale().setVisibleLogicalRange(range)
-      }
-    })
+    // Sync time scale with main chart (sub-chart → main chart)
+    // Note: Main chart also syncs to sub-charts, so we don't need bidirectional sync here
+    // The main chart's sync will handle updating all sub-charts
+    // This subscription is kept for direct user interaction on sub-charts only
 
     // Create series based on indicator type
     createSubIndicatorSeries(key, subChart)
