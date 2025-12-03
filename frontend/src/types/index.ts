@@ -1,0 +1,133 @@
+// Candle data types
+export interface Candle {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+// Indicator data types
+export interface IndicatorData {
+  time: number
+  value: number
+  color?: string
+}
+
+export interface MACDData {
+  dif: IndicatorData[]
+  dea: IndicatorData[]
+  histogram: IndicatorData[]
+}
+
+export interface KDJData {
+  k: IndicatorData[]
+  d: IndicatorData[]
+  j: IndicatorData[]
+}
+
+export interface BOLLData {
+  upper: IndicatorData[]
+  middle: IndicatorData[]
+  lower: IndicatorData[]
+}
+
+// Drawing types
+export type DrawingType = 'cursor' | 'line' | 'ray' | 'horizontal' | 'fib' | 'parallel' | 'delete'
+
+export interface LogicalPoint {
+  time: number
+  price: number
+}
+
+export interface ScreenPoint {
+  x: number
+  y: number
+}
+
+export interface Drawing {
+  type: DrawingType
+  points: LogicalPoint[]
+}
+
+// Indicator config types
+export interface IndicatorConfig {
+  enabled: boolean
+  name: string
+  series: any | any[]
+  label?: string
+  title?: string
+}
+
+export interface Indicators {
+  vol: IndicatorConfig
+  ma: IndicatorConfig
+  ema: IndicatorConfig
+  boll: IndicatorConfig
+  sar: IndicatorConfig
+  supertrend: IndicatorConfig
+  sr: IndicatorConfig
+  macd: IndicatorConfig
+  kdj: IndicatorConfig
+  rsi: IndicatorConfig
+  stochrsi: IndicatorConfig
+  cci: IndicatorConfig
+  dmi: IndicatorConfig
+  wr: IndicatorConfig
+  obv: IndicatorConfig
+  trix: IndicatorConfig
+  roc: IndicatorConfig
+  mtm: IndicatorConfig
+  dma: IndicatorConfig
+  vr: IndicatorConfig
+  brar: IndicatorConfig
+  psy: IndicatorConfig
+}
+
+// Chart options
+export interface ChartOptions {
+  symbol: { value: string }
+  bar: { value: string }
+  source: { value: string }
+  onLoading?: (loading: boolean) => void
+  onError?: (error: ChartError) => void
+  onPriceUpdate?: (price: string, change: string, isUp: boolean) => void
+}
+
+// Error type
+export interface ChartError {
+  show: boolean
+  message: string
+  detail?: string
+}
+
+// Tooltip data
+export interface TooltipData {
+  time: number
+  open?: number
+  high?: number
+  low?: number
+  close: number
+  volume: number
+  changePercent?: string
+  isUp: boolean
+}
+
+// API response types
+export interface APIResponse<T = any> {
+  code: number
+  data?: T
+  error?: string
+}
+
+export interface TickerData {
+  last: string
+  open24h: string
+  high24h: string
+  low24h: string
+  vol24h: string
+  changePercent: string
+  isUp: boolean
+}
+

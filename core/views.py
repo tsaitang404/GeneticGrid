@@ -1,24 +1,28 @@
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import cache_page
+from django.views.generic import TemplateView
 from .services import get_market_service, MarketAPIError, MARKET_SERVICES
+import os
+from pathlib import Path
 
 
 def index(request):
-    return HttpResponse('Hello, GeneticGrid!')
+    """主页 - 返回 Vue 应用"""
+    # 返回 Vue 构建的 index.html
+    static_dir = Path(__file__).resolve().parent.parent / 'static' / 'dist'
+    index_path = static_dir / 'index.html'
+    
+    with open(index_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    return HttpResponse(html_content)
 
 
 def market_view(request):
-    """K 线看盘页面"""
-    inst_id = request.GET.get('symbol', 'BTC-USDT')
-    bar = request.GET.get('bar', '1H')
-    source = request.GET.get('source', 'tradingview')
-    return render(request, 'core/market.html', {
-        'inst_id': inst_id,
-        'bar': bar,
-        'source': source,
-        'sources': list(MARKET_SERVICES.keys()),
-    })
+    """K 线看盘页面 - 返回 Vue 应用"""
+    # Vue 应用会通过路由处理所有页面
+    return index(request)
 
 
 def api_candlesticks(request):
