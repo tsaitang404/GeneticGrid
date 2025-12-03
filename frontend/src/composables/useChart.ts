@@ -6,8 +6,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const chart = ref<IChartApi | null>(null)
   const subCharts = ref<Record<string, IChartApi>>({})
   const candleSeries = ref<ISeriesApi<'Candlestick'> | null>(null)
+  const lineSeries = ref<ISeriesApi<'Line'> | null>(null)
   const volumeSeries = ref<ISeriesApi<'Histogram'> | null>(null)
   const allCandles = ref<Candle[]>([])
+  const isTimelineMode = ref<boolean>(false)
   
   // Data loading states
   const isLoadingMore = ref(false)
@@ -21,6 +23,21 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   let refreshInterval: number | null = null
   let isSyncingTimeScale = false // Prevent circular time scale sync
   let loadDebounceTimer: number | null = null // Debounce timer for loading
+
+  // Helper function to check if current bar is timeline mode
+  const checkIsTimelineMode = (bar: string): boolean => {
+    const barLower = bar.toLowerCase()
+    return barLower === 'timeline' || barLower === '分时' || barLower === 'tick'
+  }
+
+  // Helper function to get backend bar parameter
+  const getBackendBar = (bar: string): string => {
+    // Map Chinese/special timeframes to backend format
+    if (checkIsTimelineMode(bar)) {
+      return '1s' // Use 1s data for timeline display with second precision
+    }
+    return bar
+  }
 
   const initChart = (): void => {
     if (!chartRef.value) return
@@ -65,21 +82,57 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       timeScale: {
         borderColor: '#2a2e39',
         timeVisible: true,
-        secondsVisible: false
+        secondsVisible: true // Always show full time format
       },
       width: chartRef.value.clientWidth,
       height: chartRef.value.clientHeight
     })
 
-    // Add candlestick series
-    candleSeries.value = chart.value.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderDownColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      wickUpColor: '#26a69a'
-    })
+    // Determine if we should use timeline (line) mode
+    isTimelineMode.value = checkIsTimelineMode(options.bar.value)
+    
+    // Adjust spacing based on mode
+    if (isTimelineMode.value) {
+      // Timeline mode: tighter spacing for continuous line
+      chart.value.timeScale().applyOptions({
+        rightOffset: 5,
+        barSpacing: 3,
+        minBarSpacing: 0.5
+      })
+      console.log('📊 Timeline mode activated')
+    } else {
+      // Candlestick mode: normal spacing
+      chart.value.timeScale().applyOptions({
+        rightOffset: 12,
+        barSpacing: 6,
+        minBarSpacing: 3
+      })
+    }
+
+    // Add price series (candlestick or line based on mode)
+    if (isTimelineMode.value) {
+      // Timeline mode: use line chart
+      lineSeries.value = chart.value.addLineSeries({
+        color: '#2962FF',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        lastValueVisible: true,
+        priceLineVisible: true
+      })
+      candleSeries.value = null
+    } else {
+      // Candlestick mode
+      candleSeries.value = chart.value.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderDownColor: '#ef5350',
+        borderUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+        wickUpColor: '#26a69a'
+      })
+      lineSeries.value = null
+    }
 
     // Add volume series
     volumeSeries.value = chart.value.addHistogramSeries({
@@ -124,8 +177,19 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     if (options.onLoading) options.onLoading(true)
 
     try {
+      const currentBar = options.bar.value
+      const backendBar = getBackendBar(currentBar)
+      const isTimeline = checkIsTimelineMode(currentBar)
+      
+      // For timeline mode, limit to today's data only (or recent period)
+      let limit = 2000
+      if (isTimeline) {
+        // For 1s data: 1 day = 86400 seconds, use smaller limit
+        limit = Math.min(500, 2000) // Start with less data for intraday view
+      }
+      
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${options.bar.value}&limit=2000&source=${options.source.value}`
+        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=${limit}&source=${options.source.value}`
       )
       const result: APIResponse<Candle[]> = await response.json()
 
@@ -136,7 +200,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         if (result.data.length > 0) {
           oldestTimestamp.value = result.data[0].time as number
           newestTimestamp.value = result.data[result.data.length - 1].time as number
-          hasMoreData.value = result.data.length >= 1800 // 90% of requested
+          hasMoreData.value = result.data.length >= limit * 0.9 // 90% of requested
           hasNewerData.value = true
         }
         
@@ -145,8 +209,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           chart.value.timeScale().fitContent()
         }
         
-        // Aggressively preload more history data for smooth scrolling
-        if (allCandles.value.length < 5000 && hasMoreData.value) {
+        // Preload more history data for smooth scrolling (but not for timeline)
+        if (!isTimeline && allCandles.value.length < 5000 && hasMoreData.value) {
           console.log('🔄 Preloading additional 5000 candles for buffer...')
           loadMoreHistory(5000)
         }
@@ -165,17 +229,29 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   }
 
   const updateChartData = (): void => {
-    if (!candleSeries.value || !volumeSeries.value || !chart.value) return
+    if ((!candleSeries.value && !lineSeries.value) || !volumeSeries.value || !chart.value) return
 
     // Full update: replace all data
     // Note: setData() will preserve the current scroll position automatically
-    const candleData = allCandles.value.map(c => ({
-      time: c.time as any,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close
-    }))
+    
+    if (isTimelineMode.value && lineSeries.value) {
+      // Timeline mode: use close price for line chart
+      const lineData = allCandles.value.map(c => ({
+        time: c.time as any,
+        value: c.close
+      }))
+      lineSeries.value.setData(lineData)
+    } else if (candleSeries.value) {
+      // Candlestick mode
+      const candleData = allCandles.value.map(c => ({
+        time: c.time as any,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close
+      }))
+      candleSeries.value.setData(candleData)
+    }
 
     const volumeData = allCandles.value.map(c => ({
       time: c.time as any,
@@ -183,7 +259,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       color: c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
     }))
 
-    candleSeries.value.setData(candleData)
     volumeSeries.value.setData(volumeData)
 
     // Update price info
@@ -206,8 +281,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     try {
       // Use 'after' parameter to get only newer data than we have
       const afterMs = newestTimestamp.value * 1000
+      const backendBar = getBackendBar(options.bar.value)
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${options.bar.value}&limit=100&source=${options.source.value}&after=${afterMs}`
+        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=100&source=${options.source.value}&after=${afterMs}`
       )
       const result: APIResponse<Candle[]> = await response.json()
 
@@ -220,7 +296,20 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           if (newCandle.time === lastCandle.time) {
             // Update existing candle (current period may still be updating)
             allCandles.value[allCandles.value.length - 1] = newCandle
-            if (candleSeries.value && volumeSeries.value) {
+            
+            if (isTimelineMode.value && lineSeries.value && volumeSeries.value) {
+              // Timeline mode
+              lineSeries.value.update({
+                time: newCandle.time as any,
+                value: newCandle.close
+              })
+              volumeSeries.value.update({
+                time: newCandle.time as any,
+                value: newCandle.volume,
+                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+              })
+            } else if (candleSeries.value && volumeSeries.value) {
+              // Candlestick mode
               candleSeries.value.update({
                 time: newCandle.time as any,
                 open: newCandle.open,
@@ -238,7 +327,20 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           } else if (newCandle.time > lastCandle.time) {
             // Add new candle (new period started)
             allCandles.value.push(newCandle)
-            if (candleSeries.value && volumeSeries.value) {
+            
+            if (isTimelineMode.value && lineSeries.value && volumeSeries.value) {
+              // Timeline mode
+              lineSeries.value.update({
+                time: newCandle.time as any,
+                value: newCandle.close
+              })
+              volumeSeries.value.update({
+                time: newCandle.time as any,
+                value: newCandle.volume,
+                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+              })
+            } else if (candleSeries.value && volumeSeries.value) {
+              // Candlestick mode
               candleSeries.value.update({
                 time: newCandle.time as any,
                 open: newCandle.open,
@@ -366,7 +468,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       // oldestTimestamp is in seconds, API expects milliseconds
       const beforeMs = oldestTimestamp.value * 1000
       const limit = Math.min(count, 15000) // Increased max to 15000 (backend has cache)
-      const url = `/api/candlesticks/?symbol=${options.symbol.value}&bar=${options.bar.value}&limit=${limit}&source=${options.source.value}&before=${beforeMs}`
+      const backendBar = getBackendBar(options.bar.value)
+      const url = `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=${limit}&source=${options.source.value}&before=${beforeMs}`
       
       const response = await fetch(url)
       const result: APIResponse<Candle[]> = await response.json()
@@ -425,8 +528,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     try {
       // Request a large batch of newer data (up to current time)
       const afterMs = newestTimestamp.value * 1000
+      const backendBar = getBackendBar(options.bar.value)
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${options.bar.value}&limit=2000&source=${options.source.value}&after=${afterMs}`
+        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=2000&source=${options.source.value}&after=${afterMs}`
       )
       const result: APIResponse<Candle[]> = await response.json()
       
@@ -472,7 +576,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     const bar = options.bar.value.toLowerCase()
     
     // Parse the timeframe
-    if (bar.includes('s')) {
+    if (bar === 'timeline' || bar === '分时' || bar === 'tick') {
+      // Timeline/tick mode: refresh every 1-2 seconds for real-time price
+      intervalMs = 1000
+    } else if (bar.includes('s')) {
       // For second bars (1s, 5s, etc.), refresh at half the period or 500ms minimum
       const seconds = parseInt(bar.replace(/[^0-9]/g, '')) || 1
       intervalMs = Math.max(500, seconds * 500) // Half period, min 500ms
@@ -545,12 +652,14 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     chart,
     subCharts,
     candleSeries,
+    lineSeries,
     volumeSeries,
     allCandles,
     isLoadingMore,
     isLoadingNewer,
     hasMoreData,
     hasNewerData,
+    isTimelineMode,
     initialize,
     initChart,
     loadCandlesticks,
