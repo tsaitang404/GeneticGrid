@@ -351,19 +351,23 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   flex-shrink: 0;
+  overflow: visible; /* Ensure axis labels are not clipped */
 }
 
 .drawing-canvas {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 5;
+  z-index: 1; /* Ensure chart (axis/labels) renders above */
   pointer-events: none;
 }
 
 .chart-wrapper {
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 2; /* Put chart canvas above overlay canvases */
+  overflow: visible; /* Allow price axis labels to render fully */
 }
 
 .error-overlay {

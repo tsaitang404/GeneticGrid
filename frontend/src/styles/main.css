@@ -21,6 +21,8 @@ body {
   --up-color: #26a69a;
   --down-color: #ef5350;
   --blue-accent: #2962ff;
+  --latest-price-label-bg: #ffd54f;
+  --latest-price-label-text: #000000;
 }
 
 button {
@@ -52,4 +54,20 @@ input {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #363a45;
+}
+
+.latest-price-axis-label {
+  position: absolute;
+  right: 6px;
+  padding: 2px 8px;
+  background: var(--latest-price-label-bg);
+  color: var(--latest-price-label-text);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+  display: none;
 }
