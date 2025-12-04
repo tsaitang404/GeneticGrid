@@ -1,6 +1,20 @@
 <template>
-  <div class="candle-tooltip" v-if="data">
-    <div class="tooltip-time">{{ formatTime(data.time) }}</div>
+  <div
+    v-if="data"
+    class="candle-tooltip"
+    :class="{ locked: locked }"
+  >
+    <div class="tooltip-header">
+      <div class="tooltip-time">{{ formatTime(data.time) }}</div>
+      <span
+        v-if="locked"
+        class="locked-tag"
+        aria-label="已锁定"
+        title="已锁定"
+      >
+        🔒
+      </span>
+    </div>
     
     <template v-if="bar !== 'tick'">
       <div class="tooltip-row">
@@ -39,14 +53,20 @@
 </template>
 
 <script setup lang="ts">
+import { toRefs } from 'vue'
 import type { TooltipData } from '@/types'
 
 interface Props {
   data: TooltipData | null
   bar: string
+  locked?: boolean
 }
 
-defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  locked: false
+})
+
+const { data, bar, locked } = toRefs(props)
 
 const formatTime = (timestamp: number): string => {
   const date = new Date(timestamp * 1000)
@@ -60,7 +80,7 @@ const formatTime = (timestamp: number): string => {
 }
 
 const formatPrice = (price: number | undefined): string => {
-  if (!price) return '--'
+  if (price === undefined || price === null) return '--'
   return price >= 1000
     ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : price >= 1
@@ -69,7 +89,7 @@ const formatPrice = (price: number | undefined): string => {
 }
 
 const formatVolume = (vol: number): string => {
-  if (!vol) return '--'
+  if (vol === undefined || vol === null) return '--'
   return vol >= 1e9
     ? (vol / 1e9).toFixed(2) + 'B'
     : vol >= 1e6
@@ -83,20 +103,45 @@ const formatVolume = (vol: number): string => {
 <style scoped>
 .candle-tooltip {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 12px;
+  left: 12px;
   z-index: 20;
   background: rgba(30, 34, 45, 0.9);
   border: 1px solid #2a2e39;
   padding: 8px;
   border-radius: 4px;
   pointer-events: none;
+  min-width: 170px;
+}
+
+.candle-tooltip.locked {
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 
 .tooltip-time {
   color: #d1d4dc;
   font-size: 12px;
-  margin-bottom: 4px;
+}
+
+.locked-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .tooltip-row {
