@@ -63,10 +63,14 @@ interface OptionItem {
   label: string
 }
 
-const primaryTimeframes = computed(() => props.timeframes.slice(0, 5))
-const extraTimeframes = computed(() => props.timeframes.slice(5))
+// 常用时间周期：分时、1m、15m、1h、4h、1d
+const commonTimeframes = ['tick', '1m', '15m', '1h', '4h', '1d']
 
-const defaultMoreOptions: OptionItem[] = [
+const primaryTimeframes = computed(() => {
+  return commonTimeframes.filter(tf => props.timeframes.includes(tf))
+})
+
+const allTimeframeOptions: OptionItem[] = [
   { value: 'tick', label: '分时' },
   { value: '1s', label: '1秒' },
   { value: '5s', label: '5秒' },
@@ -78,7 +82,9 @@ const defaultMoreOptions: OptionItem[] = [
   { value: '15m', label: '15分' },
   { value: '30m', label: '30分' },
   { value: '1h', label: '1时' },
+  { value: '2h', label: '2时' },
   { value: '3h', label: '3时' },
+  { value: '4h', label: '4时' },
   { value: '6h', label: '6时' },
   { value: '12h', label: '12时' },
   { value: '1d', label: '1日' },
@@ -90,21 +96,8 @@ const defaultMoreOptions: OptionItem[] = [
 ]
 
 const moreOptions = computed<OptionItem[]>(() => {
-  const seen = new Set<string>()
-  const result: OptionItem[] = []
-  extraTimeframes.value.forEach((tf) => {
-    if (!seen.has(tf)) {
-      result.push({ value: tf, label: tf })
-      seen.add(tf)
-    }
-  })
-  defaultMoreOptions.forEach((opt) => {
-    if (!seen.has(opt.value)) {
-      result.push(opt)
-      seen.add(opt.value)
-    }
-  })
-  return result
+  const primarySet = new Set(commonTimeframes)
+  return allTimeframeOptions.filter(opt => !primarySet.has(opt.value))
 })
 
 const handleSelect = (tf: string): void => {
