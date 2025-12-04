@@ -53,8 +53,12 @@
             :sources="availableSources"
           />
           
-          <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
-            🔄 刷新
+          <button 
+            @click="toggleAutoRefresh" 
+            :class="['refresh-btn', { active: autoRefreshEnabled }]"
+            :title="autoRefreshEnabled ? '关闭自动刷新' : '开启自动刷新'"
+          >
+            {{ autoRefreshEnabled ? '✓ 自动刷新' : '自动刷新' }}
           </button>
         </div>
       </div>
@@ -196,6 +200,8 @@ const priceChangeClass = ref<'up' | 'down'>('up')
 const chartError = ref<ChartError>({ show: false, message: '' })
 const tooltipData = ref<TooltipData | null>(null)
 const noDataWidth = ref<string>('0px')
+const autoRefreshEnabled = ref<boolean>(true)
+const autoRefreshTimer = ref<number | null>(null)
 
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
@@ -288,14 +294,61 @@ const {
   startResize
 } = useChartResize(chart, subCharts)
 
+// 根据K线周期确定刷新间隔（毫秒）
+const getRefreshInterval = computed(() => {
+  const barValue = bar.value.toLowerCase()
+  
+  // 分时每秒刷新
+  if (barValue === 'tick') return 1000
+  
+  // 解析时间单位
+  const match = barValue.match(/^(\d+)([smhdwM])$/)
+  if (!match) return 5000 // 默认5秒
+  
+  const [, numStr, unit] = match
+  const num = parseInt(numStr, 10)
+  
+  // 根据周期计算刷新间隔，通常为周期的 1/10 或最小1秒
+  switch (unit) {
+    case 's': return Math.max(1000, num * 100) // 秒，每 1/10 周期刷新
+    case 'm': return Math.max(1000, num * 60 * 100) // 分钟
+    case 'h': return Math.max(5000, num * 60 * 60 * 100) // 小时
+    case 'd': return Math.max(60000, num * 24 * 60 * 60 * 100) // 天
+    case 'w': return 5 * 60 * 1000 // 周，每5分钟
+    case 'M': return 10 * 60 * 1000 // 月，每10分钟
+    default: return 5000
+  }
+})
+
 // Methods
 const retryLoad = (): void => {
   chartError.value.show = false
   chartRetryLoad()
 }
 
-const handleManualRefresh = async (): Promise<void> => {
-  await updateLatestData()
+const toggleAutoRefresh = (): void => {
+  autoRefreshEnabled.value = !autoRefreshEnabled.value
+}
+
+const startAutoRefresh = (): void => {
+  if (autoRefreshTimer.value) {
+    clearInterval(autoRefreshTimer.value)
+  }
+  
+  if (autoRefreshEnabled.value) {
+    autoRefreshTimer.value = window.setInterval(async () => {
+      if (autoRefreshEnabled.value && !isLoading.value) {
+        await updateLatestData()
+      }
+    }, getRefreshInterval.value)
+  }
+}
+
+const stopAutoRefresh = (): void => {
+  if (autoRefreshTimer.value) {
+    clearInterval(autoRefreshTimer.value)
+    autoRefreshTimer.value = null
+  }
 }
 
 // Watch for symbol and bar changes to emit events
@@ -313,6 +366,22 @@ watch(source, () => {
   loadCandlesticks()
 })
 
+// Watch for bar changes to restart auto refresh with new interval
+watch(bar, () => {
+  if (autoRefreshEnabled.value) {
+    startAutoRefresh()
+  }
+})
+
+// Watch for auto refresh toggle
+watch(autoRefreshEnabled, (enabled) => {
+  if (enabled) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+})
+
 // Watch for data changes to update no-data overlay
 watch([allCandles, hasMoreData], () => {
   const result = updateNoDataOverlay()
@@ -328,6 +397,8 @@ watch([allCandles, hasMoreData], () => {
 onMounted(async () => {
   // Initialize chart with auto-refresh
   await initialize()
+  loadCandlesticks()
+  startAutoRefresh()
   
   // Trigger indicator calculations after data is loaded
   if (allCandles.value.length > 0) {
@@ -337,6 +408,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   cleanupIndicators()
+  stopAutoRefresh()
 })
 </script>
 
@@ -451,6 +523,12 @@ onUnmounted(() => {
 .refresh-btn:hover {
   background: rgba(41, 98, 255, 0.15);
   border-color: var(--blue-accent);
+}
+
+.refresh-btn.active {
+  background: rgba(41, 98, 255, 0.2);
+  border-color: var(--blue-accent);
+  color: var(--blue-accent);
 }
 
 .chart-area {
