@@ -64,12 +64,26 @@ onMounted(() => {
 </script>
 
 <style>
-/* Hide TradingView watermark globally */
+/* Hide TradingView watermark and logo globally */
 .tv-lightweight-charts [class*="watermark"],
 .tv-lightweight-charts > div > canvas + div,
-.tv-lightweight-charts table tbody tr:last-child td:last-child {
+.tv-lightweight-charts table tbody tr:last-child td:last-child,
+.tv-lightweight-charts svg[class*="logo"],
+.tv-lightweight-charts a[href*="tradingview"],
+.tv-lightweight-charts div[class*="branding"],
+.tv-lightweight-charts div[class*="logo"] {
   display: none !important;
   visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Hide any SVG that might be a logo */
+.tv-lightweight-charts svg path[d*="M2 0H0v10h6v9h21"],
+.tv-lightweight-charts svg path[fill*="stroke"] {
+  display: none !important;
   opacity: 0 !important;
 }
 </style>
