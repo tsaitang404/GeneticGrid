@@ -39,7 +39,19 @@ export function useIndicators(
   const subChartHeights = reactive<Record<string, number>>({
     macd: 180,
     rsi: 180,
-    kdj: 180
+    kdj: 180,
+    stochrsi: 180,
+    cci: 180,
+    dmi: 180,
+    wr: 180,
+    obv: 180,
+    trix: 180,
+    roc: 180,
+    mtm: 180,
+    dma: 180,
+    vr: 180,
+    brar: 180,
+    psy: 180
   })
 
   const setSubChartRef = (el: HTMLElement | null, key: string): void => {
@@ -160,6 +172,59 @@ export function useIndicators(
           lastValueVisible: true,
           priceLineVisible: false
         })
+      ]
+    } else if (key === 'stochrsi' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'StochRSI K' }),
+        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'StochRSI D' })
+      ]
+    } else if (key === 'cci' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'CCI' })
+      ]
+    } else if (key === 'dmi' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'PDI' }),
+        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'MDI' }),
+        subChart.addLineSeries({ color: '#26a69a', lineWidth: 1, title: 'ADX' })
+      ]
+    } else if (key === 'wr' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'WR' })
+      ]
+    } else if (key === 'obv' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'OBV' })
+      ]
+    } else if (key === 'trix' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#FFC107', lineWidth: 1, title: 'TRIX' })
+      ]
+    } else if (key === 'roc' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'ROC' })
+      ]
+    } else if (key === 'mtm' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MTM' })
+      ]
+    } else if (key === 'dma' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'DMA1' }),
+        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'DMA2' })
+      ]
+    } else if (key === 'vr' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#26a69a', lineWidth: 1, title: 'VR' })
+      ]
+    } else if (key === 'brar' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'BR' }),
+        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'AR' })
+      ]
+    } else if (key === 'psy' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'PSY' })
       ]
     }
   }
@@ -326,9 +391,11 @@ export function useIndicators(
 
   const enabledSubIndicators: ComputedRef<Record<string, IndicatorConfig>> = computed(() => {
     const enabled: Record<string, IndicatorConfig> = {}
+    // 副图指标列表：不是覆盖在主图上的指标
+    const subIndicatorKeys = ['macd', 'rsi', 'kdj', 'stochrsi', 'cci', 'dmi', 'wr', 'obv', 'trix', 'roc', 'mtm', 'dma', 'vr', 'brar', 'psy']
     Object.keys(indicators).forEach(key => {
       const k = key as keyof Indicators
-      if (['macd', 'rsi', 'kdj'].includes(key) && indicators[k].enabled) {
+      if (subIndicatorKeys.includes(key) && indicators[k].enabled) {
         enabled[key] = indicators[k]
       }
     })
