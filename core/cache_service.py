@@ -139,7 +139,7 @@ class CandlestickCacheService:
     
     @staticmethod
     def fetch_and_cache(source: str, symbol: str, bar: str, limit: int = 1000, before: int = None):
-        """从API获取数据并缓存
+        """从API获取数据并异步缓存（不阻塞返回）
         
         Args:
             source: 数据源
@@ -156,9 +156,13 @@ class CandlestickCacheService:
             service = get_market_service(source)
             candles = service.get_candlesticks(inst_id=symbol, bar=bar, limit=limit, before=before)
             
-            # 保存到缓存
+            # 异步保存到缓存（不等待结果，避免阻塞）
             if candles:
-                CandlestickCacheService.save_to_cache(source, symbol, bar, candles)
+                try:
+                    CandlestickCacheService.save_to_cache(source, symbol, bar, candles, max_retries=1)
+                except Exception as e:
+                    # 缓存失败不影响数据返回
+                    logger.warning(f"Failed to cache data (non-blocking): {e}")
             
             return candles
         except MarketAPIError as e:
@@ -168,7 +172,7 @@ class CandlestickCacheService:
     @staticmethod
     def get_with_auto_fetch(source: str, symbol: str, bar: str, limit: int = 100,
                            before: int = None, after: int = None):
-        """智能获取数据：优先从缓存，缺失时从API获取并缓存
+        """智能获取数据：优先从API获取，失败时从缓存兜底
         
         Args:
             source: 数据源
@@ -181,52 +185,38 @@ class CandlestickCacheService:
         Returns:
             list: K线数据
         """
-        # 如果是获取after之后的数据（自动刷新场景），总是从API获取最新数据
-        if after:
-            logger.info(f"Fetching latest data after {after} from API: {source}/{symbol}/{bar}")
-            try:
-                # 从API获取最新数据（不使用before参数，获取最新的数据）
-                api_data = CandlestickCacheService.fetch_and_cache(
-                    source, symbol, bar, limit, None
-                )
-                
-                # 过滤出after之后的数据
-                if api_data:
-                    filtered_data = [c for c in api_data if c['time'] > after]
-                    logger.info(f"Fetched {len(filtered_data)} new candles after {after}")
-                    return filtered_data
-                return []
-            except MarketAPIError as e:
-                logger.error(f"API failed for after query: {e}")
-                # API失败时，尝试从缓存获取
-                return CandlestickCacheService.get_from_cache(
-                    source, symbol, bar, limit, before, after
-                )
-        
-        # 首先尝试从缓存获取
-        cached_data = CandlestickCacheService.get_from_cache(
-            source, symbol, bar, limit, before, after
-        )
-        
-        # 如果缓存数据足够，直接返回
-        if len(cached_data) >= min(limit, 100):
-            logger.info(f"Cache hit: {len(cached_data)} candles for {source}/{symbol}/{bar}")
-            return cached_data
-        
-        # 缓存不足，从API获取
-        logger.info(f"Cache miss or insufficient, fetching from API: {source}/{symbol}/{bar}")
-        
         try:
+            # 优先从API获取数据
+            logger.info(f"Fetching from API: {source}/{symbol}/{bar}")
+            
             # 转换before为毫秒（API需要）
             before_ms = before * 1000 if before else None
             
-            # 从API获取并缓存
+            # 从API获取（会异步缓存）
             api_data = CandlestickCacheService.fetch_and_cache(
                 source, symbol, bar, limit, before_ms
             )
             
+            # 如果有after参数，过滤数据
+            if after and api_data:
+                filtered_data = [c for c in api_data if c['time'] > after]
+                logger.info(f"API success: {len(filtered_data)} candles after {after}")
+                return filtered_data
+            
+            logger.info(f"API success: {len(api_data)} candles")
             return api_data
-        except MarketAPIError:
-            # API失败时，返回缓存的数据（即使不足）
-            logger.warning(f"API failed, returning cached data ({len(cached_data)} candles)")
-            return cached_data
+            
+        except MarketAPIError as e:
+            # API失败时，尝试从缓存获取
+            logger.warning(f"API failed, trying cache: {e}")
+            
+            cached_data = CandlestickCacheService.get_from_cache(
+                source, symbol, bar, limit, before, after
+            )
+            
+            if cached_data:
+                logger.info(f"Cache fallback: {len(cached_data)} candles")
+                return cached_data
+            else:
+                logger.error(f"No cached data available")
+                raise
