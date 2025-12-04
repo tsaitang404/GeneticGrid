@@ -2,8 +2,10 @@
 from .models import CandlestickCache
 from .services import get_market_service, MarketAPIError
 from django.db import transaction
+from django.db.utils import OperationalError
 from decimal import Decimal
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ class CandlestickCacheService:
         return result
     
     @staticmethod
-    def save_to_cache(source: str, symbol: str, bar: str, candles: list):
+    def save_to_cache(source: str, symbol: str, bar: str, candles: list, max_retries: int = 3):
         """批量保存K线数据到缓存
         
         Args:
@@ -65,6 +67,7 @@ class CandlestickCacheService:
             symbol: 交易对
             bar: 时间周期
             candles: K线数据列表
+            max_retries: 最大重试次数
         """
         if not candles:
             return 0
@@ -72,27 +75,40 @@ class CandlestickCacheService:
         created_count = 0
         updated_count = 0
         
-        with transaction.atomic():
-            for candle in candles:
-                obj, created = CandlestickCache.objects.update_or_create(
-                    source=source,
-                    symbol=symbol,
-                    bar=bar,
-                    time=candle['time'],
-                    defaults={
-                        'open': Decimal(str(candle['open'])),
-                        'high': Decimal(str(candle['high'])),
-                        'low': Decimal(str(candle['low'])),
-                        'close': Decimal(str(candle['close'])),
-                        'volume': Decimal(str(candle['volume'])),
-                    }
-                )
-                if created:
-                    created_count += 1
+        for attempt in range(max_retries):
+            try:
+                with transaction.atomic():
+                    for candle in candles:
+                        obj, created = CandlestickCache.objects.update_or_create(
+                            source=source,
+                            symbol=symbol,
+                            bar=bar,
+                            time=candle['time'],
+                            defaults={
+                                'open': Decimal(str(candle['open'])),
+                                'high': Decimal(str(candle['high'])),
+                                'low': Decimal(str(candle['low'])),
+                                'close': Decimal(str(candle['close'])),
+                                'volume': Decimal(str(candle['volume'])),
+                            }
+                        )
+                        if created:
+                            created_count += 1
+                        else:
+                            updated_count += 1
+                
+                logger.info(f"Saved {created_count} new, updated {updated_count} candles for {source}/{symbol}/{bar}")
+                return created_count
+                
+            except OperationalError as e:
+                if 'database is locked' in str(e) and attempt < max_retries - 1:
+                    wait_time = 0.1 * (2 ** attempt)  # 指数退避: 0.1s, 0.2s, 0.4s
+                    logger.warning(f"Database locked, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
                 else:
-                    updated_count += 1
+                    logger.error(f"Failed to save to cache after {attempt + 1} attempts: {e}")
+                    raise
         
-        logger.info(f"Saved {created_count} new, updated {updated_count} candles for {source}/{symbol}/{bar}")
         return created_count
     
     @staticmethod
@@ -165,6 +181,28 @@ class CandlestickCacheService:
         Returns:
             list: K线数据
         """
+        # 如果是获取after之后的数据（自动刷新场景），总是从API获取最新数据
+        if after:
+            logger.info(f"Fetching latest data after {after} from API: {source}/{symbol}/{bar}")
+            try:
+                # 从API获取最新数据（不使用before参数，获取最新的数据）
+                api_data = CandlestickCacheService.fetch_and_cache(
+                    source, symbol, bar, limit, None
+                )
+                
+                # 过滤出after之后的数据
+                if api_data:
+                    filtered_data = [c for c in api_data if c['time'] > after]
+                    logger.info(f"Fetched {len(filtered_data)} new candles after {after}")
+                    return filtered_data
+                return []
+            except MarketAPIError as e:
+                logger.error(f"API failed for after query: {e}")
+                # API失败时，尝试从缓存获取
+                return CandlestickCacheService.get_from_cache(
+                    source, symbol, bar, limit, before, after
+                )
+        
         # 首先尝试从缓存获取
         cached_data = CandlestickCacheService.get_from_cache(
             source, symbol, bar, limit, before, after
