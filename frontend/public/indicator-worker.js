@@ -629,7 +629,7 @@ function calculateDMA(candles, shortPeriod, longPeriod) {
         });
     }
     
-    return { ddd, ama };
+    return { dma1: ddd, dma2: ama };
 }
 
 // VR (Volume Ratio) - Simplified

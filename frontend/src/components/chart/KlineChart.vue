@@ -75,6 +75,15 @@
         class="main-chart"
         :style="{ height: mainChartHeight + 'px' }"
       >
+        <!-- 跳转到最新按钮 -->
+        <button 
+          class="jump-to-latest-btn"
+          @click="jumpToLatest"
+          title="跳转到最新K线"
+        >
+          ▶
+        </button>
+
         <DrawingToolbar
           :modelValue="currentTool"
           :expanded="toolbarExpanded"
@@ -351,6 +360,12 @@ const stopAutoRefresh = (): void => {
   }
 }
 
+const jumpToLatest = (): void => {
+  if (chart.value) {
+    chart.value.timeScale().scrollToRealTime()
+  }
+}
+
 // Watch for symbol and bar changes to emit events
 watch(symbol, (newSymbol) => {
   emit('symbol-change', newSymbol)
@@ -572,6 +587,33 @@ onUnmounted(() => {
   width: 100%;
   flex-shrink: 0;
   overflow: visible; /* Ensure axis labels are not clipped */
+}
+
+.jump-to-latest-btn {
+  position: absolute;
+  top: 10px;
+  right: 70px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(42, 46, 57, 0.9);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jump-to-latest-btn:hover {
+  background: rgba(41, 98, 255, 0.2);
+  border-color: var(--blue-accent);
+  color: var(--blue-accent);
+  transform: translateX(2px);
 }
 
 .drawing-canvas {
