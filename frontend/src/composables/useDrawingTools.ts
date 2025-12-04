@@ -1,8 +1,14 @@
 import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue'
-import type { IChartApi } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { Drawing, DrawingType, LogicalPoint, ScreenPoint } from '@/types'
 
-export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart: Ref<IChartApi | null>) {
+export function useDrawingTools(
+  canvasRef: Ref<HTMLCanvasElement | null>,
+  chart: Ref<IChartApi | null>,
+  candleSeries: Ref<ISeriesApi<'Candlestick'> | null>,
+  lineSeries: Ref<ISeriesApi<'Line'> | null>,
+  isTimelineMode: Ref<boolean>
+) {
   const currentTool = ref<DrawingType>('cursor')
   const toolbarExpanded = ref<boolean>(false)
   const drawings = reactive<Drawing[]>([])
@@ -10,13 +16,17 @@ export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart:
 
   const logicalToPoint = (logical: LogicalPoint): ScreenPoint | null => {
     if (!chart.value || !logical) return null
+    if (!logical.time && logical.time !== 0) return null
+    
     const timeScale = chart.value.timeScale()
+    const activeSeries = isTimelineMode.value ? lineSeries.value : candleSeries.value
+    if (!activeSeries) return null
     
     const x = timeScale.timeToCoordinate(logical.time as any)
-    // Note: Price to coordinate conversion requires series context
-    // For now, we'll use a simplified approach
-    if (x === null) return null
-    return { x, y: 0 } // Simplified for type checking
+    const y = activeSeries.priceToCoordinate(logical.price)
+    
+    if (x === null || y === null) return null
+    return { x, y: y as number }
   }
 
   const renderDrawings = (): void => {
@@ -29,6 +39,29 @@ export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart:
     const height = canvasRef.value.height
     
     ctx.clearRect(0, 0, width, height)
+
+    // Get price scale width (right side) and time scale height (bottom)
+    const timeScale = chart.value.timeScale()
+    const activeSeries = isTimelineMode.value ? lineSeries.value : candleSeries.value
+    if (!activeSeries) return
+    
+    const priceScale = activeSeries.priceScale()
+    const priceScaleWidth = priceScale.width()
+    const timeScaleHeight = timeScale.height()
+    
+    // Calculate drawable area (excluding axes)
+    const drawableX = 0
+    const drawableY = 0
+    const drawableWidth = width - priceScaleWidth
+    const drawableHeight = height - timeScaleHeight
+    
+    // Save context state
+    ctx.save()
+    
+    // Clip to drawable area only (exclude axes)
+    ctx.beginPath()
+    ctx.rect(drawableX, drawableY, drawableWidth, drawableHeight)
+    ctx.clip()
 
     const drawList = [...drawings]
     if (currentDrawing.value) drawList.push(currentDrawing.value)
@@ -71,14 +104,37 @@ export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart:
         }
       })
     })
+    
+    // Restore context state (remove clipping)
+    ctx.restore()
   }
 
   const handleDrawingClick = (param: any): void => {
+    // Only handle clicks when in drawing mode (not cursor mode)
+    if (currentTool.value === 'cursor') return
     if (!param || !param.point || !chart.value) return
+    
+    // Validate time parameter
+    if (!param.time && param.time !== 0) {
+      console.warn('Drawing click: invalid time parameter', param)
+      return
+    }
 
-    // Use param.seriesData to get price if available
-    const clickPrice = param.seriesData?.get(param.point) ?? 0
-    const logical = { time: param.time as any, price: clickPrice }
+    // Get price from y coordinate
+    const activeSeries = isTimelineMode.value ? lineSeries.value : candleSeries.value
+    if (!activeSeries) return
+    
+    const clickPrice = activeSeries.coordinateToPrice(param.point.y)
+    if (clickPrice === null) return
+    
+    // Ensure time is a number (Unix timestamp)
+    const timeValue = typeof param.time === 'number' ? param.time : Number(param.time)
+    if (isNaN(timeValue)) {
+      console.warn('Drawing click: time is not a number', param.time)
+      return
+    }
+    
+    const logical = { time: timeValue, price: clickPrice as number }
 
     if (!currentDrawing.value) {
       currentDrawing.value = { type: currentTool.value, points: [logical] }
@@ -95,11 +151,8 @@ export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart:
     renderDrawings()
   }
 
-  const handleCanvasMouseDown = (e: MouseEvent): void => {
-    // Handle drawing canvas interactions
-    if (currentTool.value !== 'cursor') {
-      e.preventDefault()
-    }
+  const handleCanvasMouseDown = (): void => {
+    // Canvas is always pointer-events: none, interactions handled by chart subscribeClick
   }
 
   const clearDrawings = (): void => {
@@ -108,29 +161,87 @@ export function useDrawingTools(canvasRef: Ref<HTMLCanvasElement | null>, chart:
     renderDrawings()
   }
 
-  // Setup chart click listener
-  onMounted(() => {
-    if (chart.value) {
-      chart.value.subscribeClick(handleDrawingClick)
-    }
+  let animationFrameId: number | null = null
+  let lastCanvasWidth = 0
+  let lastCanvasHeight = 0
 
-    // Update canvas size when chart resizes
-    if (canvasRef.value && chart.value) {
-      const updateCanvasSize = () => {
-        if (!chart.value) return
+  const startContinuousRendering = (): void => {
+    const render = () => {
+      if (canvasRef.value && chart.value) {
         const chartContainer = chart.value.chartElement()
-        if (chartContainer && canvasRef.value) {
-          canvasRef.value.width = chartContainer.clientWidth
-          canvasRef.value.height = chartContainer.clientHeight
+        if (chartContainer) {
+          const currentWidth = chartContainer.clientWidth
+          const currentHeight = chartContainer.clientHeight
+          
+          // Update canvas size if changed
+          if (currentWidth !== lastCanvasWidth || currentHeight !== lastCanvasHeight) {
+            canvasRef.value.width = currentWidth
+            canvasRef.value.height = currentHeight
+            lastCanvasWidth = currentWidth
+            lastCanvasHeight = currentHeight
+          }
+          
+          // Always render to track price scale changes
           renderDrawings()
         }
       }
-      updateCanvasSize()
+      animationFrameId = requestAnimationFrame(render)
     }
+    render()
+  }
+
+  const stopContinuousRendering = (): void => {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
+    }
+  }
+
+  const setupChartListener = (): void => {
+    if (chart.value) {
+      chart.value.subscribeClick(handleDrawingClick)
+      
+      // Update canvas size initially
+      if (canvasRef.value) {
+        const chartContainer = chart.value.chartElement()
+        if (chartContainer) {
+          canvasRef.value.width = chartContainer.clientWidth
+          canvasRef.value.height = chartContainer.clientHeight
+          lastCanvasWidth = chartContainer.clientWidth
+          lastCanvasHeight = chartContainer.clientHeight
+          renderDrawings()
+        }
+      }
+      
+      // Start continuous rendering to track all changes
+      startContinuousRendering()
+    }
+  }
+
+  // Setup chart click listener
+  onMounted(() => {
+    setupChartListener()
   })
 
+  // Watch for chart changes and re-setup listener
+  const unwatchChart = () => {
+    let lastChart: IChartApi | null = null
+    const checkChart = setInterval(() => {
+      if (chart.value && chart.value !== lastChart) {
+        lastChart = chart.value
+        stopContinuousRendering() // Stop old rendering loop
+        setupChartListener() // Start new one
+      }
+    }, 100)
+    
+    return () => clearInterval(checkChart)
+  }
+  
+  const stopWatch = unwatchChart()
+
   onUnmounted(() => {
-    // Cleanup
+    stopWatch()
+    stopContinuousRendering()
   })
 
   return {
