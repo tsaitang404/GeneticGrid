@@ -87,9 +87,9 @@
         <DrawingToolbar
           :modelValue="currentTool"
           :expanded="toolbarExpanded"
-          @update:tool="currentTool = $event"
+          @update:tool="handleToolbarToolUpdate"
           @update:expanded="toolbarExpanded = $event"
-          @clear="clearDrawings"
+          @clear="handleToolbarClear"
         />
 
         <canvas
@@ -172,7 +172,7 @@ import { useChart } from '@/composables/useChart'
 import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
-import type { Candle, ChartError, TooltipData, TickerData } from '@/types'
+import type { Candle, ChartError, TooltipData, TickerData, DrawingType } from '@/types'
 import { usePreferencesStore } from '@/stores/preferences'
 
 interface Props {
@@ -351,6 +351,19 @@ const {
   subChartHeights,
   startResize
 } = useChartResize(chart, subCharts)
+
+const handleToolbarToolUpdate = (tool: DrawingType): void => {
+  if (tool === 'delete') {
+    currentTool.value = 'delete'
+    return
+  }
+  currentTool.value = tool
+}
+
+const handleToolbarClear = (): void => {
+  clearDrawings()
+  currentTool.value = 'cursor'
+}
 
 // 根据K线周期确定刷新间隔（毫秒）
 const getRefreshInterval = computed(() => {

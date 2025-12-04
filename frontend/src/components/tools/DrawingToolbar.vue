@@ -32,9 +32,9 @@
       </button>
       
       <button
-        @click="$emit('clear')"
-        class="tool-btn"
-        title="清除所有"
+        @click="handleTrashClick"
+        :class="['tool-btn', { active: modelValue === 'delete' }]"
+        :title="modelValue === 'delete' ? '再次点击清除全部' : '删除模式'"
       >
         🗑️
       </button>
@@ -50,8 +50,8 @@ interface Props {
   expanded: boolean
 }
 
-defineProps<Props>()
-defineEmits<{
+const props = defineProps<Props>()
+const emit = defineEmits<{
   'update:tool': [tool: DrawingType]
   'update:expanded': [expanded: boolean]
   clear: []
@@ -65,6 +65,14 @@ const tools: Array<{ id: DrawingType; name: string; icon: string }> = [
   { id: 'fib', name: '斐波那契', icon: '≡' },
   { id: 'parallel', name: '等距通道', icon: '∥' }
 ]
+
+const handleTrashClick = () => {
+  if (props.modelValue === 'delete') {
+    emit('clear')
+    return
+  }
+  emit('update:tool', 'delete')
+}
 </script>
 
 <style scoped>
