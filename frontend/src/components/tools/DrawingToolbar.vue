@@ -98,13 +98,14 @@ const tools = [
 }
 
 .drawing-toolbar {
-  background: rgba(30, 34, 45, 0.95);
-  border: 1px solid #2a2e39;
+  background: rgba(42, 46, 57, 0.95);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  padding: 6px;
+  padding: 0;
   display: flex;
   gap: 4px;
   align-items: center;
+  height: 32px;
 }
 
 .close-btn,
