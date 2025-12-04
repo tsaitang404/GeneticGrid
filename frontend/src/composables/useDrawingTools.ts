@@ -1,5 +1,4 @@
-import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue'
-import { toRaw } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, toRaw, type Ref } from 'vue'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { Drawing, DrawingType, LogicalPoint, ScreenPoint } from '@/types'
 
@@ -14,7 +13,7 @@ export function useDrawingTools(
   const toolbarExpanded = ref<boolean>(false)
   const drawings = reactive<Drawing[]>([])
   const currentDrawing = ref<Drawing | null>(null)
-
+  const DELETE_TOLERANCE = 8
   type PriceLineHandle = ReturnType<NonNullable<ISeriesApi<'Candlestick'>['createPriceLine']>>
   interface HorizontalPriceLineRef {
     series: ISeriesApi<'Candlestick'> | ISeriesApi<'Line'>
@@ -23,6 +22,57 @@ export function useDrawingTools(
 
   const horizontalPriceLines = new Map<Drawing, HorizontalPriceLineRef>()
   const horizontalPriceLabels = new Map<Drawing, HTMLDivElement>()
+
+  const distanceSquared = (a: ScreenPoint, b: ScreenPoint): number => {
+    const dx = a.x - b.x
+    const dy = a.y - b.y
+    return dx * dx + dy * dy
+  }
+
+  const distanceToSegmentSquared = (p: ScreenPoint, a: ScreenPoint, b: ScreenPoint): number => {
+    const lengthSquared = distanceSquared(a, b)
+    if (lengthSquared === 0) return distanceSquared(p, a)
+    let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / lengthSquared
+    t = Math.max(0, Math.min(1, t))
+    const projection: ScreenPoint = {
+      x: a.x + t * (b.x - a.x),
+      y: a.y + t * (b.y - a.y)
+    }
+    return distanceSquared(p, projection)
+  }
+
+  const findDrawingNearPoint = (point: ScreenPoint, tolerance = DELETE_TOLERANCE): Drawing | null => {
+    const toleranceSquared = tolerance * tolerance
+    for (let i = drawings.length - 1; i >= 0; i -= 1) {
+      const drawing = drawings[i]
+      if (drawing.type === 'delete') continue
+
+      const screenPoints = drawing.points
+        .map(pt => logicalToPoint(pt))
+        .filter((p): p is ScreenPoint => p !== null)
+
+      if (screenPoints.length === 0) continue
+
+      if (screenPoints.some(p => distanceSquared(p, point) <= toleranceSquared)) {
+        return drawing
+      }
+
+      if (drawing.type === 'horizontal' && screenPoints[0]) {
+        if (Math.abs(screenPoints[0].y - point.y) <= tolerance) {
+          return drawing
+        }
+      }
+
+      for (let j = 0; j < screenPoints.length - 1; j += 1) {
+        const a = screenPoints[j]
+        const b = screenPoints[j + 1]
+        if (distanceToSegmentSquared(point, a, b) <= toleranceSquared) {
+          return drawing
+        }
+      }
+    }
+    return null
+  }
 
   const getActiveSeries = (): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null => {
     return isTimelineMode.value ? lineSeries.value : candleSeries.value
@@ -186,7 +236,6 @@ export function useDrawingTools(
       const stillExists = drawings.some(d => toRaw(d) === key)
       if (!stillExists) {
         removeHorizontalPriceLine(key)
-        removeHorizontalLabel(key)
       }
     })
   }
@@ -288,11 +337,30 @@ export function useDrawingTools(
     ctx.restore()
   }
 
+  const removeDrawing = (drawing: Drawing): void => {
+    removeHorizontalPriceLine(drawing)
+    const index = drawings.indexOf(drawing)
+    if (index !== -1) {
+      drawings.splice(index, 1)
+    }
+    renderDrawings()
+  }
+
   const handleDrawingClick = (param: any): void => {
     // Only handle clicks when in drawing mode (not cursor mode)
     if (currentTool.value === 'cursor') return
     if (!param || !param.point || !chart.value) return
-    
+
+    const screenPoint: ScreenPoint = { x: param.point.x, y: param.point.y }
+
+    if (currentTool.value === 'delete') {
+      const target = findDrawingNearPoint(screenPoint)
+      if (target) {
+        removeDrawing(target)
+      }
+      return
+    }
+
     // Validate time parameter
     if (!param.time && param.time !== 0) {
       console.warn('Drawing click: invalid time parameter', param)
@@ -432,6 +500,12 @@ export function useDrawingTools(
   }
   
   const stopWatch = unwatchChart()
+
+  watch(currentTool, (tool) => {
+    if (tool === 'delete') {
+      currentDrawing.value = null
+    }
+  })
 
   onUnmounted(() => {
     stopWatch()
