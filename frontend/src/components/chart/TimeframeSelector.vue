@@ -1,7 +1,7 @@
 <template>
   <div class="timeframe-selector">
     <button
-      v-for="tf in timeframes"
+      v-for="tf in primaryTimeframes"
       :key="tf"
       :class="{ active: modelValue === tf }"
       @click="handleSelect(tf)"
@@ -15,27 +15,14 @@
       @change="handleMoreChange"
       class="more-timeframes"
     >
-      <option value="">更多周期...</option>
-      <option value="tick">分时</option>
-      <option value="1s">1秒</option>
-      <option value="5s">5秒</option>
-      <option value="15s">15秒</option>
-      <option value="30s">30秒</option>
-      <option value="1m">1分</option>
-      <option value="3m">3分</option>
-      <option value="5m">5分</option>
-      <option value="15m">15分</option>
-      <option value="30m">30分</option>
-      <option value="1h">1时</option>
-      <option value="3h">3时</option>
-      <option value="6h">6时</option>
-      <option value="12h">12时</option>
-      <option value="1d">1日</option>
-      <option value="3d">3日</option>
-      <option value="5d">5日</option>
-      <option value="1w">1周</option>
-      <option value="1M">1月</option>
-      <option value="3M">3月</option>
+      <option value="">更多...</option>
+      <option
+        v-for="opt in moreOptions"
+        :key="opt.value"
+        :value="opt.value"
+      >
+        {{ opt.label }}
+      </option>
       <option value="custom">自定义...</option>
     </select>
     
@@ -53,14 +40,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, computed } from 'vue'
 
 interface Props {
   modelValue: string
   timeframes: string[]
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -70,6 +57,55 @@ const moreTimeframe = ref('')
 const customValue = ref('')
 const showCustomInput = ref(false)
 const customInputRef = ref<HTMLInputElement | null>(null)
+
+interface OptionItem {
+  value: string
+  label: string
+}
+
+const primaryTimeframes = computed(() => props.timeframes.slice(0, 5))
+const extraTimeframes = computed(() => props.timeframes.slice(5))
+
+const defaultMoreOptions: OptionItem[] = [
+  { value: 'tick', label: '分时' },
+  { value: '1s', label: '1秒' },
+  { value: '5s', label: '5秒' },
+  { value: '15s', label: '15秒' },
+  { value: '30s', label: '30秒' },
+  { value: '1m', label: '1分' },
+  { value: '3m', label: '3分' },
+  { value: '5m', label: '5分' },
+  { value: '15m', label: '15分' },
+  { value: '30m', label: '30分' },
+  { value: '1h', label: '1时' },
+  { value: '3h', label: '3时' },
+  { value: '6h', label: '6时' },
+  { value: '12h', label: '12时' },
+  { value: '1d', label: '1日' },
+  { value: '3d', label: '3日' },
+  { value: '5d', label: '5日' },
+  { value: '1w', label: '1周' },
+  { value: '1M', label: '1月' },
+  { value: '3M', label: '3月' }
+]
+
+const moreOptions = computed<OptionItem[]>(() => {
+  const seen = new Set<string>()
+  const result: OptionItem[] = []
+  extraTimeframes.value.forEach((tf) => {
+    if (!seen.has(tf)) {
+      result.push({ value: tf, label: tf })
+      seen.add(tf)
+    }
+  })
+  defaultMoreOptions.forEach((opt) => {
+    if (!seen.has(opt.value)) {
+      result.push(opt)
+      seen.add(opt.value)
+    }
+  })
+  return result
+})
 
 const handleSelect = (tf: string): void => {
   moreTimeframe.value = ''
