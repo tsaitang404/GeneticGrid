@@ -354,23 +354,39 @@ const stopAutoRefresh = (): void => {
 // Watch for symbol and bar changes to emit events
 watch(symbol, (newSymbol) => {
   emit('symbol-change', newSymbol)
+  // 切换币对时停止自动刷新，重新初始化图表并加载数据
+  stopAutoRefresh()
+  initChart()
+  loadCandlesticks().then(() => {
+    // 数据加载完成后重新启动自动刷新
+    if (autoRefreshEnabled.value) {
+      startAutoRefresh()
+    }
+  })
 })
 
 watch(bar, (newBar) => {
   emit('bar-change', newBar)
+  // 切换周期时停止自动刷新，重新初始化图表并加载数据
+  stopAutoRefresh()
+  initChart()
+  loadCandlesticks().then(() => {
+    // 数据加载完成后重新启动自动刷新
+    if (autoRefreshEnabled.value) {
+      startAutoRefresh()
+    }
+  })
 })
 
 // Watch for source changes to reload data
 watch(source, () => {
+  stopAutoRefresh()
   initChart()
-  loadCandlesticks()
-})
-
-// Watch for bar changes to restart auto refresh with new interval
-watch(bar, () => {
-  if (autoRefreshEnabled.value) {
-    startAutoRefresh()
-  }
+  loadCandlesticks().then(() => {
+    if (autoRefreshEnabled.value) {
+      startAutoRefresh()
+    }
+  })
 })
 
 // Watch for auto refresh toggle
