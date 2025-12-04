@@ -1,4 +1,5 @@
 import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue'
+import { toRaw } from 'vue'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { Drawing, DrawingType, LogicalPoint, ScreenPoint } from '@/types'
 
@@ -13,6 +14,182 @@ export function useDrawingTools(
   const toolbarExpanded = ref<boolean>(false)
   const drawings = reactive<Drawing[]>([])
   const currentDrawing = ref<Drawing | null>(null)
+
+  type PriceLineHandle = ReturnType<NonNullable<ISeriesApi<'Candlestick'>['createPriceLine']>>
+  interface HorizontalPriceLineRef {
+    series: ISeriesApi<'Candlestick'> | ISeriesApi<'Line'>
+    priceLine: PriceLineHandle
+  }
+
+  const horizontalPriceLines = new Map<Drawing, HorizontalPriceLineRef>()
+  const horizontalPriceLabels = new Map<Drawing, HTMLDivElement>()
+
+  const getActiveSeries = (): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null => {
+    return isTimelineMode.value ? lineSeries.value : candleSeries.value
+  }
+
+  const getLatestPriceLabelColors = () => {
+    if (typeof window === 'undefined') {
+      return { background: '#FFD54F', text: '#000000' }
+    }
+    const styles = getComputedStyle(document.documentElement)
+    const background = styles.getPropertyValue('--latest-price-label-bg').trim() || '#FFD54F'
+    const text = styles.getPropertyValue('--latest-price-label-text').trim() || '#000000'
+    return { background, text }
+  }
+
+  const removeHorizontalLabel = (drawing: Drawing): void => {
+    const key = toRaw(drawing)
+    const label = horizontalPriceLabels.get(key)
+    if (label && label.parentElement) {
+      label.parentElement.removeChild(label)
+    }
+    horizontalPriceLabels.delete(key)
+  }
+
+  const ensureHorizontalLabel = (drawing: Drawing): HTMLDivElement | null => {
+    if (!chart.value) return null
+    const container = chart.value.chartElement()
+    if (!container) return null
+
+    const key = toRaw(drawing)
+    let label = horizontalPriceLabels.get(key)
+    if (label && label.parentElement !== container) {
+      label.parentElement?.removeChild(label)
+      horizontalPriceLabels.delete(key)
+      label = undefined
+    }
+
+    if (!label) {
+      label = document.createElement('div')
+      label.className = 'horizontal-price-label'
+      label.style.display = 'none'
+      container.appendChild(label)
+      horizontalPriceLabels.set(key, label)
+    }
+
+    return label
+  }
+
+  const formatLabelPrice = (price: number): string => {
+    if (!Number.isFinite(price)) return '--'
+    if (price >= 100000) return price.toLocaleString()
+    if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    if (price >= 1) return price.toFixed(2)
+    return price.toPrecision(4)
+  }
+
+  const updateHorizontalLabelPosition = (drawing: Drawing): void => {
+    if (drawing.type !== 'horizontal') return
+    const price = drawing.points[0]?.price
+    if (price === undefined) {
+      removeHorizontalLabel(drawing)
+      return
+    }
+
+    const activeSeries = getActiveSeries()
+    if (!activeSeries || !chart.value) return
+
+    const coordinate = activeSeries.priceToCoordinate(price)
+    const label = ensureHorizontalLabel(drawing)
+    if (!label) return
+
+    if (coordinate === null || coordinate === undefined) {
+      label.style.display = 'none'
+      return
+    }
+
+    const container = chart.value.chartElement()
+    if (!container) {
+      label.style.display = 'none'
+      return
+    }
+
+    const chartHeight = container.clientHeight
+    const timeScaleHeight = chart.value.timeScale().height()
+    const labelHeight = label.offsetHeight || 20
+    const topMargin = 5
+    const bottomMargin = timeScaleHeight + 5
+    const rawTop = (coordinate as number) - labelHeight / 2
+    const clampedTop = Math.max(topMargin, Math.min(chartHeight - bottomMargin - labelHeight, rawTop))
+
+    label.style.top = `${clampedTop}px`
+    label.textContent = formatLabelPrice(price)
+    label.style.display = 'block'
+  }
+
+  const removeHorizontalPriceLine = (drawing: Drawing): void => {
+    const rawDrawing = toRaw(drawing)
+    const refEntry = horizontalPriceLines.get(rawDrawing)
+    if (!refEntry) return
+    try {
+      refEntry.series.removePriceLine(refEntry.priceLine)
+    } catch (error) {
+      console.warn('Failed to remove horizontal price line', error)
+    }
+    horizontalPriceLines.delete(rawDrawing)
+    removeHorizontalLabel(drawing)
+  }
+
+  const ensureHorizontalPriceLine = (drawing: Drawing): void => {
+    if (drawing.type !== 'horizontal' || drawing.points.length === 0) return
+    const price = drawing.points[0]?.price
+    if (price === undefined) return
+
+    const activeSeries = getActiveSeries()
+    if (!activeSeries) return
+
+    const rawDrawing = toRaw(drawing)
+    const existing = horizontalPriceLines.get(rawDrawing)
+    if (existing && existing.series !== activeSeries) {
+      removeHorizontalPriceLine(rawDrawing)
+    }
+
+    const target = horizontalPriceLines.get(rawDrawing)
+    const { background, text } = getLatestPriceLabelColors()
+
+    if (target) {
+      target.priceLine.applyOptions({ price, color: '#2962FF', lineStyle: 2, lineWidth: 1, axisLabelVisible: true, axisLabelColor: background, axisLabelTextColor: text, title: '' })
+      updateHorizontalLabelPosition(drawing)
+      return
+    }
+
+    try {
+      const priceLine = activeSeries.createPriceLine({
+        price,
+        color: '#2962FF',
+        lineStyle: 2,
+        lineWidth: 1,
+        axisLabelVisible: true,
+        axisLabelColor: background,
+        axisLabelTextColor: text,
+        title: ''
+      })
+      horizontalPriceLines.set(rawDrawing, { series: activeSeries, priceLine })
+      updateHorizontalLabelPosition(drawing)
+    } catch (error) {
+      console.warn('Failed to create horizontal price line', error)
+    }
+  }
+
+  const syncHorizontalPriceLines = (): void => {
+    const activeSeries = getActiveSeries()
+    if (!activeSeries) return
+
+    drawings.forEach(d => {
+      if (d.type !== 'horizontal') return
+      ensureHorizontalPriceLine(d)
+      updateHorizontalLabelPosition(d)
+    })
+    const labelKeys = Array.from(horizontalPriceLabels.keys())
+    labelKeys.forEach(key => {
+      const stillExists = drawings.some(d => toRaw(d) === key)
+      if (!stillExists) {
+        removeHorizontalPriceLine(key)
+        removeHorizontalLabel(key)
+      }
+    })
+  }
 
   const logicalToPoint = (logical: LogicalPoint): ScreenPoint | null => {
     if (!chart.value || !logical) return null
@@ -42,7 +219,7 @@ export function useDrawingTools(
 
     // Get price scale width (right side) and time scale height (bottom)
     const timeScale = chart.value.timeScale()
-    const activeSeries = isTimelineMode.value ? lineSeries.value : candleSeries.value
+  const activeSeries = getActiveSeries()
     if (!activeSeries) return
     
     const priceScale = activeSeries.priceScale()
@@ -63,7 +240,9 @@ export function useDrawingTools(
     ctx.rect(drawableX, drawableY, drawableWidth, drawableHeight)
     ctx.clip()
 
-    const drawList = [...drawings]
+  syncHorizontalPriceLines()
+
+  const drawList = [...drawings]
     if (currentDrawing.value) drawList.push(currentDrawing.value)
 
     drawList.forEach(d => {
@@ -139,7 +318,10 @@ export function useDrawingTools(
     if (!currentDrawing.value) {
       currentDrawing.value = { type: currentTool.value, points: [logical] }
       if (currentTool.value === 'horizontal') {
-        drawings.push(currentDrawing.value)
+        const finalized = currentDrawing.value
+        drawings.push(finalized)
+        ensureHorizontalPriceLine(finalized)
+        updateHorizontalLabelPosition(finalized)
         currentDrawing.value = null
       }
     } else {
@@ -156,6 +338,18 @@ export function useDrawingTools(
   }
 
   const clearDrawings = (): void => {
+    horizontalPriceLines.forEach(({ series, priceLine }) => {
+      try {
+        series.removePriceLine(priceLine)
+      } catch (error) {
+        console.warn('Failed to remove price line during clear', error)
+      }
+    })
+    horizontalPriceLines.clear()
+    horizontalPriceLabels.forEach(label => {
+      label.parentElement?.removeChild(label)
+    })
+    horizontalPriceLabels.clear()
     drawings.splice(0, drawings.length)
     currentDrawing.value = null
     renderDrawings()
