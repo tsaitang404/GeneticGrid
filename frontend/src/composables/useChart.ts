@@ -8,6 +8,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const candleSeries = ref<ISeriesApi<'Candlestick'> | null>(null)
   const lineSeries = ref<ISeriesApi<'Line'> | null>(null)
   const volumeSeries = ref<ISeriesApi<'Histogram'> | null>(null)
+  const latestPriceLine = ref<ReturnType<NonNullable<typeof candleSeries.value>['createPriceLine']> | ReturnType<NonNullable<typeof lineSeries.value>['createPriceLine']> | null>(null)
   const allCandles = ref<Candle[]>([])
   const isTimelineMode = ref<boolean>(false)
   
@@ -23,6 +24,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   let refreshInterval: number | null = null
   let isSyncingTimeScale = false // Prevent circular time scale sync
   let loadDebounceTimer: number | null = null // Debounce timer for loading
+  let latestPriceLabelEl: HTMLDivElement | null = null
+  let latestPriceValue: number | null = null
+  const axisInteractionHandlers: Array<{ type: keyof HTMLElementEventMap; handler: EventListener }> = []
 
   // Helper function to check if current bar is timeline mode
   const checkIsTimelineMode = (bar: string): boolean => {
@@ -39,11 +43,109 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     return bar
   }
 
+  const formatAxisPrice = (price: number): string => {
+    if (!Number.isFinite(price)) return '--'
+    if (price >= 100000) return price.toLocaleString()
+    if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    if (price >= 1) return price.toFixed(2)
+    return price.toPrecision(4)
+  }
+
+  const ensurePriceAxisLabelElement = (): HTMLDivElement | null => {
+    if (latestPriceLabelEl && latestPriceLabelEl.isConnected) return latestPriceLabelEl
+    if (!chartRef.value) return null
+    const el = document.createElement('div')
+    el.className = 'latest-price-axis-label'
+    el.style.display = 'none'
+    chartRef.value.appendChild(el)
+    latestPriceLabelEl = el
+    return latestPriceLabelEl
+  }
+
+  const removeLatestPriceAxisLabel = (): void => {
+    if (latestPriceLabelEl && latestPriceLabelEl.parentElement) {
+      latestPriceLabelEl.parentElement.removeChild(latestPriceLabelEl)
+    }
+    latestPriceLabelEl = null
+  }
+
+  const updatePriceAxisLabel = (price: number): void => {
+    const el = ensurePriceAxisLabelElement()
+    const activeSeries = isTimelineMode.value ? lineSeries.value : candleSeries.value
+    if (!el || !activeSeries) return
+    const coordinate = activeSeries.priceToCoordinate(price)
+    if (coordinate === null || coordinate === undefined) {
+      el.style.display = 'none'
+      return
+    }
+    el.style.display = 'block'
+    el.style.top = `${coordinate}px`
+    el.textContent = formatAxisPrice(price)
+  }
+
+  const refreshPriceAxisLabel = (): void => {
+    if (latestPriceValue !== null) {
+      updatePriceAxisLabel(latestPriceValue)
+    }
+  }
+
+  const attachAxisInteractionListeners = (): void => {
+    if (!chartRef.value) return
+    const events: Array<keyof HTMLElementEventMap> = ['wheel', 'mouseup', 'mouseleave', 'touchend']
+    events.forEach((type) => {
+      const handler: EventListener = () => {
+        window.requestAnimationFrame(() => refreshPriceAxisLabel())
+      }
+      chartRef.value?.addEventListener(type, handler)
+      axisInteractionHandlers.push({ type, handler })
+    })
+  }
+
+  const detachAxisInteractionListeners = (): void => {
+    if (!chartRef.value || axisInteractionHandlers.length === 0) return
+    axisInteractionHandlers.splice(0).forEach(({ type, handler }) => {
+      chartRef.value?.removeEventListener(type, handler)
+    })
+  }
+
+  // Create or update a labeled latest price line on right axis
+  const createOrUpdateLatestPriceLine = (price: number): void => {
+    // Remove existing line
+    if (latestPriceLine.value) {
+      if (isTimelineMode.value && lineSeries.value) {
+        lineSeries.value.removePriceLine(latestPriceLine.value)
+      } else if (candleSeries.value) {
+        candleSeries.value.removePriceLine(latestPriceLine.value)
+      }
+      latestPriceLine.value = null
+    }
+    
+    const opts = {
+      price,
+      color: '#FFD54F',
+      lineStyle: 2 as const, // Dashed line
+      lineWidth: 2 as const,
+      axisLabelVisible: true,
+      axisLabelColor: '#FFD54F', // Background color
+      axisLabelTextColor: '#000000', // Text color
+      title: ''
+    }
+    
+    latestPriceLine.value = isTimelineMode.value && lineSeries.value
+      ? lineSeries.value.createPriceLine(opts)
+      : candleSeries.value?.createPriceLine(opts) || null
+      
+    latestPriceValue = price
+    updatePriceAxisLabel(price)
+  }
+
   const initChart = (): void => {
     if (!chartRef.value) return
 
     // Remove existing chart
     if (chart.value) {
+      removeLatestPriceAxisLabel()
+      detachAxisInteractionListeners()
       chart.value.remove()
       chart.value = null
     }
@@ -77,7 +179,12 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         }
       },
       rightPriceScale: {
-        borderColor: '#2a2e39'
+        borderColor: '#2a2e39',
+        visible: true,
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1
+        }
       },
       timeScale: {
         borderColor: '#2a2e39',
@@ -95,7 +202,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     if (isTimelineMode.value) {
       // Timeline mode: tighter spacing for continuous line
       chart.value.timeScale().applyOptions({
-        rightOffset: 5,
+        rightOffset: 2,
         barSpacing: 3,
         minBarSpacing: 0.5
       })
@@ -103,7 +210,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     } else {
       // Candlestick mode: normal spacing
       chart.value.timeScale().applyOptions({
-        rightOffset: 12,
+        rightOffset: 2,
         barSpacing: 6,
         minBarSpacing: 3
       })
@@ -118,7 +225,15 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         lastValueVisible: true,
-        priceLineVisible: true
+        priceLineVisible: true,
+        priceLineWidth: 2,
+        priceLineStyle: 2, // Dashed line
+        priceLineColor: '#2962FF',
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01
+        }
       })
       candleSeries.value = null
     } else {
@@ -129,20 +244,34 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         borderDownColor: '#ef5350',
         borderUpColor: '#26a69a',
         wickDownColor: '#ef5350',
-        wickUpColor: '#26a69a'
+        wickUpColor: '#26a69a',
+        lastValueVisible: true,
+        priceLineVisible: true,
+        priceLineWidth: 2,
+        priceLineStyle: 2, // Dashed line
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01
+        }
       })
       lineSeries.value = null
     }
 
-    // Add volume series
+    
+
+    // Add volume series on a separate overlay
     volumeSeries.value = chart.value.addHistogramSeries({
       color: '#26a69a',
       priceFormat: { type: 'volume' },
-      priceScaleId: ''
+      priceScaleId: 'volume', // Use separate price scale for volume
+      lastValueVisible: false, // Hide volume label
+      priceLineVisible: false
     })
 
     volumeSeries.value.priceScale().applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 }
+      scaleMargins: { top: 0.8, bottom: 0 },
+      visible: false // Hide the volume price scale completely
     })
 
     // Subscribe to visible range changes for auto-loading and syncing sub-charts
@@ -169,8 +298,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       if (entries.length === 0 || !chart.value) return
       const { width, height } = entries[0].contentRect
       chart.value.applyOptions({ width, height })
+      refreshPriceAxisLabel()
     })
     chartObserver.observe(chartRef.value)
+    attachAxisInteractionListeners()
   }
 
   const loadCandlesticks = async (): Promise<void> => {
@@ -205,6 +336,11 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         }
         
         updateChartData()
+        // Ensure latest price line is visible with label
+        if (allCandles.value.length > 0) {
+          const latest = allCandles.value[allCandles.value.length - 1]
+          createOrUpdateLatestPriceLine(latest.close)
+        }
         if (chart.value) {
           chart.value.timeScale().fitContent()
         }
@@ -264,6 +400,13 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     // Update price info
     if (allCandles.value.length > 0 && options.onPriceUpdate) {
       const latest = allCandles.value[allCandles.value.length - 1]
+      const price = latest.close
+      
+      // Update latest price line
+      if (price !== undefined && price !== null) {
+        createOrUpdateLatestPriceLine(price)
+      }
+      
       const changeNum = ((latest.close - latest.open) / latest.open * 100)
       const change = changeNum.toFixed(2)
       const isUp = latest.close >= latest.open
@@ -362,6 +505,13 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         // Update price info
         if (hasNewData && options.onPriceUpdate) {
           const latest = allCandles.value[allCandles.value.length - 1]
+          const price = latest.close
+          
+          // Update latest price line
+          if (price !== undefined && price !== null) {
+            createOrUpdateLatestPriceLine(price)
+          }
+          
           const changeNum = ((latest.close - latest.open) / latest.open * 100)
           const change = changeNum.toFixed(2)
           options.onPriceUpdate(
@@ -432,6 +582,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     }
     
     updateNoDataOverlay()
+    refreshPriceAxisLabel()
   }
 
   const updateNoDataOverlay = (): { show: boolean; width: number } => {
@@ -639,6 +790,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     if (refreshInterval) clearInterval(refreshInterval)
     if (chartObserver) chartObserver.disconnect()
     if (chart.value) chart.value.remove()
+    removeLatestPriceAxisLabel()
+    detachAxisInteractionListeners()
   })
 
   // Initialize

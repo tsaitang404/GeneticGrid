@@ -81,7 +81,10 @@ export function useIndicators(
         vertLine: { width: 1, style: 2, visible: true, labelVisible: false },
         horzLine: { width: 1, style: 2, visible: true, labelVisible: true }
       },
-      rightPriceScale: { borderColor: '#2a2e39' },
+      rightPriceScale: { 
+        borderColor: '#2a2e39',
+        borderVisible: true
+      },
       timeScale: { borderColor: '#2a2e39', timeVisible: true, secondsVisible: false },
       width: parentWidth,
       height: parentHeight
@@ -104,20 +107,59 @@ export function useIndicators(
         subChart.addHistogramSeries({
           color: '#26a69a',
           priceFormat: { type: 'volume' },
-          title: 'MACD'
+          title: 'MACD',
+          lastValueVisible: false
         }),
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'DIF' }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'DEA' })
+        subChart.addLineSeries({ 
+          color: '#2962FF', 
+          lineWidth: 1, 
+          title: 'DIF',
+          lastValueVisible: true,
+          priceLineVisible: false
+        }),
+        subChart.addLineSeries({ 
+          color: '#FF6D00', 
+          lineWidth: 1, 
+          title: 'DEA',
+          lastValueVisible: true,
+          priceLineVisible: false
+        })
       ]
     } else if (key === 'rsi' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'RSI' })
+        subChart.addLineSeries({ 
+          color: '#9C27B0', 
+          lineWidth: 1, 
+          title: 'RSI',
+          lastValueVisible: true,
+          priceLineVisible: true,
+          priceLineWidth: 1,
+          priceLineStyle: 2
+        })
       ]
     } else if (key === 'kdj' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'K' }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'D' }),
-        subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'J' })
+        subChart.addLineSeries({ 
+          color: '#2962FF', 
+          lineWidth: 1, 
+          title: 'K',
+          lastValueVisible: true,
+          priceLineVisible: false
+        }),
+        subChart.addLineSeries({ 
+          color: '#FF6D00', 
+          lineWidth: 1, 
+          title: 'D',
+          lastValueVisible: true,
+          priceLineVisible: false
+        }),
+        subChart.addLineSeries({ 
+          color: '#E91E63', 
+          lineWidth: 1, 
+          title: 'J',
+          lastValueVisible: true,
+          priceLineVisible: false
+        })
       ]
     }
   }
