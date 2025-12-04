@@ -24,7 +24,7 @@
         v-for="tool in tools"
         :key="tool.id"
         :class="{ active: modelValue === tool.id }"
-        @click="$emit('update:tool', tool.id as DrawingType)"
+        @click="$emit('update:tool', tool.id)"
         :title="tool.name"
         class="tool-btn"
       >
@@ -57,7 +57,7 @@ defineEmits<{
   clear: []
 }>()
 
-const tools = [
+const tools: Array<{ id: DrawingType; name: string; icon: string }> = [
   { id: 'cursor', name: '光标', icon: '👆' },
   { id: 'line', name: '直线', icon: '╱' },
   { id: 'ray', name: '射线', icon: '➚' },

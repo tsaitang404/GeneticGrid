@@ -259,8 +259,11 @@ const displayTicker = computed(() => {
 const {
   chart,
   subCharts,
+  candleSeries,
+  lineSeries,
   allCandles,
   hasMoreData,
+  isTimelineMode,
   initialize,
   initChart,
   loadCandlesticks,
@@ -295,7 +298,7 @@ const {
   toolbarExpanded,
   clearDrawings,
   handleCanvasMouseDown
-} = useDrawingTools(drawingCanvasRef, chart)
+} = useDrawingTools(drawingCanvasRef, chart, candleSeries, lineSeries, isTimelineMode)
 
 const {
   mainChartHeight,
@@ -620,7 +623,9 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1; /* Ensure chart (axis/labels) renders above */
+  width: 100%;
+  height: 100%;
+  z-index: 5;
   pointer-events: none;
 }
 
