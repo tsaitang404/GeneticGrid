@@ -1,3 +1,5 @@
+import type { Ref } from 'vue'
+
 // Candle data types
 export interface Candle {
   time: number
@@ -85,11 +87,19 @@ export interface Indicators {
   psy: IndicatorConfig
 }
 
+export interface ChartColorRefs {
+  up: Ref<string>
+  down: Ref<string>
+  volumeUp: Ref<string>
+  volumeDown: Ref<string>
+}
+
 // Chart options
 export interface ChartOptions {
   symbol: { value: string }
   bar: { value: string }
   source: { value: string }
+  colors?: ChartColorRefs
   onLoading?: (loading: boolean) => void
   onError?: (error: ChartError) => void
   onPriceUpdate?: (price: string, change: string, isUp: boolean) => void

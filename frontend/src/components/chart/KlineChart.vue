@@ -159,6 +159,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import type { MouseEventParams, Time, UTCTimestamp, ISeriesApi, IChartApi, CandlestickData } from 'lightweight-charts'
 import SymbolSelector from './SymbolSelector.vue'
 import TimeframeSelector from './TimeframeSelector.vue'
@@ -172,6 +173,7 @@ import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
 import type { Candle, ChartError, TooltipData, TickerData } from '@/types'
+import { usePreferencesStore } from '@/stores/preferences'
 
 interface Props {
   initialSymbol?: string
@@ -193,6 +195,9 @@ const emit = defineEmits<{
   'symbol-change': [symbol: string]
   'bar-change': [bar: string]
 }>()
+
+const preferences = usePreferencesStore()
+const { upColor, downColor, volumeUpColor, volumeDownColor } = storeToRefs(preferences)
 
 // Refs
 const chartContainerRef = ref<HTMLElement | null>(null)
@@ -309,6 +314,12 @@ const {
   symbol,
   bar,
   source,
+  colors: {
+    up: upColor,
+    down: downColor,
+    volumeUp: volumeUpColor,
+    volumeDown: volumeDownColor
+  },
   onLoading: (loading: boolean) => { isLoading.value = loading },
   onError: (error: ChartError) => { chartError.value = error },
   onPriceUpdate: (price: string, change: string, isUp: boolean) => {

@@ -15,8 +15,7 @@
                 type="radio" 
                 name="color-scheme" 
                 value="green-up" 
-                v-model="colorScheme"
-                @change="updateColorScheme"
+                v-model="colorSchemeModel"
               >
               <span class="radio-text">
                 <span class="color-preview" style="background:#26a69a"></span>
@@ -30,8 +29,7 @@
                 type="radio" 
                 name="color-scheme" 
                 value="red-up" 
-                v-model="colorScheme"
-                @change="updateColorScheme"
+                v-model="colorSchemeModel"
               >
               <span class="radio-text">
                 <span class="color-preview" style="background:#ef5350"></span>
@@ -45,7 +43,7 @@
         
         <div class="setting-group">
           <label class="setting-label">计价货币</label>
-          <select v-model="currency" @change="updateCurrency" class="currency-select">
+          <select v-model="currencyModel" class="currency-select">
             <option value="USDT">USDT</option>
             <option value="USDC">USDC</option>
             <option value="USD">USD (美元)</option>
@@ -69,26 +67,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
+import { usePreferencesStore, type ColorScheme } from '@/stores/preferences'
 
-defineEmits<{
+const emit = defineEmits<{
   close: []
   'update:colorScheme': [scheme: string]
   'update:currency': [currency: string]
 }>()
 
-const colorScheme = ref<string>(localStorage.getItem('geneticgrid_color_scheme') || 'green-up')
-const currency = ref<string>(localStorage.getItem('geneticgrid_currency') || 'USDT')
+const preferences = usePreferencesStore()
+const { colorScheme, currency } = storeToRefs(preferences)
 
-const updateColorScheme = () => {
-  localStorage.setItem('geneticgrid_color_scheme', colorScheme.value)
-  window.location.reload() // Reload to apply color scheme changes
-}
+const colorSchemeModel = computed({
+  get: () => colorScheme.value,
+  set: (scheme: ColorScheme) => {
+    preferences.setColorScheme(scheme)
+    emit('update:colorScheme', scheme)
+  }
+})
 
-const updateCurrency = () => {
-  localStorage.setItem('geneticgrid_currency', currency.value)
-  window.location.reload() // Reload to apply currency changes
-}
+const currencyModel = computed({
+  get: () => currency.value,
+  set: (value: string) => {
+    preferences.setCurrency(value)
+    emit('update:currency', value)
+  }
+})
 
 </script>
 

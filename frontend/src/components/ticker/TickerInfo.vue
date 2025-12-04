@@ -112,11 +112,11 @@ const formatVolume = (vol: string): string => {
 }
 
 .ticker-value.up {
-  color: #26a69a;
+  color: var(--up-color);
 }
 
 .ticker-value.down {
-  color: #ef5350;
+  color: var(--down-color);
 }
 
 @media (max-width: 768px) {
