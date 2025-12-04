@@ -21,3 +21,4 @@ static/dist/
 *.swp
 *.swo
 db.sqlite3-wal
+db.sqlite3-shm

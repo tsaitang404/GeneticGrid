@@ -17,8 +17,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const isLoadingNewer = ref(false)
   const hasMoreData = ref(true)
   const hasNewerData = ref(true)
-  const oldestTimestamp = ref<number>(0)
-  const newestTimestamp = ref<number>(0)
+  const oldestTimestamp = ref<number | null>(null)
+  const newestTimestamp = ref<number | null>(null)
   
   let chartObserver: ResizeObserver | null = null
   let refreshInterval: number | null = null
@@ -643,6 +643,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     
     try {
       // oldestTimestamp is in seconds, API expects milliseconds
+      if (oldestTimestamp.value === null) {
+        isLoadingMore.value = false
+        return
+      }
       const beforeMs = oldestTimestamp.value * 1000
       const limit = Math.min(count, 15000) // Increased max to 15000 (backend has cache)
       const backendBar = getBackendBar(options.bar.value)
@@ -702,6 +706,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     
     try {
       // Request a large batch of newer data (up to current time)
+      if (newestTimestamp.value === null) {
+        isLoadingNewer.value = false
+        return
+      }
       const afterMs = newestTimestamp.value * 1000
       const backendBar = getBackendBar(options.bar.value)
       const response = await fetch(
