@@ -161,6 +161,15 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       chart.value = null
     }
 
+    // 清空所有数据状态，确保切换时不会有旧数据残留
+    allCandles.value = []
+    oldestTimestamp.value = null
+    newestTimestamp.value = null
+    hasMoreData.value = true
+    hasNewerData.value = true
+    latestPriceLine.value = null
+    latestPriceValue = null
+
     // Create new chart
     chart.value = createChart(chartRef.value, {
       layout: {

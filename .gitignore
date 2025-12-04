@@ -20,3 +20,4 @@ static/dist/
 .idea/
 *.swp
 *.swo
+db.sqlite3-wal
