@@ -17,7 +17,42 @@
 **前端**: Vue 3 + TypeScript + Vite + Lightweight Charts  
 **后端**: Django 4.2 + Python 3.11+
 
-## 🚀 快速开始
+## �️ 环境准备（pyenv + nvm）
+
+使用 [pyenv](https://github.com/pyenv/pyenv) 与 [nvm](https://github.com/nvm-sh/nvm) 可以为 Python 和 Node.js 创建可重复的开发环境。
+
+### Python（pyenv）
+
+```bash
+# 安装项目所需的 Python 版本
+pyenv install 3.11.9
+
+# 将当前目录固定为该版本
+pyenv local 3.11.9
+
+# 可选：使用 pyenv-virtualenv 管理独立的虚拟环境
+pyenv virtualenv 3.11.9 geneticgrid
+pyenv activate geneticgrid
+
+# 安装后端依赖
+pip install -r requirements.txt
+```
+
+> 如果你更倾向于使用系统 Python，也可以通过 `python -m venv .venv && source .venv/bin/activate` 来创建虚拟环境，确保最终使用的是 3.11.x 版本。
+
+### Node.js（nvm）
+
+```bash
+# 安装并启用项目指定的 Node.js 版本
+nvm install 20.17.0
+nvm use
+
+# 安装前端依赖
+cd frontend
+npm install
+```
+
+## �🚀 快速开始
 
 ```bash
 # 1. 安装依赖
