@@ -386,7 +386,88 @@ export function useIndicators(
       indicators.rsi.series[0].setData(results.rsi.map((d: any) => ({ time: d.time as any, value: d.value })))
     }
 
-    // Update other indicators similarly...
+    // Update StochRSI
+    if (results.stochrsi && Array.isArray(indicators.stochrsi.series)) {
+      if (indicators.stochrsi.series[0] && results.stochrsi.k) {
+        indicators.stochrsi.series[0].setData(results.stochrsi.k.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+      if (indicators.stochrsi.series[1] && results.stochrsi.d) {
+        indicators.stochrsi.series[1].setData(results.stochrsi.d.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+    }
+
+    // Update CCI
+    if (results.cci && Array.isArray(indicators.cci.series) && indicators.cci.series[0]) {
+      indicators.cci.series[0].setData(results.cci.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update DMI
+    if (results.dmi && Array.isArray(indicators.dmi.series)) {
+      if (indicators.dmi.series[0] && results.dmi.pdi) {
+        indicators.dmi.series[0].setData(results.dmi.pdi.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+      if (indicators.dmi.series[1] && results.dmi.mdi) {
+        indicators.dmi.series[1].setData(results.dmi.mdi.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+      if (indicators.dmi.series[2] && results.dmi.adx) {
+        indicators.dmi.series[2].setData(results.dmi.adx.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+    }
+
+    // Update WR
+    if (results.wr && Array.isArray(indicators.wr.series) && indicators.wr.series[0]) {
+      indicators.wr.series[0].setData(results.wr.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update OBV
+    if (results.obv && Array.isArray(indicators.obv.series) && indicators.obv.series[0]) {
+      indicators.obv.series[0].setData(results.obv.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update TRIX
+    if (results.trix && Array.isArray(indicators.trix.series) && indicators.trix.series[0]) {
+      indicators.trix.series[0].setData(results.trix.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update ROC
+    if (results.roc && Array.isArray(indicators.roc.series) && indicators.roc.series[0]) {
+      indicators.roc.series[0].setData(results.roc.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update MTM
+    if (results.mtm && Array.isArray(indicators.mtm.series) && indicators.mtm.series[0]) {
+      indicators.mtm.series[0].setData(results.mtm.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update DMA
+    if (results.dma && Array.isArray(indicators.dma.series)) {
+      if (indicators.dma.series[0] && results.dma.dma1) {
+        indicators.dma.series[0].setData(results.dma.dma1.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+      if (indicators.dma.series[1] && results.dma.dma2) {
+        indicators.dma.series[1].setData(results.dma.dma2.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+    }
+
+    // Update VR
+    if (results.vr && Array.isArray(indicators.vr.series) && indicators.vr.series[0]) {
+      indicators.vr.series[0].setData(results.vr.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
+
+    // Update BRAR
+    if (results.brar && Array.isArray(indicators.brar.series)) {
+      if (indicators.brar.series[0] && results.brar.br) {
+        indicators.brar.series[0].setData(results.brar.br.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+      if (indicators.brar.series[1] && results.brar.ar) {
+        indicators.brar.series[1].setData(results.brar.ar.map((d: any) => ({ time: d.time as any, value: d.value })))
+      }
+    }
+
+    // Update PSY
+    if (results.psy && Array.isArray(indicators.psy.series) && indicators.psy.series[0]) {
+      indicators.psy.series[0].setData(results.psy.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
   }
 
   const enabledSubIndicators: ComputedRef<Record<string, IndicatorConfig>> = computed(() => {
