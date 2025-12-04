@@ -70,23 +70,31 @@ const tools = [
 <style scoped>
 .drawing-controls {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 10px;
+  right: 110px;
   z-index: 20;
 }
 
 .toggle-btn {
-  background: rgba(30, 34, 45, 0.9);
-  border: 1px solid #2a2e39;
-  color: #d1d4dc;
-  padding: 6px 10px;
+  background: rgba(42, 46, 57, 0.9);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
 .toggle-btn:hover {
-  background: rgba(30, 34, 45, 1);
+  background: rgba(41, 98, 255, 0.2);
+  border-color: var(--blue-accent);
+  color: var(--blue-accent);
 }
 
 .drawing-toolbar {
@@ -103,22 +111,29 @@ const tools = [
 .tool-btn {
   background: transparent;
   border: 1px solid transparent;
-  color: #d1d4dc;
-  padding: 6px 10px;
+  color: var(--text-primary);
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-btn:hover,
 .tool-btn:hover {
-  background: #363a45;
+  background: rgba(41, 98, 255, 0.2);
+  border-color: var(--blue-accent);
 }
 
 .tool-btn.active {
-  background: #363a45;
-  border-color: #434651;
+  background: rgba(41, 98, 255, 0.2);
+  border-color: var(--blue-accent);
+  color: var(--blue-accent);
 }
 
 .separator {
