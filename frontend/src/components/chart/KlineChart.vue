@@ -116,6 +116,7 @@
           v-if="tooltipData"
           :data="tooltipData"
           :bar="bar"
+          :locked="isTooltipLocked"
         />
 
         <div
@@ -158,6 +159,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import type { MouseEventParams, Time, UTCTimestamp, ISeriesApi, IChartApi, CandlestickData } from 'lightweight-charts'
 import SymbolSelector from './SymbolSelector.vue'
 import TimeframeSelector from './TimeframeSelector.vue'
 import SourceSelector from './SourceSelector.vue'
@@ -169,7 +171,7 @@ import { useChart } from '@/composables/useChart'
 import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
-import type { ChartError, TooltipData, TickerData } from '@/types'
+import type { Candle, ChartError, TooltipData, TickerData } from '@/types'
 
 interface Props {
   initialSymbol?: string
@@ -208,6 +210,8 @@ const priceChange = ref<string>('--')
 const priceChangeClass = ref<'up' | 'down'>('up')
 const chartError = ref<ChartError>({ show: false, message: '' })
 const tooltipData = ref<TooltipData | null>(null)
+const hoveredCandle = ref<Candle | null>(null)
+const lockedCandle = ref<Candle | null>(null)
 const noDataWidth = ref<string>('0px')
 const autoRefreshEnabled = ref<boolean>(true)
 const autoRefreshTimer = ref<number | null>(null)
@@ -253,6 +257,37 @@ const displayTicker = computed(() => {
     low24h: t?.low24h ?? '--',
     vol24h: t?.vol24h ?? '--'
   }
+})
+
+const isTooltipLocked = computed(() => lockedCandle.value !== null)
+
+const toTooltipData = (candle: Candle): TooltipData => {
+  let changePercent = '--'
+  if (candle.open) {
+    const change = ((candle.close - candle.open) / candle.open) * 100
+    const formatted = Math.abs(change) >= 0.01 ? change.toFixed(2) : change.toFixed(4)
+    changePercent = `${change >= 0 ? '+' : ''}${formatted}`
+  }
+
+  return {
+    time: candle.time,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume,
+    changePercent,
+    isUp: candle.close >= candle.open
+  }
+}
+
+const refreshTooltipData = (): void => {
+  const active = lockedCandle.value ?? hoveredCandle.value
+  tooltipData.value = active ? toTooltipData(active) : null
+}
+
+watch([lockedCandle, hoveredCandle], () => {
+  refreshTooltipData()
 })
 
 // Use composables
@@ -332,6 +367,198 @@ const getRefreshInterval = computed(() => {
   }
 })
 
+const normalizeTime = (time: Time | undefined): number | null => {
+  if (time === undefined || time === null) return null
+  if (typeof time === 'number') return time
+  if (typeof time === 'string') {
+    const parsed = Date.parse(time)
+    return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000)
+  }
+  if (typeof time === 'object' && 'year' in time && 'month' in time && 'day' in time) {
+    return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000)
+  }
+  return null
+}
+
+const findCandleByTime = (timestamp: number | null): Candle | null => {
+  if (timestamp === null) return null
+  const target = allCandles.value.find(item => Math.trunc(item.time) === Math.trunc(timestamp))
+  return target ?? null
+}
+
+let highlightSeries: ISeriesApi<'Candlestick'> | null = null
+let highlightSeriesChart: IChartApi | null = null
+
+const disposeHighlightSeries = (): void => {
+  if (highlightSeries && highlightSeriesChart) {
+    try {
+      highlightSeriesChart.removeSeries(highlightSeries)
+    // eslint-disable-next-line no-empty
+    } catch {}
+  }
+  highlightSeries = null
+  highlightSeriesChart = null
+}
+
+const ensureHighlightSeries = (): ISeriesApi<'Candlestick'> | null => {
+  if (!chart.value || isTimelineMode.value) return null
+
+  if (highlightSeries && highlightSeriesChart === chart.value) {
+    return highlightSeries
+  }
+
+  if (highlightSeries && highlightSeriesChart !== chart.value) {
+    disposeHighlightSeries()
+  }
+
+  const series = chart.value.addCandlestickSeries({
+    upColor: 'rgba(255, 255, 255, 0.22)',
+    downColor: 'rgba(255, 255, 255, 0.22)',
+    borderUpColor: '#ffffff',
+    borderDownColor: '#ffffff',
+    wickUpColor: '#ffffff',
+    wickDownColor: '#ffffff',
+    lastValueVisible: false,
+    priceLineVisible: false,
+    priceScaleId: 'right'
+  })
+
+  highlightSeries = series
+  highlightSeriesChart = chart.value
+
+  return series
+}
+
+const clearHighlightData = (): void => {
+  if (highlightSeries) {
+    try {
+      highlightSeries.setData([])
+    // eslint-disable-next-line no-empty
+    } catch {}
+  }
+}
+
+const applyHighlight = (): void => {
+  if (!lockedCandle.value || !candleSeries.value || isTimelineMode.value || !chart.value) {
+    clearHighlightData()
+    return
+  }
+
+  const series = ensureHighlightSeries()
+  if (!series) return
+
+  const candle = lockedCandle.value
+  const data: CandlestickData = {
+    time: candle.time as UTCTimestamp,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close
+  }
+
+  series.setData([data])
+}
+
+const resetSelection = (): void => {
+  hoveredCandle.value = null
+  lockedCandle.value = null
+  tooltipData.value = null
+  clearHighlightData()
+}
+
+watch(allCandles, () => {
+  if (!lockedCandle.value) return
+  const candidate = findCandleByTime(lockedCandle.value.time)
+  if (!candidate) {
+    resetSelection()
+  } else if (candidate !== lockedCandle.value) {
+    lockedCandle.value = candidate
+  } else {
+    applyHighlight()
+  }
+})
+
+watch(lockedCandle, () => {
+  applyHighlight()
+})
+
+const handleCrosshairMove = (param: MouseEventParams | undefined): void => {
+  if (!param || isTimelineMode.value || !candleSeries.value) {
+    if (!lockedCandle.value) {
+      hoveredCandle.value = null
+      refreshTooltipData()
+    }
+    return
+  }
+
+  if (!param.time || param.point === undefined) {
+    hoveredCandle.value = null
+    if (!lockedCandle.value) refreshTooltipData()
+    return
+  }
+
+  const timestamp = normalizeTime(param.time as Time | undefined)
+  const candle = findCandleByTime(timestamp)
+  hoveredCandle.value = candle
+  if (!lockedCandle.value) {
+    refreshTooltipData()
+  }
+}
+
+const handleChartClick = (param: MouseEventParams): void => {
+  if (!param || isTimelineMode.value || currentTool.value !== 'cursor' || !candleSeries.value) return
+
+  const timestamp = normalizeTime(param.time as Time | undefined)
+  const candle = findCandleByTime(timestamp)
+
+  if (!candle) {
+    if (lockedCandle.value) {
+      lockedCandle.value = null
+    }
+    return
+  }
+
+  if (lockedCandle.value && lockedCandle.value.time === candle.time) {
+    lockedCandle.value = null
+  } else {
+    lockedCandle.value = candle
+  }
+}
+
+let interactionsCleanup: (() => void) | null = null
+
+const setupChartInteractions = (): void => {
+  if (interactionsCleanup) {
+    interactionsCleanup()
+    interactionsCleanup = null
+  }
+
+  if (!chart.value) return
+
+  const chartInstance = chart.value
+  chartInstance.subscribeCrosshairMove(handleCrosshairMove as any)
+  chartInstance.subscribeClick(handleChartClick)
+  interactionsCleanup = () => {
+    chartInstance.unsubscribeCrosshairMove(handleCrosshairMove as any)
+    chartInstance.unsubscribeClick(handleChartClick)
+  }
+}
+
+watch(chart, () => {
+  disposeHighlightSeries()
+  setupChartInteractions()
+  applyHighlight()
+}, { immediate: true })
+
+watch(isTimelineMode, (value) => {
+  if (value) {
+    resetSelection()
+    disposeHighlightSeries()
+  } else {
+    applyHighlight()
+  }
+})
+
 // Methods
 const retryLoad = (): void => {
   chartError.value.show = false
@@ -371,6 +598,7 @@ const jumpToLatest = (): void => {
 
 // Watch for symbol and bar changes to emit events
 watch(symbol, (newSymbol) => {
+  resetSelection()
   emit('symbol-change', newSymbol)
   // 切换币对时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
@@ -384,6 +612,7 @@ watch(symbol, (newSymbol) => {
 })
 
 watch(bar, (newBar) => {
+  resetSelection()
   emit('bar-change', newBar)
   // 切换周期时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
@@ -398,6 +627,7 @@ watch(bar, (newBar) => {
 
 // Watch for source changes to reload data
 watch(source, () => {
+  resetSelection()
   stopAutoRefresh()
   initChart()
   loadCandlesticks().then(() => {
@@ -443,6 +673,12 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanupIndicators()
   stopAutoRefresh()
+  resetSelection()
+  if (interactionsCleanup) {
+    interactionsCleanup()
+    interactionsCleanup = null
+  }
+  disposeHighlightSeries()
 })
 </script>
 
