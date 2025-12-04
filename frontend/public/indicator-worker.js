@@ -529,13 +529,55 @@ function calculateDMI(candles, period) {
 
 // Stochastic RSI - Simplified
 function calculateStochRSI(candles, rsiPeriod, stochPeriod, kPeriod, dPeriod) {
-    const k = [];
-    const d = [];
+    // Step 1: Calculate RSI
+    const rsiValues = [];
+    for (let i = rsiPeriod; i < candles.length; i++) {
+        let gains = 0;
+        let losses = 0;
+        
+        for (let j = 0; j < rsiPeriod; j++) {
+            const change = candles[i - j].close - candles[i - j - 1].close;
+            if (change > 0) {
+                gains += change;
+            } else {
+                losses += Math.abs(change);
+            }
+        }
+        
+        const avgGain = gains / rsiPeriod;
+        const avgLoss = losses / rsiPeriod;
+        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        const rsi = 100 - (100 / (1 + rs));
+        
+        rsiValues.push({ time: candles[i].time, value: rsi });
+    }
     
-    // Simplified implementation
-    for (let i = rsiPeriod + stochPeriod; i < candles.length; i++) {
-        k.push({ time: candles[i].time, value: 50 });
-        d.push({ time: candles[i].time, value: 50 });
+    // Step 2: Calculate Stochastic of RSI
+    const stochRSI = [];
+    for (let i = stochPeriod - 1; i < rsiValues.length; i++) {
+        const slice = rsiValues.slice(i - stochPeriod + 1, i + 1);
+        const maxRSI = Math.max(...slice.map(r => r.value));
+        const minRSI = Math.min(...slice.map(r => r.value));
+        const currentRSI = rsiValues[i].value;
+        
+        const stoch = maxRSI === minRSI ? 0 : ((currentRSI - minRSI) / (maxRSI - minRSI)) * 100;
+        stochRSI.push({ time: rsiValues[i].time, value: stoch });
+    }
+    
+    // Step 3: Calculate K line (SMA of StochRSI)
+    const k = [];
+    for (let i = kPeriod - 1; i < stochRSI.length; i++) {
+        const slice = stochRSI.slice(i - kPeriod + 1, i + 1);
+        const avg = slice.reduce((sum, val) => sum + val.value, 0) / kPeriod;
+        k.push({ time: stochRSI[i].time, value: avg });
+    }
+    
+    // Step 4: Calculate D line (SMA of K)
+    const d = [];
+    for (let i = dPeriod - 1; i < k.length; i++) {
+        const slice = k.slice(i - dPeriod + 1, i + 1);
+        const avg = slice.reduce((sum, val) => sum + val.value, 0) / dPeriod;
+        d.push({ time: k[i].time, value: avg });
     }
     
     return { k, d };
