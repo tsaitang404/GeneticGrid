@@ -1,34 +1,36 @@
 <template>
   <div class="indicator-selector">
-    <button
-      v-for="item in primaryIndicatorEntries"
-      :key="item.key"
-      :class="{ active: item.config.enabled }"
-      @click="emitToggle(item.key)"
-      class="indicator-btn"
-    >
-      {{ item.config.name }}
-    </button>
-
-    <select
-      v-model="moreIndicator"
-      @change="handleMoreIndicator"
-      class="more-indicators"
-    >
-      <option value="">更多指标...</option>
-      <option
-        v-for="opt in extraIndicatorOptions"
-        :key="opt.key"
-        :value="opt.key"
+    <div class="indicator-dropdown" ref="dropdownRef">
+      <button
+        class="indicator-btn"
+        @click="toggleDropdown"
       >
-        {{ opt.label }}
-      </option>
-    </select>
+        {{ dropdownLabel }}
+        <span class="arrow" :class="{ open: isOpen }">▼</span>
+      </button>
+
+      <div v-if="isOpen" class="dropdown-menu">
+        <div
+          v-for="item in allIndicatorEntries"
+          :key="item.key"
+          class="dropdown-item"
+          @click="emitToggle(item.key)"
+        >
+          <input
+            type="checkbox"
+            :checked="item.config.enabled"
+            @click.stop
+            @change="emitToggle(item.key)"
+          />
+          <span>{{ item.config.name }}</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { IndicatorConfig, Indicators } from '@/types'
 
 interface Props {
@@ -40,44 +42,55 @@ const emit = defineEmits<{
   toggle: [key: keyof Indicators]
 }>()
 
-const defaultPrimaryKeys: (keyof Indicators)[] = ['ma', 'ema', 'boll', 'macd', 'rsi']
-const primaryIndicatorKeys = computed<(keyof Indicators)[]>(() => defaultPrimaryKeys.filter(key => props.indicators[key]))
+const isOpen = ref(false)
+const dropdownRef = ref<HTMLElement | null>(null)
 
-const primaryIndicatorEntries = computed(() => primaryIndicatorKeys.value
-  .map((key) => {
-    const config = props.indicators[key]
-    if (!config) return null
-    return { key, config }
-  })
-  .filter((item): item is { key: keyof Indicators, config: IndicatorConfig } => item !== null)
-)
-
-const moreIndicator = ref('')
-
-const extraIndicatorOptions = computed(() => {
-  const primarySet = new Set(primaryIndicatorKeys.value)
+const allIndicatorEntries = computed(() => {
   return (Object.entries(props.indicators) as [keyof Indicators, Indicators[keyof Indicators]][])
-    .filter(([key]) => !primarySet.has(key))
-    .map(([key, config]) => ({ key, label: config.name }))
+    .map(([key, config]) => ({ key, config }))
+    .filter((item): item is { key: keyof Indicators, config: IndicatorConfig } => item.config !== undefined)
+})
+
+const enabledCount = computed(() => {
+  return allIndicatorEntries.value.filter(item => item.config.enabled).length
+})
+
+const dropdownLabel = computed(() => {
+  return enabledCount.value > 0 ? `指标 (${enabledCount.value})` : '指标'
 })
 
 const emitToggle = (key: keyof Indicators): void => {
   emit('toggle', key)
 }
 
-const handleMoreIndicator = (): void => {
-  if (moreIndicator.value) {
-    emitToggle(moreIndicator.value as keyof Indicators)
-    moreIndicator.value = ''
+const toggleDropdown = (): void => {
+  isOpen.value = !isOpen.value
+}
+
+const handleClickOutside = (event: MouseEvent): void => {
+  if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
+    isOpen.value = false
   }
 }
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>
 .indicator-selector {
   display: flex;
-  gap: 4px;
   align-items: center;
+  position: relative;
+}
+
+.indicator-dropdown {
+  position: relative;
 }
 
 .indicator-btn {
@@ -89,36 +102,63 @@ const handleMoreIndicator = (): void => {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 100px;
+  justify-content: space-between;
 }
 
 .indicator-btn:hover {
   background: #363a45;
+  border-color: var(--blue-accent);
 }
 
-.indicator-btn.active {
-  background: #363a45;
-  color: #fff;
-  border-color: #434651;
+.arrow {
+  font-size: 10px;
+  transition: transform 0.2s;
 }
 
-.more-indicators {
+.arrow.open {
+  transform: rotate(180deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
   background: #2a2e39;
-  color: #d1d4dc;
   border: 1px solid #363a45;
   border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 12px;
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   cursor: pointer;
-  outline: none;
-  transition: all 0.2s;
+  transition: background 0.2s;
+  font-size: 13px;
+  color: #d1d4dc;
 }
 
-.more-indicators:hover {
+.dropdown-item:hover {
   background: #363a45;
-  border-color: var(--blue-accent);
 }
 
-.more-indicators:focus {
-  border-color: var(--blue-accent);
+.dropdown-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.dropdown-item span {
+  user-select: none;
 }
 </style>

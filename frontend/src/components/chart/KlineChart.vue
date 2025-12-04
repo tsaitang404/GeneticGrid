@@ -2,61 +2,61 @@
   <div class="kline-chart-container">
     <!-- 顶部工具栏 -->
     <div class="chart-toolbar">
-      <div class="toolbar-info-inline">
-        <div class="pair-inline">
-          <span class="pair-base">{{ symbolParts.base }}</span>
-          <span class="divider">/</span>
-          <span class="pair-quote">{{ symbolParts.quote }}</span>
-          <span class="source-tag">{{ activeSourceLabel }}</span>
+      <div class="toolbar-info-row">
+        <div class="info-item">
+          <span class="label">交易对</span>
+          <span class="value pair-value">
+            <span class="pair-base">{{ symbolParts.base }}</span>
+            <span class="divider">/</span>
+            <span class="pair-quote">{{ symbolParts.quote }}</span>
+          </span>
         </div>
-        <div class="info-inline">
-          <div class="info-item">
-            <span class="label">最新价 ({{ currencyLabel }})</span>
-            <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.last }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">24h涨跌幅</span>
-            <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.changePercent }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">24h最高</span>
-            <span class="value">{{ displayTicker.high24h }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">24h最低</span>
-            <span class="value">{{ displayTicker.low24h }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">24h成交量</span>
-            <span class="value">{{ displayTicker.vol24h }}</span>
-          </div>
+        <div class="info-item">
+          <span class="label">最新价 ({{ currencyLabel }})</span>
+          <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.last }}</span>
         </div>
-      </div>
+        <div class="info-item">
+          <span class="label">24h涨跌幅</span>
+          <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.changePercent }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">24h最高</span>
+          <span class="value">{{ displayTicker.high24h }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">24h最低</span>
+          <span class="value">{{ displayTicker.low24h }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">24h成交量</span>
+          <span class="value">{{ displayTicker.vol24h }}</span>
+        </div>
 
-      <div class="toolbar-controls">
-        <SymbolSelector
-          v-model="symbol"
-          :symbols="availableSymbols"
-        />
+        <div class="toolbar-controls">
+          <SymbolSelector
+            v-model="symbol"
+            :symbols="availableSymbols"
+          />
 
-        <TimeframeSelector
-          v-model="bar"
-          :timeframes="availableTimeframes"
-        />
-        
-        <IndicatorSelector
-          :indicators="indicators"
-          @toggle="toggleIndicator"
-        />
+          <TimeframeSelector
+            v-model="bar"
+            :timeframes="availableTimeframes"
+          />
+          
+          <IndicatorSelector
+            :indicators="indicators"
+            @toggle="toggleIndicator"
+          />
 
-        <SourceSelector
-          v-model="source"
-          :sources="availableSources"
-        />
-        
-        <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
-          🔄 刷新
-        </button>
+          <SourceSelector
+            v-model="source"
+            :sources="availableSources"
+          />
+          
+          <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
+            🔄 刷新
+          </button>
+        </div>
       </div>
     </div>
 
@@ -199,7 +199,7 @@ const noDataWidth = ref<string>('0px')
 
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
-const availableTimeframes = ref<string[]>(['分时', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
+const availableTimeframes = ref<string[]>(['tick', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
 const availableSources = [
   { value: 'tradingview', label: 'TradingView' },
   { value: 'binance', label: 'Binance' },
@@ -224,11 +224,6 @@ const symbolParts = computed(() => {
     }
   }
   return { base: upper || '--', quote: '--' }
-})
-
-const activeSourceLabel = computed(() => {
-  const match = availableSources.find(src => src.value === source.value)
-  return match ? match.label : source.value.toUpperCase()
 })
 
 const currencyLabel = computed(() => props.currency?.toUpperCase() || 'USDT')
@@ -355,36 +350,48 @@ onUnmounted(() => {
 
 .chart-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
   padding: 12px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  justify-content: space-between;
 }
 
-.toolbar-info-inline {
-  flex: 1 1 50%;
-  min-width: 320px;
+.toolbar-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  width: 100%;
+}
+
+.toolbar-info-row .info-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  min-width: 100px;
+  flex: 0 0 auto;
 }
 
-.pair-inline {
+.toolbar-info-row .value.pair-value {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 600;
+  align-items: baseline;
+  gap: 4px;
 }
 
-.pair-inline .pair-base {
+.pair-base {
   color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
 }
 
-.pair-inline .pair-quote {
+.pair-quote {
   color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.divider {
+  color: var(--text-secondary);
+  font-size: 18px;
 }
 
 .source-tag {
@@ -397,66 +404,36 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.info-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-}
-
-.info-inline .info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 120px;
-}
-
-.info-inline .label {
+.toolbar-info-row .label {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.info-inline .value {
-  font-weight: 600;
-  font-size: 15px;
+.toolbar-info-row .value {
+  font-weight: 700;
+  font-size: 18px;
   color: var(--text-primary);
 }
 
-.info-inline .value.up {
+.toolbar-info-row .value.up {
   color: var(--up-color);
 }
 
-.info-inline .value.down {
+.toolbar-info-row .value.down {
   color: var(--down-color);
 }
 
 .toolbar-controls {
-  flex: 1 1 45%;
-  min-width: 320px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 12px;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .toolbar-controls > * {
   flex: 0 0 auto;
-}
-
-.toolbar-controls :deep(.selector-wrapper),
-.toolbar-controls :deep(.timeframe-selector),
-.toolbar-controls :deep(.indicator-selector) {
-  min-width: 120px;
-}
-
-@media (max-width: 1024px) {
-  .chart-toolbar {
-    flex-direction: column;
-  }
-
-  .toolbar-controls {
-    justify-content: flex-start;
-  }
 }
 
 .refresh-btn {
