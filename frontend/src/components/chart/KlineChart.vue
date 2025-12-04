@@ -1,35 +1,62 @@
 <template>
   <div class="kline-chart-container">
-    <!-- 顶部控制栏 -->
-    <div class="control-bar">
-      <SymbolSelector
-        v-model="symbol"
-        :symbols="availableSymbols"
-      />
-      
-      <TimeframeSelector
-        v-model="bar"
-        :timeframes="availableTimeframes"
-      />
-      
-      <IndicatorSelector
-        :indicators="indicators"
-        @toggle="toggleIndicator"
-      />
-      
-      <SourceSelector
-        v-model="source"
-      />
-      
-      <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
-        🔄 刷新
-      </button>
-      
-      <div class="price-info">
-        <span class="label">最新价:</span>
-        <span class="value" :class="priceChangeClass">{{ latestPrice }}</span>
-        <span class="label">24h涨跌:</span>
-        <span class="value" :class="priceChangeClass">{{ priceChange }}</span>
+    <!-- 顶部工具栏 -->
+    <div class="chart-toolbar">
+      <div class="toolbar-info-inline">
+        <div class="pair-inline">
+          <span class="pair-base">{{ symbolParts.base }}</span>
+          <span class="divider">/</span>
+          <span class="pair-quote">{{ symbolParts.quote }}</span>
+          <span class="source-tag">{{ activeSourceLabel }}</span>
+        </div>
+        <div class="info-inline">
+          <div class="info-item">
+            <span class="label">最新价 ({{ currencyLabel }})</span>
+            <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.last }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">24h涨跌幅</span>
+            <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.changePercent }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">24h最高</span>
+            <span class="value">{{ displayTicker.high24h }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">24h最低</span>
+            <span class="value">{{ displayTicker.low24h }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">24h成交量</span>
+            <span class="value">{{ displayTicker.vol24h }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-controls">
+        <SymbolSelector
+          v-model="symbol"
+          :symbols="availableSymbols"
+        />
+
+        <TimeframeSelector
+          v-model="bar"
+          :timeframes="availableTimeframes"
+        />
+        
+        <IndicatorSelector
+          :indicators="indicators"
+          @toggle="toggleIndicator"
+        />
+
+        <SourceSelector
+          v-model="source"
+          :sources="availableSources"
+        />
+        
+        <button @click="handleManualRefresh" class="refresh-btn" title="手动刷新">
+          🔄 刷新
+        </button>
       </div>
     </div>
 
@@ -117,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import SymbolSelector from './SymbolSelector.vue'
 import TimeframeSelector from './TimeframeSelector.vue'
 import SourceSelector from './SourceSelector.vue'
@@ -129,18 +156,22 @@ import { useChart } from '@/composables/useChart'
 import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
-import type { ChartError, TooltipData } from '@/types'
+import type { ChartError, TooltipData, TickerData } from '@/types'
 
 interface Props {
   initialSymbol?: string
   initialBar?: string
   initialSource?: string
+  ticker?: TickerData | null
+  currency?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialSymbol: 'BTCUSDT',
   initialBar: '1h',
-  initialSource: 'okx'
+  initialSource: 'okx',
+  ticker: null,
+  currency: 'USDT'
 })
 
 const emit = defineEmits<{
@@ -169,6 +200,50 @@ const noDataWidth = ref<string>('0px')
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
 const availableTimeframes = ref<string[]>(['分时', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
+const availableSources = [
+  { value: 'tradingview', label: 'TradingView' },
+  { value: 'binance', label: 'Binance' },
+  { value: 'coingecko', label: 'CoinGecko' },
+  { value: 'okx', label: 'OKX' }
+]
+
+const quoteCandidates = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'CNY', 'JPY', 'KRW', 'GBP']
+
+const symbolParts = computed(() => {
+  const upper = symbol.value?.toUpperCase() || '--'
+  if (upper.includes('-')) {
+    const [base, quote] = upper.split('-')
+    return { base: base || '--', quote: quote || '--' }
+  }
+  for (const quote of quoteCandidates) {
+    if (upper.endsWith(quote)) {
+      return {
+        base: upper.slice(0, Math.max(upper.length - quote.length, 1)) || '--',
+        quote
+      }
+    }
+  }
+  return { base: upper || '--', quote: '--' }
+})
+
+const activeSourceLabel = computed(() => {
+  const match = availableSources.find(src => src.value === source.value)
+  return match ? match.label : source.value.toUpperCase()
+})
+
+const currencyLabel = computed(() => props.currency?.toUpperCase() || 'USDT')
+
+const displayTicker = computed(() => {
+  const t = props.ticker
+  return {
+    last: t?.last ?? latestPrice.value,
+    changePercent: t ? `${t.isUp ? '+' : ''}${t.changePercent}%` : `${priceChange.value}${priceChange.value === '--' ? '' : '%'}`,
+    isUp: t?.isUp ?? (priceChangeClass.value === 'up'),
+    high24h: t?.high24h ?? '--',
+    low24h: t?.low24h ?? '--',
+    vol24h: t?.vol24h ?? '--'
+  }
+})
 
 // Use composables
 const {
@@ -278,53 +353,127 @@ onUnmounted(() => {
   background: var(--bg-primary);
 }
 
-.control-bar {
+.chart-toolbar {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+}
+
+.toolbar-info-inline {
+  flex: 1 1 50%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pair-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.pair-inline .pair-base {
+  color: var(--text-primary);
+}
+
+.pair-inline .pair-quote {
+  color: var(--text-secondary);
+}
+
+.source-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(41, 98, 255, 0.15);
+  color: var(--blue-accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.info-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.info-inline .info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.info-inline .label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.info-inline .value {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.info-inline .value.up {
+  color: var(--up-color);
+}
+
+.info-inline .value.down {
+  color: var(--down-color);
+}
+
+.toolbar-controls {
+  flex: 1 1 45%;
+  min-width: 320px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.toolbar-controls > * {
+  flex: 0 0 auto;
+}
+
+.toolbar-controls :deep(.selector-wrapper),
+.toolbar-controls :deep(.timeframe-selector),
+.toolbar-controls :deep(.indicator-selector) {
+  min-width: 120px;
+}
+
+@media (max-width: 1024px) {
+  .chart-toolbar {
+    flex-direction: column;
+  }
+
+  .toolbar-controls {
+    justify-content: flex-start;
+  }
 }
 
 .refresh-btn {
   padding: 6px 12px;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
   cursor: pointer;
   font-size: 13px;
   transition: all 0.2s;
+  height: 36px;
 }
 
 .refresh-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--primary-color);
-}
-
-.price-info {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-}
-
-.price-info .label {
-  color: var(--text-secondary);
-}
-
-.price-info .value {
-  font-weight: bold;
-}
-
-.price-info .value.up {
-  color: var(--up-color);
-}
-
-.price-info .value.down {
-  color: var(--down-color);
+  background: rgba(41, 98, 255, 0.15);
+  border-color: var(--blue-accent);
 }
 
 .chart-area {

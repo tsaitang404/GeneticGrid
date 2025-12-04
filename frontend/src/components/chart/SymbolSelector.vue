@@ -1,13 +1,16 @@
 <template>
-  <select 
-    :value="modelValue"
-    @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
-    class="symbol-select"
-  >
-    <option v-for="sym in symbols" :key="sym" :value="sym">
-      {{ sym }}
-    </option>
-  </select>
+  <div class="symbol-selector">
+    <label class="symbol-label">币对</label>
+    <select 
+      :value="modelValue"
+      @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
+      class="symbol-select"
+    >
+      <option v-for="sym in symbols" :key="sym" :value="sym">
+        {{ sym }}
+      </option>
+    </select>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -24,17 +27,35 @@ defineEmits<{
 
 <style scoped>
 .symbol-selector {
-  background: #2a2e39;
-  color: #d1d4dc;
-  border: 1px solid #363a45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.symbol-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.symbol-select {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  padding: 6px 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
   outline: none;
+  min-width: 120px;
+  transition: all 0.2s;
 }
 
-.symbol-selector:hover {
-  background: #363a45;
+.symbol-select:hover {
+  border-color: var(--blue-accent);
+}
+
+.symbol-select:focus {
+  border-color: var(--blue-accent);
+  box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
 }
 </style>

@@ -9,16 +9,13 @@
       </div>
     </header>
 
-    <TickerInfo
-      :ticker="ticker"
-      :currency="currency"
-    />
-    
     <main class="app-main">
       <KlineChart
         :initial-symbol="initialSymbol"
         :initial-bar="initialBar"
         :initial-source="initialSource"
+        :ticker="ticker"
+        :currency="currency"
         @symbol-change="handleSymbolChange"
       />
     </main>
@@ -34,7 +31,6 @@
 import { ref, onMounted } from 'vue'
 import KlineChart from './components/chart/KlineChart.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
-import TickerInfo from './components/ticker/TickerInfo.vue'
 import { useTicker } from './composables/useTicker'
 
 const initialSymbol = ref<string>('BTCUSDT')
