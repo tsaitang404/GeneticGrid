@@ -163,10 +163,10 @@ const formatVolume = (vol: number): string => {
 }
 
 .tooltip-row .value.up {
-  color: #26a69a;
+  color: var(--up-color);
 }
 
 .tooltip-row .value.down {
-  color: #ef5350;
+  color: var(--down-color);
 }
 </style>

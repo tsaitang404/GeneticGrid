@@ -11,6 +11,16 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const latestPriceLine = ref<ReturnType<NonNullable<typeof candleSeries.value>['createPriceLine']> | ReturnType<NonNullable<typeof lineSeries.value>['createPriceLine']> | null>(null)
   const allCandles = ref<Candle[]>([])
   const isTimelineMode = ref<boolean>(false)
+
+  const DEFAULT_UP_COLOR = '#26a69a'
+  const DEFAULT_DOWN_COLOR = '#ef5350'
+  const DEFAULT_VOLUME_UP_COLOR = 'rgba(38, 166, 154, 0.5)'
+  const DEFAULT_VOLUME_DOWN_COLOR = 'rgba(239, 83, 80, 0.5)'
+
+  const getUpColor = (): string => options.colors?.up.value ?? DEFAULT_UP_COLOR
+  const getDownColor = (): string => options.colors?.down.value ?? DEFAULT_DOWN_COLOR
+  const getVolumeUpColor = (): string => options.colors?.volumeUp.value ?? DEFAULT_VOLUME_UP_COLOR
+  const getVolumeDownColor = (): string => options.colors?.volumeDown.value ?? DEFAULT_VOLUME_DOWN_COLOR
   
   // Data loading states
   const isLoadingMore = ref(false)
@@ -150,6 +160,30 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     updatePriceAxisLabel(price)
   }
 
+  const applySeriesColors = (): void => {
+    const upColor = getUpColor()
+    const downColor = getDownColor()
+
+    if (candleSeries.value) {
+      candleSeries.value.applyOptions({
+        upColor,
+        downColor,
+        borderUpColor: upColor,
+        borderDownColor: downColor,
+        wickUpColor: upColor,
+        wickDownColor: downColor
+      })
+    }
+
+    if (volumeSeries.value) {
+      volumeSeries.value.applyOptions({
+        color: getVolumeUpColor()
+      })
+    }
+
+    updateChartData()
+  }
+
   const initChart = (): void => {
     if (!chartRef.value) return
 
@@ -258,13 +292,15 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       candleSeries.value = null
     } else {
       // Candlestick mode
+      const upColor = getUpColor()
+      const downColor = getDownColor()
       candleSeries.value = chart.value.addCandlestickSeries({
-        upColor: '#26a69a',
-        downColor: '#ef5350',
-        borderDownColor: '#ef5350',
-        borderUpColor: '#26a69a',
-        wickDownColor: '#ef5350',
-        wickUpColor: '#26a69a',
+        upColor,
+        downColor,
+        borderDownColor: downColor,
+        borderUpColor: upColor,
+        wickDownColor: downColor,
+        wickUpColor: upColor,
         lastValueVisible: true,
         priceLineVisible: true,
         priceLineWidth: 2,
@@ -282,7 +318,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
 
     // Add volume series on a separate overlay
     volumeSeries.value = chart.value.addHistogramSeries({
-      color: '#26a69a',
+      color: getVolumeUpColor(),
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume', // Use separate price scale for volume
       lastValueVisible: false, // Hide volume label
@@ -415,10 +451,12 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       candleSeries.value.setData(candleData)
     }
 
+    const volumeUpColor = getVolumeUpColor()
+    const volumeDownColor = getVolumeDownColor()
     const volumeData = allCandles.value.map(c => ({
       time: c.time as any,
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+      color: c.close >= c.open ? volumeUpColor : volumeDownColor
     }))
 
     volumeSeries.value.setData(volumeData)
@@ -446,6 +484,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
 
   const updateLatestData = async (): Promise<void> => {
     if (allCandles.value.length === 0 || !newestTimestamp.value) return
+
+    const volumeUpColor = getVolumeUpColor()
+    const volumeDownColor = getVolumeDownColor()
 
     try {
       // Use 'after' parameter to get only newer data than we have
@@ -475,7 +516,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
               volumeSeries.value.update({
                 time: newCandle.time as any,
                 value: newCandle.volume,
-                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                color: newCandle.close >= newCandle.open ? volumeUpColor : volumeDownColor
               })
             } else if (candleSeries.value && volumeSeries.value) {
               // Candlestick mode
@@ -489,7 +530,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
               volumeSeries.value.update({
                 time: newCandle.time as any,
                 value: newCandle.volume,
-                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                color: newCandle.close >= newCandle.open ? volumeUpColor : volumeDownColor
               })
             }
             hasNewData = true
@@ -506,7 +547,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
               volumeSeries.value.update({
                 time: newCandle.time as any,
                 value: newCandle.volume,
-                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                color: newCandle.close >= newCandle.open ? volumeUpColor : volumeDownColor
               })
             } else if (candleSeries.value && volumeSeries.value) {
               // Candlestick mode
@@ -520,7 +561,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
               volumeSeries.value.update({
                 time: newCandle.time as any,
                 value: newCandle.volume,
-                color: newCandle.close >= newCandle.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                color: newCandle.close >= newCandle.open ? volumeUpColor : volumeDownColor
               })
             }
             newestTimestamp.value = newCandle.time as number
@@ -795,6 +836,15 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     }, intervalMs)
     
     console.log(`🔄 Auto-refresh started: ${bar} → ${intervalMs}ms interval (${(intervalMs / 1000).toFixed(1)}s)`)
+  }
+
+  if (options.colors) {
+    watch(
+      [options.colors.up, options.colors.down, options.colors.volumeUp, options.colors.volumeDown],
+      () => {
+        applySeriesColors()
+      }
+    )
   }
 
   // Watch for symbol/bar changes

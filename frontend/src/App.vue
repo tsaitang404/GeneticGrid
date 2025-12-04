@@ -29,15 +29,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import KlineChart from './components/chart/KlineChart.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
 import { useTicker } from './composables/useTicker'
+import { usePreferencesStore } from './stores/preferences'
 
 const initialSymbol = ref<string>('BTCUSDT')
 const initialBar = ref<string>('1h')
 const initialSource = ref<string>('tradingview')
 const showSettings = ref<boolean>(false)
-const currency = ref<string>(localStorage.getItem('geneticgrid_currency') || 'USDT')
+
+const preferences = usePreferencesStore()
+const { currency } = storeToRefs(preferences)
 
 // Symbol and source for ticker
 const currentSymbol = ref<string>(initialSymbol.value)
