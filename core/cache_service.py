@@ -1,6 +1,7 @@
 """K线数据缓存服务"""
 from .models import CandlestickCache
-from .services import get_market_service, MarketAPIError
+from .plugin_adapter import get_unified_service
+from .services import MarketAPIError
 from django.db import transaction
 from django.db.utils import OperationalError
 from decimal import Decimal
@@ -152,9 +153,15 @@ class CandlestickCacheService:
             list: K线数据
         """
         try:
-            # 从API获取数据
-            service = get_market_service(source)
+            # 使用统一服务（优先插件系统）
+            service = get_unified_service(source)
             candles = service.get_candlesticks(inst_id=symbol, bar=bar, limit=limit, before=before)
+            
+            # 日志标记数据来源
+            if service.is_using_plugin:
+                logger.info(f"📦 使用插件获取 {source}/{symbol}/{bar}: {len(candles)} 条")
+            else:
+                logger.info(f"🔧 使用旧服务获取 {source}/{symbol}/{bar}: {len(candles)} 条")
             
             # 异步保存到缓存（不等待结果，避免阻塞）
             if candles:
