@@ -127,6 +127,20 @@
 
         <div ref="mainChartRef" class="chart-wrapper" />
 
+        <!-- 无更早数据覆盖层 -->
+        <div
+          v-if="!hasMoreData && allCandles.length > 0 && earliestDataOverlayWidth > 0"
+          class="no-earlier-data-overlay"
+          :style="{ 
+            width: earliestDataOverlayWidth + 'px'
+          }"
+        >
+          <div class="no-earlier-data-content">
+            <span class="no-earlier-data-text">无更早数据</span>
+            <span class="no-earlier-data-icon">▶</span>
+          </div>
+        </div>
+
         <!-- 主图指标图例 -->
         <div v-if="mainChartLegends.length > 0" class="main-chart-legends">
           <div
@@ -173,12 +187,26 @@
           <div
             v-show="config.enabled"
             class="sub-chart"
-            :style="{ height: subChartHeights[key] + 'px' }"
+            :style="{ height: subChartHeights[key] + 'px', position: 'relative' }"
           >
             <div
               :ref="el => setSubChartRef(el as HTMLElement | null, String(key))"
               class="chart-wrapper"
             />
+            
+            <!-- 副图无更早数据覆盖层 -->
+            <div
+              v-if="!hasMoreData && allCandles.length > 0 && earliestDataOverlayWidth > 0"
+              class="no-earlier-data-overlay sub-chart-overlay"
+              :style="{ 
+                width: earliestDataOverlayWidth + 'px'
+              }"
+            >
+              <div class="no-earlier-data-content">
+                <span class="no-earlier-data-text">无更早数据</span>
+                <span class="no-earlier-data-icon">▶</span>
+              </div>
+            </div>
             
             <ResizeHandle
               @resize-start="startResize(String(key), $event)"
@@ -191,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, nextTick, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { MouseEventParams, Time, UTCTimestamp, ISeriesApi, IChartApi, CandlestickData } from 'lightweight-charts'
 import SymbolSelector from './SymbolSelector.vue'
@@ -423,6 +451,50 @@ const {
   clearDrawings,
   handleCanvasMouseDown
 } = useDrawingTools(drawingCanvasRef, chart, candleSeries, lineSeries, isTimelineMode)
+
+// 计算最早数据覆盖层的位置（从左边缘到最早K线）
+const earliestDataOverlayWidth = ref<number>(0)
+
+const updateEarliestDataOverlay = () => {
+  if (!chart.value || !allCandles.value.length || hasMoreData.value) {
+    earliestDataOverlayWidth.value = 0
+    return
+  }
+
+  try {
+    const timeScale = chart.value.timeScale()
+    const earliestCandle = allCandles.value[0]
+    
+    // 将最早K线的时间转换为像素坐标
+    const coordinate = timeScale.timeToCoordinate(earliestCandle.time as Time)
+    
+    if (coordinate !== null && coordinate > 0) {
+      // 从左边缘到最早K线的宽度
+      earliestDataOverlayWidth.value = coordinate
+    } else {
+      earliestDataOverlayWidth.value = 0
+    }
+  } catch (error) {
+    earliestDataOverlayWidth.value = 0
+  }
+}
+
+// 监听相关变化来更新覆盖层宽度
+watch([chart, allCandles, hasMoreData], () => {
+  nextTick(() => {
+    updateEarliestDataOverlay()
+  })
+}, { flush: 'post' })
+
+// 监听时间轴变化（缩放、平移）
+watchEffect(() => {
+  if (chart.value) {
+    const timeScale = chart.value.timeScale()
+    timeScale.subscribeVisibleLogicalRangeChange(() => {
+      updateEarliestDataOverlay()
+    })
+  }
+})
 
 const {
   mainChartHeight,
@@ -1172,6 +1244,77 @@ onUnmounted(() => {
   z-index: 5;
 }
 
+/* 无更早数据覆盖层 */
+.no-earlier-data-overlay {
+  position: absolute;
+  left: 0; /* 固定从左边缘开始 */
+  top: 0;
+  bottom: 28px;
+  /* 宽度由 Vue 动态设置：从左边缘到最早K线，实时同步 */
+  background: linear-gradient(to right, rgba(50, 50, 60, 0.9), rgba(40, 40, 50, 0.7), rgba(30, 30, 40, 0.3));
+  border-right: 2px solid rgba(100, 100, 120, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* 内容靠右对齐 */
+  padding-right: 10px;
+  pointer-events: none;
+  z-index: 10;
+  animation: fadeIn 0.3s ease-in-out;
+  overflow: visible;
+  /* 不使用 transition，完全实时跟随K线图移动 */
+}
+
+.no-earlier-data-overlay.sub-chart-overlay {
+  bottom: 0;
+}
+
+.no-earlier-data-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(200, 200, 220, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  background: rgba(60, 60, 80, 0.6);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(120, 120, 150, 0.3);
+}
+
+.no-earlier-data-icon {
+  font-size: 13px;
+  opacity: 0.95;
+  animation: pulse 2s ease-in-out infinite;
+  color: rgba(150, 180, 255, 0.9);
+}
+
+.no-earlier-data-text {
+  white-space: nowrap;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
 .sub-charts {
   display: flex;
   flex-direction: column;
@@ -1183,5 +1326,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
 }
 </style>
