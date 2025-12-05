@@ -102,8 +102,10 @@
         <DrawingToolbar
           :modelValue="currentTool"
           :expanded="toolbarExpanded"
+          :parallel-line-count="parallelLineCount"
           @update:tool="handleToolbarToolUpdate"
           @update:expanded="toolbarExpanded = $event"
+          @configure-parallel="handleParallelConfigure"
           @clear="handleToolbarClear"
         />
 
@@ -449,6 +451,8 @@ const {
   currentTool,
   toolbarExpanded,
   clearDrawings,
+  parallelLineCount,
+  setParallelLineCount,
   handleCanvasMouseDown
 } = useDrawingTools(drawingCanvasRef, chart, candleSeries, lineSeries, isTimelineMode)
 
@@ -508,6 +512,10 @@ const handleToolbarToolUpdate = (tool: DrawingType): void => {
     return
   }
   currentTool.value = tool
+}
+
+const handleParallelConfigure = (count: number): void => {
+  setParallelLineCount(count)
 }
 
 const handleToolbarClear = (): void => {
