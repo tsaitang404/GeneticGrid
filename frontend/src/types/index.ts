@@ -104,6 +104,7 @@ export interface ChartOptions {
   symbol: { value: string }
   bar: { value: string }
   source: { value: string }
+  exchangeRate?: { value: number }
   colors?: ChartColorRefs
   onLoading?: (loading: boolean) => void
   onError?: (error: ChartError) => void

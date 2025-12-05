@@ -205,6 +205,7 @@ import { useChart } from '@/composables/useChart'
 import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
+import { useTicker } from '@/composables/useTicker'
 import type { Candle, ChartError, TooltipData, TickerData, DrawingType } from '@/types'
 import { usePreferencesStore } from '@/stores/preferences'
 
@@ -242,6 +243,28 @@ const noDataOverlayRef = ref<HTMLElement | null>(null)
 const symbol = ref<string>(props.initialSymbol)
 const bar = ref<string>(props.initialBar)
 const source = ref<string>(props.initialSource)
+
+// 获取汇率转换函数
+const currencyRef = ref(props.currency)
+const { getRate } = useTicker(symbol, source, currencyRef)
+
+// 计算当前汇率
+const exchangeRate = computed(() => getRate())
+
+// 监听 currency prop 变化
+watch(() => props.currency, (newCurrency) => {
+  currencyRef.value = newCurrency
+  // 汇率变化时重新加载数据
+  chartError.value = { show: false, message: '' }
+  stopAutoRefresh()
+  initChart()
+  loadCandlesticks().then(() => {
+    if (autoRefreshEnabled.value) {
+      startAutoRefresh()
+    }
+  })
+})
+
 const isLoading = ref<boolean>(true)
 const latestPrice = ref<string>('--')
 const priceChange = ref<string>('--')
@@ -367,6 +390,7 @@ const {
   symbol,
   bar,
   source,
+  exchangeRate,
   colors: {
     up: upColor,
     down: downColor,

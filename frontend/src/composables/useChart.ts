@@ -386,12 +386,23 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const result: APIResponse<Candle[]> = await response.json()
 
       if (result.code === 0 && result.data) {
-        allCandles.value = result.data
+        // 应用汇率转换
+        const rate = options.exchangeRate?.value || 1
+        const convertedData = result.data.map(candle => ({
+          ...candle,
+          open: candle.open * rate,
+          high: candle.high * rate,
+          low: candle.low * rate,
+          close: candle.close * rate
+          // volume 不需要转换
+        }))
+        
+        allCandles.value = convertedData
         
         // Track timestamps for pagination (store as seconds)
-        if (result.data.length > 0) {
-          oldestTimestamp.value = result.data[0].time as number
-          newestTimestamp.value = result.data[result.data.length - 1].time as number
+        if (convertedData.length > 0) {
+          oldestTimestamp.value = convertedData[0].time as number
+          newestTimestamp.value = convertedData[convertedData.length - 1].time as number
           hasMoreData.value = true
           hasNewerData.value = true
         } else {
@@ -503,7 +514,16 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const result: APIResponse<Candle[]> = await response.json()
 
       if (result.code === 0 && result.data && result.data.length > 0) {
-        const newCandles = result.data
+        // 应用汇率转换
+        const rate = options.exchangeRate?.value || 1
+        const newCandles = result.data.map(candle => ({
+          ...candle,
+          open: candle.open * rate,
+          high: candle.high * rate,
+          low: candle.low * rate,
+          close: candle.close * rate
+        }))
+        
         const lastCandle = allCandles.value[allCandles.value.length - 1]
         let hasNewData = false
 
@@ -720,7 +740,16 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       
       if (result.code === 0 && result.data && result.data.length > 0) {
         const loadTime = Date.now() - startTime
-        const newCandles = result.data
+        
+        // 应用汇率转换
+        const rate = options.exchangeRate?.value || 1
+        const newCandles = result.data.map(candle => ({
+          ...candle,
+          open: candle.open * rate,
+          high: candle.high * rate,
+          low: candle.low * rate,
+          close: candle.close * rate
+        }))
         
         // Prepend new data and remove duplicates
         const existingTimes = new Set(allCandles.value.map(c => c.time))
