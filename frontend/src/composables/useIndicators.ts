@@ -20,16 +20,16 @@ export function useIndicators(
     },
     ma: { 
       enabled: false, 
-      name: 'MA(9,12,26)', 
-      zhName: '移动平均线(MACD标准)',
-      description: '简单移动平均线(Simple Moving Average)，采用MACD标准周期配置。MA9(信号线周期)、MA12(快线周期)、MA26(慢线周期)，与MACD指标完美配合，便于识别均线与MACD的共振信号。',
+      name: 'MA(5,10,20)', 
+      zhName: '移动平均线(标准)',
+      description: '简单移动平均线(Simple Moving Average)，采用标准周期配置。MA5(短期)、MA10(中期)、MA20(长期)，是最常用的均线组合，适用于大多数市场环境。',
       series: [] 
     },
     maWithMacd: { 
       enabled: false, 
-      name: 'MA(12,26)', 
-      zhName: '移动平均线(MACD配合)',
-      description: '配合MACD指标使用的移动平均线。MA12和MA26与MACD的快慢线周期一致，便于观察均线与MACD的共振信号，提高交易准确性。',
+      name: 'MA(9,12,26)', 
+      zhName: '移动平均线(MACD标准)',
+      description: '配合MACD指标使用的移动平均线。MA9(信号线周期)、MA12(快线周期)、MA26(慢线周期)，与MACD指标完美配合，便于识别均线与MACD的共振信号。',
       series: [] 
     },
     ema: { 
@@ -387,7 +387,8 @@ export function useIndicators(
     } else if (key === 'maWithMacd') {
       indicators.maWithMacd.series = [
         chart.value.addLineSeries({ color: '#2962FF', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
-        chart.value.addLineSeries({ color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
+        chart.value.addLineSeries({ color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#9C27B0', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
     } else if (key === 'ema') {
       indicators.ema.series = [
@@ -668,25 +669,26 @@ export function useIndicators(
   const mainChartLegends = computed(() => {
     const legends: Array<{ indicator: string; lines: Array<{ name: string; color: string }> }> = []
     
-    // MA(9,12,26)
+    // MA(5,10,20) - 标准
     if (indicators.ma?.enabled) {
       legends.push({
         indicator: 'MA',
         lines: [
-          { name: 'MA9', color: '#2196F3' },
-          { name: 'MA12', color: '#FF9800' },
-          { name: 'MA26', color: '#9C27B0' }
+          { name: 'MA5', color: '#2196F3' },
+          { name: 'MA10', color: '#FF9800' },
+          { name: 'MA20', color: '#9C27B0' }
         ]
       })
     }
     
-    // MA(12,26) with MACD
+    // MA(9,12,26) - MACD标准
     if (indicators.maWithMacd?.enabled) {
       legends.push({
         indicator: 'MA',
         lines: [
-          { name: 'MA12', color: '#2962FF' },
-          { name: 'MA26', color: '#FF6D00' }
+          { name: 'MA9', color: '#2962FF' },
+          { name: 'MA12', color: '#FF6D00' },
+          { name: 'MA26', color: '#9C27B0' }
         ]
       })
     }
