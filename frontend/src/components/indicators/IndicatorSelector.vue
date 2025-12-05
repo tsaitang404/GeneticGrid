@@ -48,7 +48,9 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const allIndicatorEntries = computed(() => {
   return (Object.entries(props.indicators) as [keyof Indicators, Indicators[keyof Indicators]][])
     .map(([key, config]) => ({ key, config }))
-    .filter((item): item is { key: keyof Indicators, config: IndicatorConfig } => item.config !== undefined)
+    .filter((item): item is { key: keyof Indicators, config: IndicatorConfig } => 
+      item.config !== undefined && item.key !== 'vol' // 排除VOL，因为它默认显示
+    )
 })
 
 const enabledCount = computed(() => {
