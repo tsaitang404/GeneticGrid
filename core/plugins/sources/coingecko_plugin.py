@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
-    """CoinGecko 数据聚合器插件"""
+    """CoinGecko 数据聚合器插件
+    
+    协议实现：
+    - 接收标准格式：symbol="BTCUSDT"
+    - 内部转换为：coin_id="bitcoin"
+    """
     
     BASE_URL = "https://api.coingecko.com/api/v3"
     
@@ -38,11 +43,34 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         "LINK": "chainlink",
         "DOT": "polkadot",
         "MATIC": "matic-network",
+        "BNB": "binancecoin",
     }
     
     def __init__(self):
         self._session = None
         super().__init__()
+    
+    def _normalize_symbol(self, symbol: str) -> str:
+        """标准格式 "BTCUSDT" -> CoinGecko 格式 "bitcoin" """
+        symbol = symbol.upper().replace('-', '').replace('/', '')
+        
+        # 提取基础币种
+        for quote in ['USDT', 'USDC', 'USD', 'BTC', 'ETH']:
+            if symbol.endswith(quote):
+                base = symbol[:-len(quote)]
+                coin_id = self.COIN_ID_MAP.get(base)
+                if coin_id:
+                    return coin_id
+                raise PluginError(f"不支持的币种: {base}")
+        
+        # 默认：假设后4位是计价币种
+        if len(symbol) > 4:
+            base = symbol[:-4]
+            coin_id = self.COIN_ID_MAP.get(base)
+            if coin_id:
+                return coin_id
+        
+        raise PluginError(f"不支持的币种: {symbol}")
     
     def _get_metadata(self) -> DataSourceMetadata:
         """获取 CoinGecko 元数据"""
@@ -69,10 +97,10 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
             supports_ticker=True,
             ticker_update_frequency=60,
             supported_symbols=[
-                "BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", "DOGE-USDT",
-                "ADA-USDT", "AVAX-USDT", "LINK-USDT"
+                "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT",
+                "ADAUSDT", "AVAXUSDT", "LINKUSDT", "BNBUSDT"
             ],
-            symbol_format="BASE-USDT",
+            symbol_format="BTCUSDT",  # 标准格式
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=False,  # CoinGecko 全球可直连
@@ -92,18 +120,9 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
             })
         return self._session
     
-    def _get_coin_id(self, symbol: str) -> str:
-        """获取 CoinGecko 币种 ID"""
-        # 从 BTC-USDT 提取 BTC
-        base = symbol.split('-')[0].upper()
-        coin_id = self.COIN_ID_MAP.get(base)
-        if not coin_id:
-            raise PluginError(f"不支持的币种: {base}")
-        return coin_id
-    
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
-        symbol: str,
+        coin_id: str,
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
@@ -111,11 +130,10 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         """CoinGecko 不支持 K线数据"""
         raise PluginError("CoinGecko 不支持 K线数据，仅支持行情数据")
     
-    def get_ticker(self, symbol: str) -> TickerData:
-        """获取行情数据"""
+    def _get_ticker_impl(self, coin_id: str) -> TickerData:
+        """获取行情数据的内部实现（coin_id 已转换为 bitcoin 等）"""
         try:
-            coin_id = self._get_coin_id(symbol)
-            
+            # coin_id 已经通过 _normalize_symbol 转换了，直接使用
             # CoinGecko API - Simple Price
             url = f"{self.BASE_URL}/simple/price"
             params = {

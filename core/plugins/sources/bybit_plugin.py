@@ -92,7 +92,7 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
         }
         return mapping.get(bar, "60")
     
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
         symbol: str,
         bar: str,
@@ -155,7 +155,7 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Bybit 获取 K线数据失败: {e}")
             raise PluginError(f"Bybit 获取 K线数据失败: {e}")
     
-    def get_ticker(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
             bybit_symbol = self._convert_symbol(symbol)

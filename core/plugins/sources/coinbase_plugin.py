@@ -22,13 +22,37 @@ logger = logging.getLogger(__name__)
 
 
 class CoinbaseMarketPlugin(MarketDataSourcePlugin):
-    """Coinbase 交易所数据源插件"""
+    """Coinbase 交易所数据源插件
+    
+    协议实现：
+    - 接收标准格式：symbol="BTCUSDT", bar="1h"
+    - 内部转换为：symbol="BTC-USD", granularity=3600
+    """
     
     BASE_URL = "https://api.exchange.coinbase.com"
     
     def __init__(self):
         self._session = None
         super().__init__()
+    
+    def _normalize_symbol(self, symbol: str) -> str:
+        """标准格式 "BTCUSDT" -> Coinbase 格式 "BTC-USD" """
+        symbol = symbol.upper().replace('-', '').replace('/', '')
+        
+        # Coinbase 只支持 USD，不支持 USDT
+        for quote in ['USDT', 'USDC']:
+            if symbol.endswith(quote):
+                base = symbol[:-len(quote)]
+                return f"{base}-USD"
+        
+        if symbol.endswith('USD'):
+            base = symbol[:-3]
+            return f"{base}-USD"
+        
+        # 默认：假设后4位是计价币种，改为 USD
+        if len(symbol) > 4:
+            return f"{symbol[:-4]}-USD"
+        return symbol
     
     def _get_metadata(self) -> DataSourceMetadata:
         """获取 Coinbase 元数据"""
@@ -95,7 +119,7 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
         }
         return mapping.get(bar, 3600)
     
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
         symbol: str,
         bar: str,
@@ -145,7 +169,7 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Coinbase 获取 K线数据失败: {e}")
             raise PluginError(f"Coinbase 获取 K线数据失败: {e}")
     
-    def get_ticker(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
             coinbase_symbol = self._convert_symbol(symbol)
