@@ -10,12 +10,13 @@ self.onmessage = function(e) {
             try {
                 if (ind === 'ma') {
                     results.ma = [
-                        calculateSMA(candles, 9),
-                        calculateSMA(candles, 12),
-                        calculateSMA(candles, 26)
+                        calculateSMA(candles, 5),
+                        calculateSMA(candles, 10),
+                        calculateSMA(candles, 20)
                     ];
                 } else if (ind === 'maWithMacd') {
                     results.maWithMacd = [
+                        calculateSMA(candles, 9),
                         calculateSMA(candles, 12),
                         calculateSMA(candles, 26)
                     ];
