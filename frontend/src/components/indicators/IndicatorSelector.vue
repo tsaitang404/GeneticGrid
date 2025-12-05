@@ -15,6 +15,7 @@
           :key="item.key"
           class="dropdown-item"
           @click="emitToggle(item.key)"
+          :title="item.config.description"
         >
           <input
             type="checkbox"
@@ -22,7 +23,15 @@
             @click.stop
             @change="emitToggle(item.key)"
           />
-          <span>{{ item.config.name }}</span>
+          <div class="indicator-info">
+            <div class="indicator-name">
+              <span class="name-en">{{ item.config.name }}</span>
+              <span v-if="item.config.zhName" class="name-zh">{{ item.config.zhName }}</span>
+            </div>
+            <div v-if="item.config.description" class="indicator-desc">
+              {{ item.config.description }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -132,8 +141,9 @@ onUnmounted(() => {
   background: #2a2e39;
   border: 1px solid #363a45;
   border-radius: 4px;
-  min-width: 200px;
-  max-height: 400px;
+  min-width: 320px;
+  max-width: 450px;
+  max-height: 500px;
   overflow-y: auto;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -141,13 +151,18 @@ onUnmounted(() => {
 
 .dropdown-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: background 0.2s;
   font-size: 13px;
   color: #d1d4dc;
+  border-bottom: 1px solid #363a45;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
 }
 
 .dropdown-item:hover {
@@ -158,9 +173,40 @@ onUnmounted(() => {
   cursor: pointer;
   width: 16px;
   height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
-.dropdown-item span {
+.indicator-info {
+  flex: 1;
   user-select: none;
+  min-width: 0;
+}
+
+.indicator-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.name-en {
+  font-weight: 600;
+  color: #2196F3;
+  font-size: 13px;
+}
+
+.name-zh {
+  color: #d1d4dc;
+  font-size: 12px;
+}
+
+.indicator-desc {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.4;
+  margin-top: 4px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 </style>
