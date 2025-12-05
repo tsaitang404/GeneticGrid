@@ -249,6 +249,133 @@ class CoinGeckoMarketService:
         }
 
 
+class CoinbaseMarketService:
+    """Coinbase Exchange 公开行情接口（无需 API Key）"""
+    
+    BASE_URL = "https://api.exchange.coinbase.com"
+    
+    def __init__(self, timeout=10):
+        self.timeout = timeout
+        self.session = get_session()
+    
+    def _convert_product(self, inst_id: str) -> str:
+        """将 OKX 格式转换为 Coinbase 格式: BTC-USDT -> BTC-USD"""
+        base, quote = inst_id.split("-")
+        # Coinbase 支持 USD, EUR, GBP 等
+        quote_map = {
+            "USDT": "USD",
+            "USDC": "USDC",
+            "EUR": "EUR",
+            "GBP": "GBP",
+        }
+        return f"{base}-{quote_map.get(quote, quote)}"
+    
+    def _bar_to_granularity(self, bar: str) -> int:
+        """将时间周期转换为 Coinbase granularity（秒）
+        Coinbase 支持的 granularity: 60, 300, 900, 3600, 21600, 86400
+        """
+        mapping = {
+            "1m": 60,
+            "5m": 300,
+            "15m": 900,
+            "30m": 900,  # 不支持，使用 15m
+            "1h": 3600,
+            "1H": 3600,
+            "2h": 3600,   # 不支持，使用 1h
+            "4h": 21600,  # 使用 6h 替代
+            "4H": 21600,
+            "6h": 21600,
+            "12h": 21600, # 不支持，使用 6h
+            "1d": 86400,
+            "1D": 86400,
+            "1w": 86400,  # 不支持，使用 1d
+            "1W": 86400,
+        }
+        return mapping.get(bar, 3600)  # 默认 1h
+    
+    def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100, before: int = None):
+        """获取 K 线数据
+        :param before: 获取该时间戳之前的数据（毫秒）
+        """
+        product = self._convert_product(inst_id)
+        granularity = self._bar_to_granularity(bar)
+        
+        url = f"{self.BASE_URL}/products/{product}/candles"
+        params = {
+            "granularity": granularity,
+            "limit": min(limit, 300)  # Coinbase 最多 300 条
+        }
+        
+        if before:
+            # Coinbase 的 start 参数是 ISO 8601 时间戳
+            from datetime import datetime
+            dt = datetime.utcfromtimestamp(before / 1000)
+            params["start"] = dt.isoformat() + "Z"
+        
+        try:
+            resp = self.session.get(url, params=params, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.exceptions.Timeout:
+            raise MarketAPIError("Coinbase API 连接超时")
+        except requests.exceptions.RequestException as e:
+            raise MarketAPIError(f"Coinbase API 网络错误: {str(e)}")
+        
+        if isinstance(data, dict) and data.get("error"):
+            raise MarketAPIError(f"Coinbase API 错误: {data.get('error', '未知错误')}")
+        
+        # Coinbase 返回格式: [[time, low, high, open, close, volume], ...]
+        # 倒序返回，需要反转
+        candles = []
+        for item in reversed(data):
+            candles.append({
+                "time": int(item[0]),
+                "open": float(item[3]),
+                "high": float(item[2]),
+                "low": float(item[1]),
+                "close": float(item[4]),
+                "volume": float(item[5]),
+            })
+        return candles
+    
+    def get_ticker(self, inst_id: str = "BTC-USDT"):
+        """获取最新行情"""
+        product = self._convert_product(inst_id)
+        
+        url = f"{self.BASE_URL}/products/{product}/ticker"
+        
+        try:
+            resp = self.session.get(url, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.exceptions.Timeout:
+            raise MarketAPIError("Coinbase API 连接超时")
+        except requests.exceptions.RequestException as e:
+            raise MarketAPIError(f"Coinbase API 网络错误: {str(e)}")
+        
+        if isinstance(data, dict) and data.get("error"):
+            raise MarketAPIError(f"Coinbase API 错误: {data.get('error', '未知错误')}")
+        
+        # 获取 24h 统计数据
+        url_stats = f"{self.BASE_URL}/products/{product}/stats"
+        try:
+            resp_stats = self.session.get(url_stats, timeout=self.timeout)
+            resp_stats.raise_for_status()
+            stats = resp_stats.json()
+        except:
+            stats = {}
+        
+        return {
+            "instId": inst_id,
+            "last": str(data.get("price", 0)),
+            "open24h": str(stats.get("open", 0)),
+            "high24h": str(stats.get("high", 0)),
+            "low24h": str(stats.get("low", 0)),
+            "vol24h": str(stats.get("volume", 0)),
+            "volCcy24h": str(data.get("volume", 0)),
+        }
+
+
 class OKXMarketService:
     """OKX 公开行情接口（无需 API Key）"""
 
@@ -324,6 +451,7 @@ class OKXMarketService:
 
 # 数据源工厂
 MARKET_SERVICES = {
+    "coinbase": CoinbaseMarketService,
     "tradingview": TradingViewMarketService,
     "binance": BinanceMarketService,
     "coingecko": CoinGeckoMarketService,

@@ -7,10 +7,11 @@
 - 🚀 **Vue 3 + TypeScript**: 完整的类型安全前端应用
 - 📊 **22 种技术指标**: MA, EMA, BOLL, MACD, RSI, KDJ 等
 - 🎨 **画线工具**: 直线、射线、斐波那契回调、等距通道
-- 🔄 **多数据源**: TradingView, Binance, CoinGecko, OKX
+- 🔄 **多数据源**: OKX, Binance, Coinbase, CoinGecko, TradingView
 - 💱 **15 种货币**: 支持多货币单位和实时汇率转换
 - ⚡ **Web Worker**: 异步计算指标，不阻塞UI
 - 🎯 **无限滚动**: 自动加载历史和实时数据
+- 🌍 **全球交易所覆盖**: 支持北美(Coinbase)、亚洲(OKX/币安)等主要市场
 
 ## 📦 技术栈
 
