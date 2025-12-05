@@ -261,7 +261,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         barSpacing: 3,
         minBarSpacing: 0.5
       })
-      console.log('📊 Timeline mode activated')
     } else {
       // Candlestick mode: normal spacing
       chart.value.timeScale().applyOptions({
@@ -422,7 +421,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         
         // Preload more history data for smooth scrolling (but not for timeline)
         if (!isTimeline && allCandles.value.length < 10000 && hasMoreData.value) {
-          console.log('🔄 Preloading additional 10000 candles for buffer... (current:', allCandles.value.length, ')')
           // Use setTimeout to avoid blocking initial render
           setTimeout(() => {
             loadMoreHistory(10000)
@@ -640,19 +638,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     const shouldLoadNewer = hasNewerData.value && !isLoadingNewer.value && visibleToIndex > allCandles.value.length - bufferZone
     
     // Debug logging
-    if (visibleFromIndex < bufferZone || visibleToIndex > allCandles.value.length - bufferZone) {
-      console.log('📍 Scroll check:', {
-        visibleFromIndex,
-        visibleToIndex,
-        total: allCandles.value.length,
-        bufferZone,
-        hasMoreData: hasMoreData.value,
-        isLoadingMore: isLoadingMore.value,
-        shouldLoadHistory,
-        shouldLoadNewer
-      })
-    }
-    
     if (shouldLoadHistory || shouldLoadNewer) {
       // Debounce: wait 50ms to avoid loading during active dragging (reduced for faster response)
       loadDebounceTimer = window.setTimeout(() => {
@@ -677,10 +662,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           // Cap at 15000 (backend cache makes this fast)
           loadCount = Math.min(15000, Math.ceil(loadCount))
           
-          console.log('🔄 Loading history - visible:', visibleFromIndex, 'range:', visibleRange, 'gap:', gap, 'loading:', loadCount)
           loadMoreHistory(loadCount)
         } else if (shouldLoadNewer && !isLoadingNewer.value && hasNewerData.value) {
-          console.log('🔄 Loading newer - visible:', visibleToIndex, '/', allCandles.value.length)
           loadMoreNewerUntilEnough()
         }
         loadDebounceTimer = null
@@ -705,7 +688,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       // x is the pixel position of the first candle
       // If x > 0, there's empty space to the left that should show "no data"
       if (x !== null && x > 0) {
-        console.log(`🚧 No more data overlay: width=${Math.floor(x)}px, first candle at ${new Date(firstCandleTime as number * 1000).toLocaleString()}`)
         return { show: true, width: Math.floor(x) }
       }
     }
@@ -714,15 +696,11 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   }
 
   const loadMoreHistory = async (count: number): Promise<void> => {
-    console.log('📥 loadMoreHistory called:', { count, isLoadingMore: isLoadingMore.value, hasMoreData: hasMoreData.value, oldestTimestamp: oldestTimestamp.value })
-    
     if (isLoadingMore.value || !hasMoreData.value) {
-      console.log('⏭️ Skipping load - already loading or no more data')
       return
     }
     
     isLoadingMore.value = true
-    const startTime = Date.now()
     
     try {
       // oldestTimestamp is in seconds, API expects milliseconds
@@ -739,8 +717,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const result: APIResponse<Candle[]> = await response.json()
       
       if (result.code === 0 && result.data && result.data.length > 0) {
-        const loadTime = Date.now() - startTime
-        
         // 应用汇率转换
         const rate = options.exchangeRate?.value || 1
         const newCandles = result.data.map(candle => ({
@@ -756,31 +732,21 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time))
         
         if (uniqueNewCandles.length > 0) {
-          const oldLength = allCandles.value.length
-          const oldestTime = allCandles.value[0]?.time
-          
           allCandles.value = [...uniqueNewCandles, ...allCandles.value]
           allCandles.value.sort((a, b) => (a.time as number) - (b.time as number))
           
-          const newLength = allCandles.value.length
           const newOldestTime = allCandles.value[0].time
           
           oldestTimestamp.value = newOldestTime as number
-          
-          console.log(`✅ Loaded ${uniqueNewCandles.length}/${result.data.length} unique candles in ${loadTime}ms`)
-          console.log(`   Array: ${oldLength} → ${newLength}, Oldest: ${new Date((oldestTime as number) * 1000).toISOString()} → ${new Date(newOldestTime as number * 1000).toISOString()}`)
-          console.log(`   hasMoreData: ${hasMoreData.value} (got ${result.data.length}/${limit})`)
           
           // Update chart data - setData will preserve user's current view position
           updateChartData()
           // As long as we receive any unique candles we still assume there may be more history
           hasMoreData.value = true
         } else {
-          console.log('⚠️ All loaded data was duplicate')
           hasMoreData.value = false
         }
       } else {
-        console.log('❌ No more history data from server')
         hasMoreData.value = false
       }
     } catch (err) {
@@ -815,19 +781,16 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         const uniqueCandles = newCandles.filter(c => !existingTimes.has(c.time))
         
         if (uniqueCandles.length > 0) {
-          const oldLength = allCandles.value.length
           allCandles.value = [...allCandles.value, ...uniqueCandles]
           allCandles.value.sort((a, b) => (a.time as number) - (b.time as number))
           newestTimestamp.value = allCandles.value[allCandles.value.length - 1].time as number
           
-          console.log(`✅ Loaded ${uniqueCandles.length} newer candles (${oldLength} → ${allCandles.value.length})`)
           updateChartData()
         }
         
         // If we got less than requested, we've likely reached the present
         hasNewerData.value = result.data.length >= 1500
       } else {
-        console.log('❌ No newer data available')
         hasNewerData.value = false
       }
     } catch (err) {
@@ -885,8 +848,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     refreshInterval = window.setInterval(() => {
       updateLatestData()
     }, intervalMs)
-    
-    console.log(`🔄 Auto-refresh started: ${bar} → ${intervalMs}ms interval (${(intervalMs / 1000).toFixed(1)}s)`)
   }
 
   if (options.colors) {

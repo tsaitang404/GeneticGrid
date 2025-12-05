@@ -313,7 +313,6 @@ const availableTimeframes = ref<string[]>(['tick', '1m', '5m', '15m', '30m', '1h
 
 // Handle source change to update available symbols and timeframes
 const handleSourceChange = (sourceData: any) => {
-  console.log('Source changed:', sourceData)
   
   // Update available symbols
   if (sourceData.supported_symbols && sourceData.supported_symbols.length > 0) {
