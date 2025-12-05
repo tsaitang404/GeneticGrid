@@ -6,6 +6,7 @@
 import os
 import logging
 import socket
+import time
 from typing import Optional, Dict, Tuple
 
 logger = logging.getLogger(__name__)
@@ -24,12 +25,28 @@ PROXY_CONFIG = {
     }
 }
 
+# 代理可用性缓存 (避免每次请求都检测，提升性能)
+# 格式: {proxy_type: (is_available, timestamp)}
+_PROXY_CACHE = {}
+_CACHE_TTL = 60  # 缓存60秒
+
 
 def is_proxy_available(proxy_type: str = 'socks5') -> bool:
-    """检查代理是否可用"""
+    """检查代理是否可用（带缓存，避免每次请求都检测）"""
+    global _PROXY_CACHE
+    
+    # 检查缓存
+    now = time.time()
+    if proxy_type in _PROXY_CACHE:
+        is_available, timestamp = _PROXY_CACHE[proxy_type]
+        if now - timestamp < _CACHE_TTL:
+            return is_available
+    
+    # 缓存过期或不存在，重新检测
     try:
         config = PROXY_CONFIG.get(proxy_type)
         if not config:
+            _PROXY_CACHE[proxy_type] = (False, now)
             return False
         
         host = config['host']
@@ -42,12 +59,16 @@ def is_proxy_available(proxy_type: str = 'socks5') -> bool:
         
         if result == 0:
             logger.info(f"✅ {proxy_type.upper()} 代理 {host}:{port} 可用")
+            _PROXY_CACHE[proxy_type] = (True, now)
             return True
         else:
             logger.warning(f"❌ {proxy_type.upper()} 代理 {host}:{port} 不可用")
+            _PROXY_CACHE[proxy_type] = (False, now)
             return False
     except Exception as e:
         logger.warning(f"❌ 检查 {proxy_type.upper()} 代理失败: {e}")
+        _PROXY_CACHE[proxy_type] = (False, now)
+        return False
         return False
 
 
