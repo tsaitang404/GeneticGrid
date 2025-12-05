@@ -178,6 +178,13 @@ export function useIndicators(
       zhName: '心理线',
       description: '心理线(Psychological Line)，N日内上涨天数占比。取值0-100%，>75%超买，<25%超卖，50%为多空平衡。反映市场心理，配合其他指标判断买卖时机。',
       series: [] 
+    },
+    atr: { 
+      enabled: false, 
+      name: 'ATR', 
+      zhName: '平均真实波幅',
+      description: '平均真实波幅(Average True Range)，衡量市场波动性的指标。ATR值越大波动越剧烈，越小波动越平缓。不判断方向，常用于设置动态止损(价格±2-3倍ATR)和仓位管理。标准周期14。',
+      series: [] 
     }
   }) as Indicators
 
@@ -197,7 +204,8 @@ export function useIndicators(
     dma: 180,
     vr: 180,
     brar: 180,
-    psy: 180
+    psy: 180,
+    atr: 180
   })
 
   const setSubChartRef = (el: HTMLElement | null, key: string): void => {
@@ -371,6 +379,18 @@ export function useIndicators(
     } else if (key === 'psy' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
         subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'PSY' })
+      ]
+    } else if (key === 'atr' && indicators[key as keyof Indicators]) {
+      indicators[key]!.series = [
+        subChart.addLineSeries({ 
+          color: '#FF9800', 
+          lineWidth: 2, 
+          title: 'ATR',
+          lastValueVisible: true,
+          priceLineVisible: true,
+          priceLineWidth: 1,
+          priceLineStyle: 2
+        })
       ]
     }
   }
@@ -646,12 +666,17 @@ export function useIndicators(
     if (results.psy && Array.isArray(indicators.psy.series) && indicators.psy.series[0]) {
       indicators.psy.series[0].setData(results.psy.map((d: any) => ({ time: d.time as any, value: d.value })))
     }
+
+    // Update ATR
+    if (results.atr && Array.isArray(indicators.atr.series) && indicators.atr.series[0]) {
+      indicators.atr.series[0].setData(results.atr.map((d: any) => ({ time: d.time as any, value: d.value })))
+    }
   }
 
   const enabledSubIndicators: ComputedRef<Record<string, IndicatorConfig>> = computed(() => {
     const enabled: Record<string, IndicatorConfig> = {}
     // 副图指标列表：不是覆盖在主图上的指标
-    const subIndicatorKeys = ['macd', 'rsi', 'kdj', 'stochrsi', 'cci', 'dmi', 'wr', 'obv', 'trix', 'roc', 'mtm', 'dma', 'vr', 'brar', 'psy']
+    const subIndicatorKeys = ['macd', 'rsi', 'kdj', 'stochrsi', 'cci', 'dmi', 'wr', 'obv', 'trix', 'roc', 'mtm', 'dma', 'vr', 'brar', 'psy', 'atr']
     Object.keys(indicators).forEach(key => {
       const k = key as keyof Indicators
       if (subIndicatorKeys.includes(key) && indicators[k].enabled) {

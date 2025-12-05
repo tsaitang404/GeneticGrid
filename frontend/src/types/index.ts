@@ -89,6 +89,7 @@ export interface Indicators {
   vr: IndicatorConfig
   brar: IndicatorConfig
   psy: IndicatorConfig
+  atr: IndicatorConfig
 }
 
 export interface ChartColorRefs {

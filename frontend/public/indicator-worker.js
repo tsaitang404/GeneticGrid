@@ -70,6 +70,8 @@ self.onmessage = function(e) {
                     results.brar = calculateBRAR(candles, 26);
                 } else if (ind === 'psy') {
                     results.psy = calculatePSY(candles, 12);
+                } else if (ind === 'atr') {
+                    results.atr = calculateATR(candles, 14);
                 }
             } catch (err) {
                 console.error('Worker calculation error:', ind, err);
@@ -681,4 +683,55 @@ function calculateBRAR(candles, period) {
     }
     
     return { br, ar };
+}
+
+// ATR (Average True Range)
+function calculateATR(candles, period = 14) {
+    if (candles.length < period + 1) return [];
+    
+    const result = [];
+    const trValues = [];
+    
+    // Calculate True Range for each candle
+    for (let i = 1; i < candles.length; i++) {
+        const high = candles[i].high;
+        const low = candles[i].low;
+        const prevClose = candles[i-1].close;
+        
+        // True Range = max of:
+        // 1. High - Low
+        // 2. |High - Previous Close|
+        // 3. |Low - Previous Close|
+        const tr = Math.max(
+            high - low,
+            Math.abs(high - prevClose),
+            Math.abs(low - prevClose)
+        );
+        
+        trValues.push(tr);
+    }
+    
+    // Calculate initial ATR (simple average of first 'period' TR values)
+    let atr = 0;
+    for (let i = 0; i < period; i++) {
+        atr += trValues[i];
+    }
+    atr = atr / period;
+    
+    result.push({
+        time: candles[period].time,
+        value: atr
+    });
+    
+    // Calculate subsequent ATR values using smoothing (Wilder's smoothing)
+    // ATR = ((Previous ATR * (period - 1)) + Current TR) / period
+    for (let i = period; i < trValues.length; i++) {
+        atr = ((atr * (period - 1)) + trValues[i]) / period;
+        result.push({
+            time: candles[i + 1].time,
+            value: atr
+        });
+    }
+    
+    return result;
 }
