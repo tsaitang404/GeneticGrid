@@ -20,16 +20,30 @@ export function useIndicators(
     },
     ma: { 
       enabled: false, 
-      name: 'MA', 
-      zhName: '移动平均线',
-      description: '简单移动平均线(Simple Moving Average)，计算N日收盘价的算术平均值。可识别趋势方向，金叉看涨，死叉看跌。常用周期：MA7、MA25、MA99。',
+      name: 'MA(9,12,26)', 
+      zhName: '移动平均线(MACD标准)',
+      description: '简单移动平均线(Simple Moving Average)，采用MACD标准周期配置。MA9(信号线周期)、MA12(快线周期)、MA26(慢线周期)，与MACD指标完美配合，便于识别均线与MACD的共振信号。',
+      series: [] 
+    },
+    maWithMacd: { 
+      enabled: false, 
+      name: 'MA(12,26)', 
+      zhName: '移动平均线(MACD配合)',
+      description: '配合MACD指标使用的移动平均线。MA12和MA26与MACD的快慢线周期一致，便于观察均线与MACD的共振信号，提高交易准确性。',
       series: [] 
     },
     ema: { 
       enabled: false, 
-      name: 'EMA', 
-      zhName: '指数移动平均线',
-      description: '指数平滑移动平均线(Exponential Moving Average)，对近期价格赋予更高权重。相比MA更敏感，能更快反应价格变化。常用周期：EMA7、EMA25、EMA99。',
+      name: 'EMA(5,10,20)', 
+      zhName: '指数移动平均线(短期)',
+      description: '指数平滑移动平均线(Exponential Moving Average)，对近期价格赋予更高权重。短期配置：EMA5、EMA10、EMA20，反应灵敏，适合捕捉快速趋势变化。',
+      series: [] 
+    },
+    emaFib: { 
+      enabled: false, 
+      name: 'EMA(9,21,55)', 
+      zhName: '指数移动平均线(斐波那契)',
+      description: '基于斐波那契数列的EMA配置。EMA9、EMA21、EMA55符合黄金分割比例，是加密货币和量化交易中最流行的配置，TradingView默认推荐。',
       series: [] 
     },
     boll: { 
@@ -370,11 +384,22 @@ export function useIndicators(
         chart.value.addLineSeries({ color: '#FF9800', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
         chart.value.addLineSeries({ color: '#9C27B0', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
+    } else if (key === 'maWithMacd') {
+      indicators.maWithMacd.series = [
+        chart.value.addLineSeries({ color: '#2962FF', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
+      ]
     } else if (key === 'ema') {
       indicators.ema.series = [
         chart.value.addLineSeries({ color: '#00BCD4', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
         chart.value.addLineSeries({ color: '#FFC107', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
         chart.value.addLineSeries({ color: '#E91E63', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
+      ]
+    } else if (key === 'emaFib') {
+      indicators.emaFib.series = [
+        chart.value.addLineSeries({ color: '#4CAF50', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#FF5722', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#9C27B0', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
     } else if (key === 'boll') {
       indicators.boll.series = [
@@ -440,11 +465,29 @@ export function useIndicators(
       })
     }
 
+    // Update MA with MACD
+    if (results.maWithMacd && Array.isArray(indicators.maWithMacd.series)) {
+      results.maWithMacd.forEach((data: any, i: number) => {
+        if (indicators.maWithMacd.series[i]) {
+          indicators.maWithMacd.series[i].setData(data.map((d: any) => ({ time: d.time as any, value: d.value })))
+        }
+      })
+    }
+
     // Update EMA
     if (results.ema && Array.isArray(indicators.ema.series)) {
       results.ema.forEach((data: any, i: number) => {
         if (indicators.ema.series[i]) {
           indicators.ema.series[i].setData(data.map((d: any) => ({ time: d.time as any, value: d.value })))
+        }
+      })
+    }
+
+    // Update EMA Fibonacci
+    if (results.emaFib && Array.isArray(indicators.emaFib.series)) {
+      results.emaFib.forEach((data: any, i: number) => {
+        if (indicators.emaFib.series[i]) {
+          indicators.emaFib.series[i].setData(data.map((d: any) => ({ time: d.time as any, value: d.value })))
         }
       })
     }
@@ -633,7 +676,7 @@ export function useIndicators(
     indicators[key]!.enabled = !indicators[key]!.enabled
 
     // Handle main indicators (overlays on main chart)
-    if (['vol', 'ma', 'ema', 'boll', 'sar', 'supertrend', 'sr'].includes(key)) {
+    if (['vol', 'ma', 'maWithMacd', 'ema', 'emaFib', 'boll', 'sar', 'supertrend', 'sr'].includes(key)) {
       if (key === 'vol' && indicators.vol && indicators.vol.series) {
         indicators.vol.series.applyOptions({ visible: indicators.vol.enabled })
       } else if (indicators[key]!.enabled) {

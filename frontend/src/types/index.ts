@@ -67,7 +67,9 @@ export interface IndicatorConfig {
 export interface Indicators {
   vol: IndicatorConfig
   ma: IndicatorConfig
+  maWithMacd: IndicatorConfig
   ema: IndicatorConfig
+  emaFib: IndicatorConfig
   boll: IndicatorConfig
   sar: IndicatorConfig
   supertrend: IndicatorConfig

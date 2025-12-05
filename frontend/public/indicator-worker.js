@@ -10,15 +10,26 @@ self.onmessage = function(e) {
             try {
                 if (ind === 'ma') {
                     results.ma = [
-                        calculateSMA(candles, 7),
-                        calculateSMA(candles, 25),
-                        calculateSMA(candles, 99)
+                        calculateSMA(candles, 9),
+                        calculateSMA(candles, 12),
+                        calculateSMA(candles, 26)
+                    ];
+                } else if (ind === 'maWithMacd') {
+                    results.maWithMacd = [
+                        calculateSMA(candles, 12),
+                        calculateSMA(candles, 26)
                     ];
                 } else if (ind === 'ema') {
                     results.ema = [
-                        calculateEMA(candles, 7),
-                        calculateEMA(candles, 25),
-                        calculateEMA(candles, 99)
+                        calculateEMA(candles, 5),
+                        calculateEMA(candles, 10),
+                        calculateEMA(candles, 20)
+                    ];
+                } else if (ind === 'emaFib') {
+                    results.emaFib = [
+                        calculateEMA(candles, 9),
+                        calculateEMA(candles, 21),
+                        calculateEMA(candles, 55)
                     ];
                 } else if (ind === 'boll') {
                     results.boll = calculateBollingerBands(candles, 20, 2);
