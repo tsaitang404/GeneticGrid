@@ -525,17 +525,116 @@ function calculatePSY(candles, period) {
     return result;
 }
 
-// DMI (Directional Movement Index) - Simplified
-function calculateDMI(candles, period) {
+// DMI (Directional Movement Index)
+function calculateDMI(candles, period = 14) {
+    if (candles.length < period + 1) {
+        return { pdi: [], mdi: [], adx: [] };
+    }
+    
     const pdi = [];
     const mdi = [];
     const adx = [];
     
-    // Simplified implementation
-    for (let i = period; i < candles.length; i++) {
-        pdi.push({ time: candles[i].time, value: 50 });
-        mdi.push({ time: candles[i].time, value: 50 });
-        adx.push({ time: candles[i].time, value: 25 });
+    // Step 1: Calculate +DM, -DM, and TR (True Range)
+    const plusDM = [];
+    const minusDM = [];
+    const tr = [];
+    
+    for (let i = 1; i < candles.length; i++) {
+        const high = candles[i].high;
+        const low = candles[i].low;
+        const prevHigh = candles[i - 1].high;
+        const prevLow = candles[i - 1].low;
+        const prevClose = candles[i - 1].close;
+        
+        // +DM and -DM
+        const upMove = high - prevHigh;
+        const downMove = prevLow - low;
+        
+        let plusDMValue = 0;
+        let minusDMValue = 0;
+        
+        if (upMove > downMove && upMove > 0) {
+            plusDMValue = upMove;
+        }
+        if (downMove > upMove && downMove > 0) {
+            minusDMValue = downMove;
+        }
+        
+        plusDM.push(plusDMValue);
+        minusDM.push(minusDMValue);
+        
+        // True Range
+        const tr1 = high - low;
+        const tr2 = Math.abs(high - prevClose);
+        const tr3 = Math.abs(low - prevClose);
+        tr.push(Math.max(tr1, tr2, tr3));
+    }
+    
+    // Step 2: Smooth +DM, -DM, and TR using Wilder's smoothing
+    let smoothedPlusDM = plusDM.slice(0, period).reduce((a, b) => a + b, 0);
+    let smoothedMinusDM = minusDM.slice(0, period).reduce((a, b) => a + b, 0);
+    let smoothedTR = tr.slice(0, period).reduce((a, b) => a + b, 0);
+    
+    const smoothedPlusDMArray = [smoothedPlusDM];
+    const smoothedMinusDMArray = [smoothedMinusDM];
+    const smoothedTRArray = [smoothedTR];
+    
+    for (let i = period; i < plusDM.length; i++) {
+        smoothedPlusDM = smoothedPlusDM - (smoothedPlusDM / period) + plusDM[i];
+        smoothedMinusDM = smoothedMinusDM - (smoothedMinusDM / period) + minusDM[i];
+        smoothedTR = smoothedTR - (smoothedTR / period) + tr[i];
+        
+        smoothedPlusDMArray.push(smoothedPlusDM);
+        smoothedMinusDMArray.push(smoothedMinusDM);
+        smoothedTRArray.push(smoothedTR);
+    }
+    
+    // Step 3: Calculate +DI and -DI
+    const plusDI = [];
+    const minusDI = [];
+    
+    for (let i = 0; i < smoothedTRArray.length; i++) {
+        const pdiValue = smoothedTRArray[i] === 0 ? 0 : (smoothedPlusDMArray[i] / smoothedTRArray[i]) * 100;
+        const mdiValue = smoothedTRArray[i] === 0 ? 0 : (smoothedMinusDMArray[i] / smoothedTRArray[i]) * 100;
+        
+        plusDI.push(pdiValue);
+        minusDI.push(mdiValue);
+    }
+    
+    // Step 4: Calculate DX
+    const dx = [];
+    for (let i = 0; i < plusDI.length; i++) {
+        const sum = plusDI[i] + minusDI[i];
+        const dxValue = sum === 0 ? 0 : (Math.abs(plusDI[i] - minusDI[i]) / sum) * 100;
+        dx.push(dxValue);
+    }
+    
+    // Step 5: Calculate ADX (smoothed DX)
+    if (dx.length >= period) {
+        let adxValue = dx.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        
+        for (let i = 0; i < plusDI.length; i++) {
+            if (i < period - 1) {
+                // Not enough data yet
+                continue;
+            }
+            
+            if (i === period - 1) {
+                // First ADX value
+                adx.push({ time: candles[i + period].time, value: adxValue });
+            } else {
+                // Subsequent ADX values using Wilder's smoothing
+                adxValue = ((adxValue * (period - 1)) + dx[i]) / period;
+                adx.push({ time: candles[i + period].time, value: adxValue });
+            }
+        }
+    }
+    
+    // Build final result arrays
+    for (let i = 0; i < plusDI.length; i++) {
+        pdi.push({ time: candles[i + period].time, value: plusDI[i] });
+        mdi.push({ time: candles[i + period].time, value: minusDI[i] });
     }
     
     return { pdi, mdi, adx };
