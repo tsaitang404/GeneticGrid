@@ -55,7 +55,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         mapping = {
             "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
             "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H",
-            "1d": "1D", "1w": "1W", "1M": "1M",
+            "1d": "1D", "3d": "3D", "1w": "1W", "1M": "1M",
         }
         return mapping.get(bar, bar)
     
@@ -89,7 +89,9 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
-                "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w", "1M"
+                "1m", "3m", "5m", "15m", "30m",
+                "1h", "2h", "4h", "6h", "12h",
+                "1d", "3d", "1w", "1M"
             ],
             candlestick_limit=300,
             candlestick_max_history_days=None,  # 无限制

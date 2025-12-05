@@ -76,7 +76,9 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
-                "1m", "5m", "15m", "1h", "4h", "1d", "1w"  # Coinbase 支持的粒度
+                "1m", "5m", "15m", "30m",
+                "1h", "2h", "6h",
+                "1d"
             ],
             candlestick_limit=350,
             candlestick_max_history_days=None,

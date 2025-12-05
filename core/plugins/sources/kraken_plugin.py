@@ -52,7 +52,9 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
-                "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"
+                "1m", "5m", "15m", "30m",
+                "1h", "4h",
+                "1d", "1w"
             ],
             candlestick_limit=720,  # Kraken 最多返回 720 条
             candlestick_max_history_days=None,

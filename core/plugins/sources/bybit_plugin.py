@@ -52,7 +52,9 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
-                "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"
+                "1m", "3m", "5m", "15m", "30m",
+                "1h", "2h", "4h", "6h", "12h",
+                "1d", "1w", "1M"
             ],
             candlestick_limit=1000,  # Bybit 最多返回 1000 条
             candlestick_max_history_days=None,
@@ -84,11 +86,11 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
         return inst_id.replace("-", "")
     
     def _convert_bar(self, bar: str) -> str:
-        """将时间周期转换为 Bybit 格式"""
+        """将时间周期转换为 Bybit 格式（分钟数或特殊字符）"""
         mapping = {
-            "1m": "1", "5m": "5", "15m": "15", "30m": "30",
-            "1h": "60", "1H": "60", "4h": "240", "4H": "240",
-            "1d": "D", "1D": "D", "1w": "W", "1W": "W"
+            "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
+            "1h": "60", "2h": "120", "4h": "240", "6h": "360", "12h": "720",
+            "1d": "D", "1w": "W", "1M": "M"
         }
         return mapping.get(bar, "60")
     

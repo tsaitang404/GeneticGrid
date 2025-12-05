@@ -53,7 +53,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             supports_candlesticks=True,
             candlestick_granularities=[
                 "1m", "3m", "5m", "15m", "30m",
-                "1h", "2h", "4h", "6h", "8h", "12h",
+                "1h", "2h", "4h", "6h", "12h",
                 "1d", "3d", "1w", "1M"
             ],
             candlestick_limit=1000,  # Binance 最多返回 1000 条
@@ -96,11 +96,8 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         """将时间周期转换为 Binance 格式"""
         mapping = {
             "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "1H": "1h", "2h": "2h", "2H": "2h",
-            "4h": "4h", "4H": "4h", "6h": "6h", "6H": "6h",
-            "8h": "8h", "8H": "8h", "12h": "12h", "12H": "12h",
-            "1d": "1d", "1D": "1d", "3d": "3d", "3D": "3d",
-            "1w": "1w", "1W": "1w"
+            "1h": "1h", "2h": "2h", "4h": "4h", "6h": "6h", "12h": "12h",
+            "1d": "1d", "3d": "3d", "1w": "1w", "1M": "1M"
         }
         return mapping.get(bar, "1h")
     
