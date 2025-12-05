@@ -664,6 +664,100 @@ export function useIndicators(
     return Object.keys(enabledSubIndicators.value).length > 0
   })
 
+  // 计算主图指标的图例信息
+  const mainChartLegends = computed(() => {
+    const legends: Array<{ indicator: string; lines: Array<{ name: string; color: string }> }> = []
+    
+    // MA(9,12,26)
+    if (indicators.ma?.enabled) {
+      legends.push({
+        indicator: 'MA',
+        lines: [
+          { name: 'MA9', color: '#2196F3' },
+          { name: 'MA12', color: '#FF9800' },
+          { name: 'MA26', color: '#9C27B0' }
+        ]
+      })
+    }
+    
+    // MA(12,26) with MACD
+    if (indicators.maWithMacd?.enabled) {
+      legends.push({
+        indicator: 'MA',
+        lines: [
+          { name: 'MA12', color: '#2962FF' },
+          { name: 'MA26', color: '#FF6D00' }
+        ]
+      })
+    }
+    
+    // EMA(5,10,20)
+    if (indicators.ema?.enabled) {
+      legends.push({
+        indicator: 'EMA',
+        lines: [
+          { name: 'EMA5', color: '#00BCD4' },
+          { name: 'EMA10', color: '#FFC107' },
+          { name: 'EMA20', color: '#E91E63' }
+        ]
+      })
+    }
+    
+    // EMA(9,21,55) Fibonacci
+    if (indicators.emaFib?.enabled) {
+      legends.push({
+        indicator: 'EMA',
+        lines: [
+          { name: 'EMA9', color: '#4CAF50' },
+          { name: 'EMA21', color: '#FF5722' },
+          { name: 'EMA55', color: '#9C27B0' }
+        ]
+      })
+    }
+    
+    // BOLL
+    if (indicators.boll?.enabled) {
+      legends.push({
+        indicator: 'BOLL',
+        lines: [
+          { name: 'BOLL Upper', color: '#2196F3' },
+          { name: 'BOLL Mid', color: '#FFC107' },
+          { name: 'BOLL Lower', color: '#2196F3' }
+        ]
+      })
+    }
+    
+    // SAR
+    if (indicators.sar?.enabled) {
+      legends.push({
+        indicator: 'SAR',
+        lines: [{ name: 'SAR', color: '#FF6D00' }]
+      })
+    }
+    
+    // SuperTrend
+    if (indicators.supertrend?.enabled) {
+      legends.push({
+        indicator: 'SuperTrend',
+        lines: [{ name: 'SuperTrend', color: '#26a69a' }]
+      })
+    }
+    
+    // Support/Resistance
+    if (indicators.sr?.enabled) {
+      legends.push({
+        indicator: 'SR',
+        lines: [
+          { name: 'Resistance', color: '#ef5350' },
+          { name: 'Support', color: '#26a69a' }
+        ]
+      })
+    }
+    
+    // 按图例数量降序排序：图例多的在前，图例少的在后
+    return legends.sort((a, b) => b.lines.length - a.lines.length)
+  })
+
   const cleanup = (): void => {
     terminateWorker()
     Object.keys(subCharts.value).forEach(key => {
@@ -715,6 +809,7 @@ export function useIndicators(
     toggleIndicator,
     enabledSubIndicators,
     hasSubIndicators,
+    mainChartLegends,
     setSubChartRef,
     triggerWorkerCalculation,
     cleanup

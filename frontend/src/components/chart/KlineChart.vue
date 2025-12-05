@@ -127,6 +127,24 @@
 
         <div ref="mainChartRef" class="chart-wrapper" />
 
+        <!-- 主图指标图例 -->
+        <div v-if="mainChartLegends.length > 0" class="main-chart-legends">
+          <div
+            v-for="(group, index) in mainChartLegends"
+            :key="group.indicator + index"
+            class="legend-group"
+          >
+            <span
+              v-for="line in group.lines"
+              :key="line.name"
+              class="legend-item"
+              :style="{ color: line.color }"
+            >
+              {{ line.name }}
+            </span>
+          </div>
+        </div>
+
         <CandleTooltip
           v-if="tooltipData"
           :data="tooltipData"
@@ -369,6 +387,7 @@ const {
   toggleIndicator,
   enabledSubIndicators,
   hasSubIndicators,
+  mainChartLegends,
   setSubChartRef,
   triggerWorkerCalculation,
   cleanup: cleanupIndicators
@@ -1025,6 +1044,39 @@ onUnmounted(() => {
   position: relative;
   z-index: 2; /* Put chart canvas above overlay canvases */
   overflow: visible; /* Allow price axis labels to render fully */
+}
+
+.main-chart-legends {
+  position: absolute;
+  top: 8px;
+  left: 200px;
+  z-index: 15;
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  max-width: calc(100% - 220px);
+  background: rgba(19, 23, 34, 0.75);
+  padding: 8px 14px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+  user-select: none;
+}
+
+.legend-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.legend-item {
+  display: block;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .error-overlay {
