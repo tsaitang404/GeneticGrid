@@ -20,12 +20,10 @@ export function useIndicatorWorker() {
     if (worker.value) return
 
     try {
-      // 根据环境使用不同的 Worker 路径
-      const workerPath = import.meta.env.DEV 
-        ? '/indicator-worker.js' 
-        : '/static/dist/indicator-worker.js'
+      // Vite base 是 /static/dist/，所以 public 目录的文件也在这个路径下
+      const workerPath = import.meta.env.BASE_URL + 'indicator-worker.js'
       
-      worker.value = new Worker(workerPath)
+      worker.value = new Worker(workerPath, { type: 'classic' })
       
       worker.value.onmessage = (e: MessageEvent<WorkerMessage>) => {
         const { id, type, results } = e.data
@@ -41,7 +39,11 @@ export function useIndicatorWorker() {
       
       worker.value.onerror = (error) => {
         console.error('Indicator worker error:', error)
+        console.error('Worker path:', workerPath)
+        console.error('BASE_URL:', import.meta.env.BASE_URL)
       }
+      
+      console.log('✅ Indicator worker initialized:', workerPath)
     } catch (error) {
       console.error('Failed to initialize indicator worker:', error)
     }
