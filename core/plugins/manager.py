@@ -3,11 +3,15 @@
 插件管理系统
 
 负责发现、加载、注册和管理数据源插件。
+支持自动扫描 sources/ 目录下的所有 *_plugin.py 文件。
 """
 
 from typing import Dict, List, Optional, Type
 from importlib import import_module
 import logging
+import os
+import glob
+import importlib.util
 
 from .base import MarketDataSourcePlugin, PluginError, DataSourceMetadata
 
@@ -31,7 +35,94 @@ class PluginManager:
         if not self._initialized:
             self._plugins: Dict[str, MarketDataSourcePlugin] = {}
             self._plugin_classes: Dict[str, Type[MarketDataSourcePlugin]] = {}
+            self._failed_plugins: Dict[str, str] = {}  # 记录加载失败的插件
             self._initialized = True
+    
+    def auto_discover_plugins(self, sources_dir: Optional[str] = None) -> Dict[str, str]:
+        """
+        自动扫描并加载 sources 目录下的所有插件
+        
+        Args:
+            sources_dir: sources 目录路径，如果为 None 则使用默认路径
+        
+        Returns:
+            加载结果统计 {'success': count, 'failed': count, 'errors': {plugin_name: error}}
+        """
+        if sources_dir is None:
+            # 默认使用当前模块的 sources 目录
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            sources_dir = os.path.join(current_dir, 'sources')
+        
+        if not os.path.exists(sources_dir):
+            logger.warning(f"插件目录不存在: {sources_dir}")
+            return {'success': 0, 'failed': 0, 'errors': {}}
+        
+        # 查找所有 *_plugin.py 文件
+        pattern = os.path.join(sources_dir, '*_plugin.py')
+        plugin_files = glob.glob(pattern)
+        
+        success_count = 0
+        failed_count = 0
+        errors = {}
+        
+        logger.info(f"🔍 扫描插件目录: {sources_dir}")
+        logger.info(f"📦 发现 {len(plugin_files)} 个插件文件")
+        
+        for plugin_file in plugin_files:
+            plugin_name = os.path.basename(plugin_file)[:-3]  # 移除 .py
+            module_name = f"core.plugins.sources.{plugin_name}"
+            
+            try:
+                # 动态导入模块
+                module = import_module(module_name)
+                
+                # 查找插件类（以 Plugin 结尾的类）
+                plugin_class = None
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, MarketDataSourcePlugin)
+                        and attr is not MarketDataSourcePlugin
+                        and attr_name.endswith('Plugin')
+                    ):
+                        plugin_class = attr
+                        break
+                
+                if plugin_class:
+                    # 尝试实例化并注册
+                    try:
+                        instance = plugin_class()
+                        self.register_plugin(instance)
+                        success_count += 1
+                        logger.info(f"  ✅ 加载成功: {instance.display_name} ({plugin_name})")
+                    except Exception as e:
+                        failed_count += 1
+                        error_msg = f"实例化失败: {str(e)}"
+                        errors[plugin_name] = error_msg
+                        self._failed_plugins[plugin_name] = error_msg
+                        logger.error(f"  ❌ 实例化失败: {plugin_name} - {e}")
+                else:
+                    failed_count += 1
+                    error_msg = "未找到插件类"
+                    errors[plugin_name] = error_msg
+                    self._failed_plugins[plugin_name] = error_msg
+                    logger.warning(f"  ⚠️  未找到插件类: {plugin_name}")
+                    
+            except Exception as e:
+                failed_count += 1
+                error_msg = f"导入失败: {str(e)}"
+                errors[plugin_name] = error_msg
+                self._failed_plugins[plugin_name] = error_msg
+                logger.error(f"  ❌ 导入失败: {plugin_name} - {e}")
+        
+        logger.info(f"✅ 插件加载完成: 成功 {success_count}, 失败 {failed_count}")
+        
+        return {
+            'success': success_count,
+            'failed': failed_count,
+            'errors': errors
+        }
     
     def register_plugin(self, plugin_instance: MarketDataSourcePlugin) -> None:
         """
@@ -185,10 +276,15 @@ class PluginManager:
             return plugin.get_capability()
         return None
     
+    def get_failed_plugins(self) -> Dict[str, str]:
+        """获取加载失败的插件列表"""
+        return self._failed_plugins.copy()
+    
     def reset(self) -> None:
         """重置管理器（用于测试）"""
         self._plugins.clear()
         self._plugin_classes.clear()
+        self._failed_plugins.clear()
         logger.info("插件管理器已重置")
 
 
