@@ -371,6 +371,7 @@ const {
   hasSubIndicators,
   setSubChartRef,
   triggerWorkerCalculation,
+  rebuildSubCharts,
   cleanup: cleanupIndicators
 } = useIndicators(chart, subCharts, allCandles)
 
@@ -649,6 +650,7 @@ watch(symbol, (newSymbol) => {
   // 切换币对时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
   initChart()
+  rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     // 数据加载完成后重新启动自动刷新
     if (autoRefreshEnabled.value) {
@@ -663,6 +665,7 @@ watch(bar, (newBar) => {
   // 切换周期时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
   initChart()
+  rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     // 数据加载完成后重新启动自动刷新
     if (autoRefreshEnabled.value) {
@@ -676,6 +679,7 @@ watch(source, () => {
   resetSelection()
   stopAutoRefresh()
   initChart()
+  rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     if (autoRefreshEnabled.value) {
       startAutoRefresh()

@@ -538,6 +538,27 @@ export function useIndicators(
     }
   }
 
+  const rebuildSubCharts = (): void => {
+    // 重建所有已启用的副图（切换币种/周期时使用）
+    const subIndicatorKeys = ['macd', 'rsi', 'kdj', 'stochrsi', 'cci', 'dmi', 'wr', 'obv', 'trix', 'roc', 'mtm', 'dma', 'vr', 'brar', 'psy'] as const
+    
+    subIndicatorKeys.forEach(key => {
+      if (indicators[key]?.enabled && subChartRefs[key]) {
+        // 移除旧的副图
+        if (subCharts.value[key]) {
+          subCharts.value[key].remove()
+          delete subCharts.value[key]
+        }
+        // 重新初始化
+        nextTick(() => {
+          setTimeout(() => {
+            initSubChart(key)
+          }, 100)
+        })
+      }
+    })
+  }
+
   return {
     indicators,
     subChartHeights,
@@ -546,6 +567,7 @@ export function useIndicators(
     hasSubIndicators,
     setSubChartRef,
     triggerWorkerCalculation,
+    rebuildSubCharts,
     cleanup
   }
 }
