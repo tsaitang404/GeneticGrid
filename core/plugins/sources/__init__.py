@@ -8,6 +8,7 @@ from .binance_plugin import BinanceMarketPlugin
 from .coinbase_plugin import CoinbaseMarketPlugin
 from .coingecko_plugin import CoinGeckoMarketPlugin
 from .tradingview_plugin import TradingViewMarketPlugin
+from .kraken_plugin import KrakenMarketPlugin
 
 __all__ = [
     'OKXMarketPlugin',
@@ -15,4 +16,5 @@ __all__ = [
     'CoinbaseMarketPlugin',
     'CoinGeckoMarketPlugin',
     'TradingViewMarketPlugin',
+    'KrakenMarketPlugin',
 ]

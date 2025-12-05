@@ -12,6 +12,7 @@ from .plugins.sources import (
     CoinbaseMarketPlugin,
     CoinGeckoMarketPlugin,
     TradingViewMarketPlugin,
+    KrakenMarketPlugin,
 )
 import logging
 
@@ -29,6 +30,7 @@ def initialize_plugins():
         CoinbaseMarketPlugin,
         CoinGeckoMarketPlugin,
         TradingViewMarketPlugin,
+        KrakenMarketPlugin,
     ]
     
     for plugin_class in plugins_to_register:
