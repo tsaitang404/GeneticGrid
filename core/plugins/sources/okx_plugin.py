@@ -121,8 +121,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     def _get_proxies(self) -> dict:
         """获取代理配置"""
         try:
-            from core.proxy_config import get_okx_proxy
-            proxy = get_okx_proxy()
+            from core.proxy_config import get_proxy
+            proxy = get_proxy()
             if proxy:
                 return {'http': proxy, 'https': proxy}
         except Exception as e:
