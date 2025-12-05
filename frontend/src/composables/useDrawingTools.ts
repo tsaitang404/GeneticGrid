@@ -17,6 +17,9 @@ export function useDrawingTools(
   const editingDrawing = ref<Drawing | null>(null) // 正在编辑的线条
   const editingPointIndex = ref<number>(-1) // 正在编辑的控制点索引
   const isDragging = ref<boolean>(false) // 是否正在拖拽
+  const DEFAULT_PARALLEL_LINE_COUNT = 2
+  const MAX_PARALLEL_LINE_COUNT = 10
+  const parallelLineCount = ref<number>(DEFAULT_PARALLEL_LINE_COUNT)
   let suppressNextClick = false
   const DELETE_TOLERANCE = 8
   type PriceLineHandle = ReturnType<NonNullable<ISeriesApi<'Candlestick'>['createPriceLine']>>
@@ -27,6 +30,31 @@ export function useDrawingTools(
 
   const horizontalPriceLines = new Map<Drawing, HorizontalPriceLineRef>()
   const horizontalPriceLabels = new Map<Drawing, HTMLDivElement>()
+
+  const clampParallelLineCount = (value: number): number => {
+    const num = Number.isFinite(value) ? Math.round(value) : DEFAULT_PARALLEL_LINE_COUNT
+    if (Number.isNaN(num)) return DEFAULT_PARALLEL_LINE_COUNT
+    return Math.min(MAX_PARALLEL_LINE_COUNT, Math.max(2, num))
+  }
+
+  const resolveParallelLineCount = (drawing?: Drawing | null): number => {
+    if (!drawing) return parallelLineCount.value
+    const metaValue = drawing.meta?.parallelLineCount
+    return clampParallelLineCount(metaValue ?? parallelLineCount.value)
+  }
+
+  const setParallelLineCount = (value: number): number => {
+    const clamped = clampParallelLineCount(value)
+    parallelLineCount.value = clamped
+    if (currentDrawing.value?.type === 'parallel') {
+      currentDrawing.value.meta = {
+        ...(currentDrawing.value.meta ?? {}),
+        parallelLineCount: clamped
+      }
+      renderDrawings()
+    }
+    return clamped
+  }
 
   const distanceSquared = (a: ScreenPoint, b: ScreenPoint): number => {
     const dx = a.x - b.x
@@ -60,6 +88,17 @@ export function useDrawingTools(
 
       if (screenPoints.some(p => distanceSquared(p, point) <= toleranceSquared)) {
         return drawing
+      }
+
+      if (drawing.type === 'parallel') {
+        const lineCount = resolveParallelLineCount(drawing)
+        const segments = buildParallelSegments(drawing.points, lineCount)
+        for (const segment of segments) {
+          if (distanceToSegmentSquared(point, segment.start, segment.end) <= toleranceSquared) {
+            return drawing
+          }
+        }
+        continue
       }
 
       if (drawing.type === 'horizontal' && screenPoints[0]) {
@@ -103,6 +142,19 @@ export function useDrawingTools(
     return null
   }
 
+  const requiredPointsForType = (type: DrawingType): number => {
+    switch (type) {
+      case 'horizontal':
+        return 1
+      case 'parallel':
+        return 3
+      case 'line':
+      case 'ray':
+      default:
+        return 2
+    }
+  }
+
   const beginControlPointEdit = (
     controlPoint: { drawing: Drawing, pointIndex: number },
     toolType: DrawingType,
@@ -133,7 +185,7 @@ export function useDrawingTools(
   ): { drawing: Drawing, pointIndex: number, toolType: DrawingType } | null => {
     const suppressClick = options?.suppressUpcomingClick ?? false
     const shouldStartEdit = options?.startEdit ?? true
-    for (const toolType of ['line', 'ray', 'horizontal'] as DrawingType[]) {
+  for (const toolType of ['line', 'ray', 'horizontal', 'parallel'] as DrawingType[]) {
       const controlPoint = findControlPoint(screenPoint, toolType)
       if (controlPoint) {
         if (shouldStartEdit) {
@@ -329,6 +381,55 @@ export function useDrawingTools(
     return { x, y: y as number }
   }
 
+  const buildParallelSegments = (points: LogicalPoint[], lineCount: number): Array<{ start: ScreenPoint, end: ScreenPoint }> => {
+    if (points.length < 2) return []
+
+    const first = logicalToPoint(points[0])
+    const second = logicalToPoint(points[1])
+    if (!first || !second) return []
+
+    const dx = second.x - first.x
+    const dy = second.y - first.y
+    const length = Math.hypot(dx, dy)
+    if (length < 0.5) return []
+
+    const normalX = -dy / length
+    const normalY = dx / length
+
+    let offsetTotal = 0
+    if (points.length >= 3) {
+      const third = logicalToPoint(points[2])
+      if (third) {
+        offsetTotal = (third.x - first.x) * normalX + (third.y - first.y) * normalY
+      }
+    }
+
+    const clampedCount = Math.max(1, Math.min(MAX_PARALLEL_LINE_COUNT, Math.round(lineCount)))
+    const segments: Array<{ start: ScreenPoint, end: ScreenPoint }> = []
+
+    if (clampedCount <= 1) {
+      segments.push({ start: first, end: second })
+      return segments
+    }
+
+    if (Math.abs(offsetTotal) < 0.001) {
+      // 无偏移时只绘制基础线
+      segments.push({ start: first, end: second })
+      return segments
+    }
+
+    const step = offsetTotal / (clampedCount - 1)
+    for (let i = 0; i < clampedCount; i++) {
+      const offset = step * i
+      segments.push({
+        start: { x: first.x + normalX * offset, y: first.y + normalY * offset },
+        end: { x: second.x + normalX * offset, y: second.y + normalY * offset }
+      })
+    }
+
+    return segments
+  }
+
   const renderDrawings = (): void => {
     if (!canvasRef.value || !chart.value) return
     
@@ -378,10 +479,16 @@ export function useDrawingTools(
       if (
         isCurrent &&
         previewPoint.value &&
-        (d.type === 'line' || d.type === 'ray') &&
         basePoints.length >= 1
       ) {
-        pointsForRendering = [basePoints[0], previewPoint.value]
+        if (d.type === 'line' || d.type === 'ray') {
+          pointsForRendering = [basePoints[0], previewPoint.value]
+        } else if (d.type === 'parallel') {
+          const requiredPoints = requiredPointsForType('parallel')
+          if (basePoints.length < requiredPoints) {
+            pointsForRendering = [...basePoints, previewPoint.value]
+          }
+        }
       }
 
       ctx.beginPath()
@@ -407,6 +514,15 @@ export function useDrawingTools(
         if (p1) {
           ctx.moveTo(0, p1.y)
           ctx.lineTo(width, p1.y)
+        }
+      } else if (d.type === 'parallel') {
+        if (pointsForRendering.length >= 2) {
+          const lineCount = resolveParallelLineCount(d)
+          const segments = buildParallelSegments(pointsForRendering, lineCount)
+          segments.forEach(segment => {
+            ctx.moveTo(segment.start.x, segment.start.y)
+            ctx.lineTo(segment.end.x, segment.end.y)
+          })
         }
       }
 
@@ -514,7 +630,10 @@ export function useDrawingTools(
 
     // 正常画线逻辑
     if (!currentDrawing.value) {
-      currentDrawing.value = { type: currentTool.value, points: [logical] }
+      const meta = currentTool.value === 'parallel'
+        ? { parallelLineCount: parallelLineCount.value }
+        : undefined
+      currentDrawing.value = { type: currentTool.value, points: [logical], meta }
       previewPoint.value = logical
       if (currentTool.value === 'horizontal') {
         const finalized = currentDrawing.value
@@ -524,11 +643,21 @@ export function useDrawingTools(
         currentDrawing.value = null
         previewPoint.value = null
       }
-    } else {
+    } else if (currentDrawing.value.type === currentTool.value) {
       currentDrawing.value.points.push(logical)
-      drawings.push(currentDrawing.value)
-      currentDrawing.value = null
-      previewPoint.value = null
+      const requiredPoints = requiredPointsForType(currentDrawing.value.type)
+      if (currentDrawing.value.points.length >= requiredPoints) {
+        const finalized = currentDrawing.value
+        drawings.push(finalized)
+        if (finalized.type === 'horizontal') {
+          ensureHorizontalPriceLine(finalized)
+          updateHorizontalLabelPosition(finalized)
+        }
+        currentDrawing.value = null
+        previewPoint.value = null
+      } else {
+        previewPoint.value = logical
+      }
     }
 
     renderDrawings()
@@ -698,16 +827,29 @@ export function useDrawingTools(
   const updatePreviewFromPointer = (clientX: number, clientY: number) => {
     if (!currentDrawing.value) return
     if (isDragging.value) return
-    if (currentDrawing.value.type !== 'line' && currentDrawing.value.type !== 'ray') return
+
+    const type = currentDrawing.value.type
+    if (type !== 'line' && type !== 'ray' && type !== 'parallel') return
 
     const logical = getLogicalFromClient(clientX, clientY)
-    if (logical) {
+    if (!logical) {
+      if (previewPoint.value !== null) {
+        previewPoint.value = null
+        renderDrawings()
+      }
+      return
+    }
+
+    if (type === 'parallel') {
+      const stage = currentDrawing.value.points.length
+      if (stage === 0) return
       previewPoint.value = logical
       renderDrawings()
-    } else if (previewPoint.value !== null) {
-      previewPoint.value = null
-      renderDrawings()
+      return
     }
+
+    previewPoint.value = logical
+    renderDrawings()
   }
 
   const handleGlobalMouseMove = (e: MouseEvent) => {
@@ -823,6 +965,8 @@ export function useDrawingTools(
     toolbarExpanded,
     drawings,
     clearDrawings,
+    parallelLineCount,
+    setParallelLineCount,
     renderDrawings,
     handleCanvasMouseDown
   }

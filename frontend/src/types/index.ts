@@ -48,9 +48,14 @@ export interface ScreenPoint {
   y: number
 }
 
+export interface DrawingMeta {
+  parallelLineCount?: number
+}
+
 export interface Drawing {
   type: DrawingType
   points: LogicalPoint[]
+  meta?: DrawingMeta
 }
 
 // Indicator config types
