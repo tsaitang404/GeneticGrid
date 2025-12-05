@@ -5,7 +5,7 @@ from django.views.generic import TemplateView
 from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
-from .proxy_config import is_proxy_available, get_proxy_url, get_okx_proxy, PROXY_CONFIG
+from .proxy_config import is_proxy_available, get_proxy_url, get_proxy, PROXY_CONFIG
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
 from .plugins.base import PluginError
@@ -163,7 +163,7 @@ def api_proxy_status(request):
                 'available': is_proxy_available('http'),
                 'url': get_proxy_url('http'),
             },
-            'okx_proxy': get_okx_proxy(),
+            'proxy': get_proxy(),
         }
         
         return JsonResponse({
