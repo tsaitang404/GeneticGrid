@@ -122,9 +122,9 @@ def api_ticker(request):
         
         # 日志标记数据来源
         if service.is_using_plugin:
-            logger.debug(f"📦 使用插件获取行情 {source}/{inst_id}")
+            logger.debug(f"📦 使用插件获取行情 {source}/{symbol}")
         else:
-            logger.debug(f"🔧 使用旧服务获取行情 {source}/{inst_id}")
+            logger.debug(f"🔧 使用旧服务获取行情 {source}/{symbol}")
         
         response = JsonResponse({
             'code': 0,
