@@ -2,12 +2,17 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import cache_page
 from django.views.generic import TemplateView
-from .services import get_market_service, MarketAPIError, MARKET_SERVICES
+from .services import MarketAPIError, MARKET_SERVICES
+from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
 from .proxy_config import is_proxy_available, get_proxy_url, get_okx_proxy, PROXY_CONFIG
+from .plugins.manager import get_plugin_manager
+from .plugins.documentation import DocumentationGenerator
+from .plugins.base import PluginError
 import os
 from pathlib import Path
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +109,21 @@ def api_ticker(request):
     source = request.GET.get('source', 'okx')
     
     try:
-        service = get_market_service(source)
+        # 使用统一服务（优先插件系统）
+        service = get_unified_service(source)
         ticker = service.get_ticker(inst_id=inst_id)
+        
+        # 日志标记数据来源
+        if service.is_using_plugin:
+            logger.debug(f"📦 使用插件获取行情 {source}/{inst_id}")
+        else:
+            logger.debug(f"🔧 使用旧服务获取行情 {source}/{inst_id}")
+        
         response = JsonResponse({
             'code': 0,
             'data': ticker,
             'source': source,
+            'using_plugin': service.is_using_plugin,
         })
         response['Cache-Control'] = 'public, max-age=3'  # 行情缓存3秒
         return response
@@ -150,6 +164,87 @@ def api_proxy_status(request):
         })
     except Exception as e:
         logger.error(f"获取代理状态失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)
+
+
+def api_sources(request):
+    """数据源列表 API - 返回所有已注册的数据源及其能力"""
+    try:
+        manager = get_plugin_manager()
+        sources = {}
+        
+        for name, plugin in manager.get_all_plugins().items():
+            metadata = plugin.get_metadata()
+            capability = plugin.get_capability()
+            
+            sources[name] = {
+                'metadata': metadata.to_dict(),
+                'capability': capability.to_dict(),
+            }
+        
+        return JsonResponse({
+            'code': 0,
+            'data': sources,
+            'total': len(sources),
+        })
+    except Exception as e:
+        logger.error(f"获取数据源列表失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)
+
+
+def api_source_capabilities(request, source_name):
+    """获取指定数据源的详细能力 API"""
+    try:
+        manager = get_plugin_manager()
+        plugin = manager.get_plugin(source_name)
+        
+        if not plugin:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 "{source_name}" 不存在',
+            }, status=404)
+        
+        metadata = plugin.get_metadata()
+        capability = plugin.get_capability()
+        
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'name': source_name,
+                'metadata': metadata.to_dict(),
+                'capability': capability.to_dict(),
+                'documentation': DocumentationGenerator.generate_plugin_doc(plugin),
+            }
+        })
+    except Exception as e:
+        logger.error(f"获取数据源能力失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)
+
+
+def api_source_documentation(request):
+    """获取所有数据源的文档 API"""
+    try:
+        manager = get_plugin_manager()
+        doc = DocumentationGenerator.generate_all_plugins_doc(manager)
+        
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'markdown': doc,
+                'json': DocumentationGenerator.generate_capabilities_json(manager),
+            }
+        })
+    except Exception as e:
+        logger.error(f"生成文档失败: {e}")
         return JsonResponse({
             'code': -1,
             'error': str(e),
