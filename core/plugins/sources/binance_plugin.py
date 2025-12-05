@@ -3,7 +3,7 @@
 币安交易所数据源插件
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 import logging
 import requests
@@ -17,6 +17,7 @@ from ..base import (
     SourceType,
     PluginError,
 )
+from core.proxy_config import get_proxy
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             last_updated=datetime(2025, 12, 5),
             is_active=True,
             is_experimental=False,
-            requires_proxy=False,  # 币安全球可直连
+            requires_proxy=True,  # 币安在某些地区被墙
         )
     
     def _get_capability(self) -> Capability:
@@ -71,7 +72,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             symbol_format="BTCUSDT",  # 币安格式
             requires_api_key=False,
             requires_authentication=False,
-            requires_proxy=False,
+            requires_proxy=True,
             has_rate_limit=True,
             rate_limit_per_minute=1200,
             supports_real_time=False,
@@ -80,13 +81,24 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     
     @property
     def _get_session(self):
-        """获取 requests session"""
+        """获取 requests session，自动配置代理"""
         if self._session is None:
             self._session = requests.Session()
             self._session.headers.update({
                 'User-Agent': 'GeneticGrid/2.0'
             })
+            # 配置代理
+            self._session.proxies = self._get_proxies()
         return self._session
+    
+    def _get_proxies(self) -> Dict[str, str]:
+        """获取代理配置"""
+        proxy = get_proxy()
+        if proxy:
+            logger.info(f"Binance 使用代理: {proxy}")
+            return {"http": proxy, "https": proxy}
+        logger.warning("Binance 未配置代理，可能无法访问")
+        return {}
     
     def _convert_symbol(self, inst_id: str) -> str:
         """将标准格式转换为 Binance 格式: BTC-USDT -> BTCUSDT"""

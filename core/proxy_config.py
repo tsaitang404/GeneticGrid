@@ -115,10 +115,10 @@ def get_proxy_dict() -> Dict[str, str]:
     return {}
 
 
-def get_okx_proxy() -> Optional[str]:
-    """获取 OKX SDK 代理配置
+def get_proxy() -> Optional[str]:
+    """获取通用代理配置（用于所有需要代理的插件）
     
-    OKX SDK 支持:
+    支持:
     - HTTP/HTTPS 代理: 'http://host:port'
     - SOCKS5 代理: 'socks5://host:port'
     """
@@ -168,8 +168,8 @@ def print_proxy_status():
     print(f"HTTP: {http_config['host']}:{http_config['port']} - {'✅ 可用' if http_available else '❌ 不可用'}")
     
     # 实际使用的代理
-    okx_proxy = get_okx_proxy()
-    print(f"OKX SDK 代理: {okx_proxy or '未配置'}")
+    proxy = get_proxy()
+    print(f"通用代理: {proxy or '未配置'}")
     
     proxy_dict = get_proxy_dict()
     print(f"Requests/HTTPX 代理: {proxy_dict or '未配置'}")
