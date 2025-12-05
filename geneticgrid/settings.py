@@ -12,6 +12,18 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# 代理配置
+# 支持环境变量：
+#   SOCKS5_PROXY_HOST (默认: 127.0.0.1)
+#   SOCKS5_PROXY_PORT (默认: 1080)
+#   HTTP_PROXY_HOST (默认: 127.0.0.1)
+#   HTTP_PROXY_PORT (默认: 8080)
+PROXY_ENABLED = os.environ.get('PROXY_ENABLED', 'true').lower() in ('true', '1', 'yes')
+SOCKS5_PROXY_HOST = os.environ.get('SOCKS5_PROXY_HOST', '127.0.0.1')
+SOCKS5_PROXY_PORT = int(os.environ.get('SOCKS5_PROXY_PORT', 1080))
+HTTP_PROXY_HOST = os.environ.get('HTTP_PROXY_HOST', '127.0.0.1')
+HTTP_PROXY_PORT = int(os.environ.get('HTTP_PROXY_PORT', 8080))
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',

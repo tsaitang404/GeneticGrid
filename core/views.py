@@ -4,6 +4,7 @@ from django.views.decorators.cache import cache_page
 from django.views.generic import TemplateView
 from .services import get_market_service, MarketAPIError, MARKET_SERVICES
 from .cache_service import CandlestickCacheService
+from .proxy_config import is_proxy_available, get_proxy_url, get_okx_proxy, PROXY_CONFIG
 import os
 from pathlib import Path
 import logging
@@ -117,4 +118,39 @@ def api_ticker(request):
             'code': -1,
             'error': str(e),
             'source': source,
+        }, status=500)
+
+
+def api_proxy_status(request):
+    """代理状态 API"""
+    try:
+        socks5_config = PROXY_CONFIG['socks5']
+        http_config = PROXY_CONFIG['http']
+        
+        status = {
+            'proxy_enabled': True,
+            'socks5': {
+                'host': socks5_config['host'],
+                'port': socks5_config['port'],
+                'available': is_proxy_available('socks5'),
+                'url': get_proxy_url('socks5'),
+            },
+            'http': {
+                'host': http_config['host'],
+                'port': http_config['port'],
+                'available': is_proxy_available('http'),
+                'url': get_proxy_url('http'),
+            },
+            'okx_proxy': get_okx_proxy(),
+        }
+        
+        return JsonResponse({
+            'code': 0,
+            'data': status,
+        })
+    except Exception as e:
+        logger.error(f"获取代理状态失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
         }, status=500)
