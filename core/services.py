@@ -1,4 +1,4 @@
-# 行情服务 - 支持多数据源
+# 行情服务 - 支持多数据源（仅供插件使用的适配层）
 import os
 import requests
 from requests.adapters import HTTPAdapter
@@ -30,6 +30,11 @@ def get_session():
 class MarketAPIError(Exception):
     """行情 API 调用异常"""
     pass
+
+
+# ============================================================================
+# 以下服务类仅作为插件的适配层使用，建议直接在插件中实现API调用
+# ============================================================================
 
 
 class BinanceMarketService:
@@ -449,7 +454,11 @@ class OKXMarketService:
         return data[0]
 
 
-# 数据源工厂
+# ============================================================================
+# 数据源工厂 - 已废弃，请使用插件系统
+# ============================================================================
+
+# 保留用于向后兼容
 MARKET_SERVICES = {
     "coinbase": CoinbaseMarketService,
     "tradingview": TradingViewMarketService,
@@ -460,7 +469,15 @@ MARKET_SERVICES = {
 
 
 def get_market_service(source: str = "okx"):
-    """获取指定数据源的行情服务"""
+    """
+    获取指定数据源的行情服务
+    
+    ⚠️ 已废弃: 请使用插件系统
+    from core.plugins.manager import get_plugin_manager
+    manager = get_plugin_manager()
+    plugin = manager.get_plugin('okx')
+    """
+    logger.warning(f"⚠️ get_market_service() 已废弃，请使用插件系统")
     service_class = MARKET_SERVICES.get(source.lower())
     if not service_class:
         raise MarketAPIError(f"不支持的数据源: {source}")
