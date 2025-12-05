@@ -406,7 +406,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         
         // Preload more history data for smooth scrolling (but not for timeline)
         if (!isTimeline && allCandles.value.length < 10000 && hasMoreData.value) {
-          console.log('🔄 Preloading additional 10000 candles for buffer...')
+          console.log('🔄 Preloading additional 10000 candles for buffer... (current:', allCandles.value.length, ')')
           // Use setTimeout to avoid blocking initial render
           setTimeout(() => {
             loadMoreHistory(10000)
@@ -614,6 +614,20 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     const shouldLoadHistory = hasMoreData.value && !isLoadingMore.value && visibleFromIndex < bufferZone
     const shouldLoadNewer = hasNewerData.value && !isLoadingNewer.value && visibleToIndex > allCandles.value.length - bufferZone
     
+    // Debug logging
+    if (visibleFromIndex < bufferZone || visibleToIndex > allCandles.value.length - bufferZone) {
+      console.log('📍 Scroll check:', {
+        visibleFromIndex,
+        visibleToIndex,
+        total: allCandles.value.length,
+        bufferZone,
+        hasMoreData: hasMoreData.value,
+        isLoadingMore: isLoadingMore.value,
+        shouldLoadHistory,
+        shouldLoadNewer
+      })
+    }
+    
     if (shouldLoadHistory || shouldLoadNewer) {
       // Debounce: wait 50ms to avoid loading during active dragging (reduced for faster response)
       loadDebounceTimer = window.setTimeout(() => {
@@ -675,7 +689,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   }
 
   const loadMoreHistory = async (count: number): Promise<void> => {
+    console.log('📥 loadMoreHistory called:', { count, isLoadingMore: isLoadingMore.value, hasMoreData: hasMoreData.value, oldestTimestamp: oldestTimestamp.value })
+    
     if (isLoadingMore.value || !hasMoreData.value) {
+      console.log('⏭️ Skipping load - already loading or no more data')
       return
     }
     

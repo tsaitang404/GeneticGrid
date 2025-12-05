@@ -159,6 +159,15 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         """获取 K线数据的内部实现（已转换为 OKX 格式）
         
         API 文档: https://www.okx.com/docs-v5/en/#rest-api-market-data-get-candlesticks
+        
+        OKX API 参数说明：
+        - 返回数据是倒序的（最新在前，最旧在后）
+        - before: 请求此bar时间戳之前的分页内容（用于向后翻页，获取更晚的数据）
+        - after: 请求此bar时间戳之后的分页内容（用于向前翻页，获取更早的数据）
+        
+        注意：OKX 的 before/after 是分页参数，与时间方向相反！
+        - 要获取历史数据（更早），使用 after 参数
+        - 要获取更新数据（更晚），使用 before 参数
         """
         try:
             params = {
@@ -167,7 +176,9 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
                 "limit": str(min(limit, 300))
             }
             if before:
-                params["before"] = str(before)  # 已转换为毫秒
+                # before 参数用于获取历史数据，所以实际应该使用 OKX 的 after 参数
+                # before 参数已在 _normalize_timestamp 中转换为毫秒
+                params["after"] = str(before)
             
             result = self._request("/market/candles", params)
             
@@ -176,9 +187,10 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             
             data = result.get("data", [])
             if not data:
-                raise PluginError("OKX 返回数据为空")
+                return []  # 返回空列表而不是抛出异常
             
             candles = []
+            # OKX 返回倒序数据（最新在前），我们反转为正序（最旧在前）
             for item in reversed(data):
                 candles.append(CandleData(
                     time=int(item[0]) // 1000,  # 毫秒转秒
