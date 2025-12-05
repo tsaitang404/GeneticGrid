@@ -362,6 +362,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   }
 
   const loadCandlesticks = async (): Promise<void> => {
+    // 清除之前的错误状态
+    if (options.onError) {
+      options.onError({ show: false, message: '' })
+    }
     if (options.onLoading) options.onLoading(true)
 
     try {

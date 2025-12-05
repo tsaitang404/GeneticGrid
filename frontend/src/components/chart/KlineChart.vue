@@ -677,6 +677,7 @@ const jumpToLatest = (): void => {
 // Watch for symbol and bar changes to emit events
 watch(symbol, (newSymbol) => {
   resetSelection()
+  chartError.value = { show: false, message: '' } // 清除错误状态
   emit('symbol-change', newSymbol)
   // 切换币对时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
@@ -691,6 +692,7 @@ watch(symbol, (newSymbol) => {
 
 watch(bar, (newBar) => {
   resetSelection()
+  chartError.value = { show: false, message: '' } // 清除错误状态
   emit('bar-change', newBar)
   // 切换周期时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
@@ -706,6 +708,7 @@ watch(bar, (newBar) => {
 // Watch for source changes to reload data
 watch(source, () => {
   resetSelection()
+  chartError.value = { show: false, message: '' } // 清除错误状态
   stopAutoRefresh()
   initChart()
   loadCandlesticks().then(() => {
