@@ -35,7 +35,7 @@ def api_candlesticks(request):
     inst_id = request.GET.get('symbol', 'BTC-USDT')
     bar = request.GET.get('bar', '1H')
     limit = int(request.GET.get('limit', 100))
-    source = request.GET.get('source', 'tradingview')
+    source = request.GET.get('source', 'okx')
     before = request.GET.get('before')  # 获取该时间戳之前的数据（毫秒）
     after = request.GET.get('after')    # 获取该时间戳之后的数据（毫秒）
     
@@ -101,7 +101,7 @@ def api_candlesticks(request):
 def api_ticker(request):
     """最新行情 API"""
     inst_id = request.GET.get('symbol', 'BTC-USDT')
-    source = request.GET.get('source', 'binance')
+    source = request.GET.get('source', 'okx')
     
     try:
         service = get_market_service(source)
