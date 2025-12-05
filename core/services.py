@@ -3,12 +3,16 @@ import os
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from .proxy_config import configure_requests_proxies, get_okx_proxy
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 全局 Session 复用连接池
 _session = None
 
 def get_session():
-    """获取复用的 requests session，带连接池和重试"""
+    """获取复用的 requests session，带连接池、重试和代理支持"""
     global _session
     if _session is None:
         _session = requests.Session()
@@ -17,6 +21,9 @@ def get_session():
         adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=retry)
         _session.mount('https://', adapter)
         _session.mount('http://', adapter)
+        
+        # 配置代理
+        configure_requests_proxies(_session)
     return _session
 
 
@@ -247,14 +254,24 @@ class OKXMarketService:
 
     def __init__(self, proxy=None):
         import okx.MarketData as MarketData
-        self.proxy = proxy or os.environ.get('OKX_PROXY')
+        
+        # 如果没有提供代理，使用配置模块的代理
+        if proxy is None:
+            proxy = get_okx_proxy()
+        
+        self.proxy = proxy
+        logger.info(f"OKX Market Service 初始化，代理: {proxy or '无'}")
         
         try:
-            self.market_api = MarketData.MarketAPI(
-                flag="0",
-                proxy=self.proxy,
-            )
-        except Exception:
+            if proxy:
+                self.market_api = MarketData.MarketAPI(
+                    flag="0",
+                    proxy=proxy,
+                )
+            else:
+                self.market_api = MarketData.MarketAPI(flag="0")
+        except Exception as e:
+            logger.warning(f"OKX MarketAPI 初始化失败，尝试不使用代理: {e}")
             self.market_api = MarketData.MarketAPI(flag="0")
 
     def get_candlesticks(self, inst_id: str = "BTC-USDT", bar: str = "1H", limit: int = 100, before: int = None):
