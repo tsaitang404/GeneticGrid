@@ -11,7 +11,7 @@ export function useIndicators(
   const { calculateIndicators, terminateWorker } = useIndicatorWorker()
   
   const indicators = reactive<Partial<Indicators>>({
-    vol: { enabled: true, name: 'VOL', series: null },
+    vol: { enabled: true, name: 'VOL', series: null }, // 默认指标，始终显示
     ma: { enabled: false, name: 'MA', series: [] },
     ema: { enabled: false, name: 'EMA', series: [] },
     boll: { enabled: false, name: 'BOLL', series: [] },
@@ -496,6 +496,10 @@ export function useIndicators(
 
   const toggleIndicator = (key: keyof Indicators): void => {
     if (!indicators[key]) return
+    
+    // VOL 是默认指标，不允许禁用
+    if (key === 'vol') return
+    
     indicators[key]!.enabled = !indicators[key]!.enabled
 
     // Handle main indicators (overlays on main chart)
