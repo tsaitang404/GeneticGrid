@@ -1,8 +1,10 @@
 import { ref, onUnmounted, watch, type Ref } from 'vue'
 import { createChart, type IChartApi, type ISeriesApi, ColorType } from 'lightweight-charts'
 import type { Candle, ChartOptions, APIResponse } from '@/types'
+import { useTimeScaleSync } from './useTimeScaleSync'
 
 export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOptions) {
+  const { isSyncingTimeScale } = useTimeScaleSync()
   const chart = ref<IChartApi | null>(null)
   const subCharts = ref<Record<string, IChartApi>>({})
   const candleSeries = ref<ISeriesApi<'Candlestick'> | null>(null)
@@ -32,7 +34,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   
   let chartObserver: ResizeObserver | null = null
   let refreshInterval: number | null = null
-  let isSyncingTimeScale = false // Prevent circular time scale sync
   let loadDebounceTimer: number | null = null // Debounce timer for loading
   let latestPriceLabelEl: HTMLDivElement | null = null
   let latestPriceValue: number | null = null
@@ -333,19 +334,19 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     // Subscribe to visible range changes for auto-loading and syncing sub-charts
     chart.value.timeScale().subscribeVisibleLogicalRangeChange((range) => {
       // Prevent infinite loop from sub-chart sync
-      if (isSyncingTimeScale) return
+      if (isSyncingTimeScale.value) return
       
       onVisibleRangeChange(range)
       
       // Sync all sub-charts time scale with main chart
       if (range) {
-        isSyncingTimeScale = true
+        isSyncingTimeScale.value = true
         Object.values(subCharts.value).forEach(subChart => {
           if (subChart) {
             subChart.timeScale().setVisibleLogicalRange(range)
           }
         })
-        isSyncingTimeScale = false
+        isSyncingTimeScale.value = false
       }
     })
 
