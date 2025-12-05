@@ -219,6 +219,11 @@ class MarketDataSourcePlugin(ABC):
     数据源插件基类
     
     所有数据源都必须继承此类并实现所有抽象方法。
+    
+    协议约定：
+    - 交易对格式：统一使用无分隔符格式，如 "BTCUSDT"
+    - 时间粒度：统一使用小写格式，如 "1m", "1h", "1d"
+    - 时间戳：统一使用秒级 Unix 时间戳
     """
     
     def __init__(self):
@@ -236,7 +241,62 @@ class MarketDataSourcePlugin(ABC):
         """获取数据源能力（由子类实现）"""
         pass
     
+    def _normalize_symbol(self, symbol: str) -> str:
+        """标准化交易对格式（由子类覆盖实现内部转换）
+        
+        输入：标准格式 "BTCUSDT"
+        输出：数据源特定格式，如 "BTC-USDT" (OKX), "BTCUSDT" (Binance)
+        
+        默认实现：直接返回，适用于无分隔符格式的数据源
+        """
+        return symbol
+    
+    def _normalize_granularity(self, bar: str) -> str:
+        """标准化时间粒度格式（由子类覆盖实现内部转换）
+        
+        输入：标准格式 "1h", "1d"
+        输出：数据源特定格式，如 "1H" (OKX), "60" (Bybit)
+        
+        默认实现：直接返回
+        """
+        return bar
+    
+    def _normalize_timestamp(self, timestamp: Optional[int]) -> Optional[int]:
+        """标准化时间戳（由子类覆盖实现内部转换）
+        
+        输入：秒级 Unix 时间戳
+        输出：数据源特定格式（秒或毫秒）
+        
+        默认实现：直接返回秒级时间戳
+        """
+        return timestamp
+    
+    def _denormalize_timestamp(self, timestamp: int) -> int:
+        """反标准化时间戳（由子类覆盖实现）
+        
+        输入：数据源返回的时间戳
+        输出：标准秒级 Unix 时间戳
+        
+        默认实现：直接返回
+        """
+        return timestamp
+    
     @abstractmethod
+    def _get_candlesticks_impl(
+        self,
+        symbol: str,
+        bar: str,
+        limit: int = 100,
+        before: Optional[int] = None,
+    ) -> List[CandleData]:
+        """获取 K线数据的内部实现（由子类实现，使用数据源格式）"""
+        pass
+    
+    @abstractmethod
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
+        """获取行情数据的内部实现（由子类实现，使用数据源格式）"""
+        pass
+    
     def get_candlesticks(
         self,
         symbol: str,
@@ -245,29 +305,40 @@ class MarketDataSourcePlugin(ABC):
         before: Optional[int] = None,
     ) -> List[CandleData]:
         """
-        获取 K线数据
+        获取 K线数据（统一接口）
         
         Args:
-            symbol: 交易对，如 "BTC-USDT"
-            bar: 时间粒度，如 "1h"
+            symbol: 交易对（标准格式："BTCUSDT"）
+            bar: 时间粒度（标准格式："1h", "1d"）
             limit: 返回条数
-            before: 之前的 Unix 时间戳（用于分页）
+            before: 之前的 Unix 时间戳（秒）
         
         Returns:
-            K线数据列表
+            K线数据列表（时间戳已标准化为秒）
         
         Raises:
             PluginError: 如果数据源不支持或发生错误
         """
-        pass
+        # 转换为数据源格式
+        source_symbol = self._normalize_symbol(symbol)
+        source_bar = self._normalize_granularity(bar)
+        source_before = self._normalize_timestamp(before)
+        
+        # 调用子类实现
+        candles = self._get_candlesticks_impl(source_symbol, source_bar, limit, source_before)
+        
+        # 确保时间戳标准化
+        for candle in candles:
+            candle.time = self._denormalize_timestamp(candle.time)
+        
+        return candles
     
-    @abstractmethod
     def get_ticker(self, symbol: str) -> TickerData:
         """
-        获取最新行情数据
+        获取最新行情数据（统一接口）
         
         Args:
-            symbol: 交易对
+            symbol: 交易对（标准格式："BTCUSDT"）
         
         Returns:
             行情数据
@@ -275,7 +346,16 @@ class MarketDataSourcePlugin(ABC):
         Raises:
             PluginError: 如果数据源不支持或发生错误
         """
-        pass
+        # 转换为数据源格式
+        source_symbol = self._normalize_symbol(symbol)
+        
+        # 调用子类实现
+        ticker = self._get_ticker_impl(source_symbol)
+        
+        # 标准化交易对名称
+        ticker.inst_id = symbol
+        
+        return ticker
     
     def get_supported_symbols(self) -> List[str]:
         """获取支持的交易对列表"""

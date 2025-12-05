@@ -54,13 +54,20 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             candlestick_granularities=[
                 "1m", "3m", "5m", "15m", "30m",
                 "1h", "2h", "4h", "6h", "8h", "12h",
-                "1d", "3d", "1w"
+                "1d", "3d", "1w", "1M"
             ],
             candlestick_limit=1000,  # Binance 最多返回 1000 条
             candlestick_max_history_days=None,
             supports_ticker=True,
             ticker_update_frequency=1,
-            supported_symbols=[],  # 动态获取
+            supported_symbols=[
+                # 主流 USDT 交易对
+                "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
+                "SOLUSDT", "DOGEUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
+                "AVAXUSDT", "LINKUSDT", "ATOMUSDT", "UNIUSDT", "ETCUSDT",
+                "SHIBUSDT", "TRXUSDT", "BCHUSDT", "NEARUSDT", "APTUSDT",
+                # Binance 支持 1000+ 交易对
+            ],
             symbol_format="BTCUSDT",  # 币安格式
             requires_api_key=False,
             requires_authentication=False,
@@ -97,7 +104,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         }
         return mapping.get(bar, "1h")
     
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
         symbol: str,
         bar: str,
@@ -150,7 +157,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Binance 获取 K线数据失败: {e}")
             raise PluginError(f"Binance 获取 K线数据失败: {e}")
     
-    def get_ticker(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
             binance_symbol = self._convert_symbol(symbol)

@@ -95,7 +95,7 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
         }
         return mapping.get(bar, 60)
     
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
         symbol: str,
         bar: str,
@@ -154,7 +154,7 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Kraken 获取 K线数据失败: {e}")
             raise PluginError(f"Kraken 获取 K线数据失败: {e}")
     
-    def get_ticker(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
             kraken_symbol = self._convert_symbol(symbol)

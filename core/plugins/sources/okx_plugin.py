@@ -22,12 +22,50 @@ logger = logging.getLogger(__name__)
 
 
 class OKXMarketPlugin(MarketDataSourcePlugin):
-    """OKX 交易所数据源插件 - 直接使用 REST API"""
+    """OKX 交易所数据源插件 - 直接使用 REST API
+    
+    协议实现：
+    - 接收标准格式：symbol="BTCUSDT", bar="1h", timestamp=秒
+    - 内部转换为：symbol="BTC-USDT", bar="1H", timestamp=毫秒
+    """
     
     BASE_URL = "https://www.okx.com/api/v5"
     
     def __init__(self):
         super().__init__()
+    
+    def _normalize_symbol(self, symbol: str) -> str:
+        """标准格式 "BTCUSDT" -> OKX 格式 "BTC-USDT" """
+        # 解析交易对
+        symbol = symbol.upper().replace('-', '').replace('/', '')
+        
+        # 常见计价币种
+        for quote in ['USDT', 'USDC', 'USD', 'BTC', 'ETH']:
+            if symbol.endswith(quote):
+                base = symbol[:-len(quote)]
+                return f"{base}-{quote}"
+        
+        # 默认：假设后4位是计价币种
+        if len(symbol) > 4:
+            return f"{symbol[:-4]}-{symbol[-4:]}"
+        return symbol
+    
+    def _normalize_granularity(self, bar: str) -> str:
+        """标准格式 "1h" -> OKX 格式 "1H" """
+        mapping = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H",
+            "1d": "1D", "1w": "1W", "1M": "1M",
+        }
+        return mapping.get(bar, bar)
+    
+    def _normalize_timestamp(self, timestamp: Optional[int]) -> Optional[int]:
+        """秒 -> 毫秒"""
+        return timestamp * 1000 if timestamp else None
+    
+    def _denormalize_timestamp(self, timestamp: int) -> int:
+        """毫秒 -> 秒"""
+        return timestamp // 1000 if timestamp > 10**10 else timestamp
     
     def _get_metadata(self) -> DataSourceMetadata:
         """获取 OKX 元数据"""
@@ -51,14 +89,20 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
-                "1m", "3m", "5m", "15m", "30m", "1H", "2H", "4H", "6H", "12H", "1D", "1W", "1M"
+                "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w", "1M"
             ],
             candlestick_limit=300,
             candlestick_max_history_days=None,  # 无限制
             supports_ticker=True,
             ticker_update_frequency=1,
-            supported_symbols=[],  # 动态获取
-            symbol_format="BASE-USDT",
+            supported_symbols=[
+                # 主流币对
+                "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
+                "SOLUSDT", "DOGEUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
+                "AVAXUSDT", "LINKUSDT", "ATOMUSDT", "UNIUSDT", "ETCUSDT",
+                # 更多交易对可通过 OKX API 动态获取
+            ],
+            symbol_format="BTCUSDT",  # 标准格式
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=True,  # 使用代理更稳定
@@ -69,20 +113,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         )
     
     def _convert_bar(self, bar: str) -> str:
-        """将标准格式转换为 OKX 格式"""
-        # OKX 要求小时、天、周、月用大写
-        mapping = {
-            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1H", "1H": "1H",
-            "2h": "2H", "2H": "2H",
-            "4h": "4H", "4H": "4H",
-            "6h": "6H", "6H": "6H",
-            "12h": "12H", "12H": "12H",
-            "1d": "1D", "1D": "1D",
-            "1w": "1W", "1W": "1W",
-            "1M": "1M",
-        }
-        return mapping.get(bar, "1H")  # 默认返回 1H
+        """已废弃：使用 _normalize_granularity 代替"""
+        return self._normalize_granularity(bar)
     
     def _get_proxies(self) -> dict:
         """获取代理配置"""
@@ -115,27 +147,25 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         except requests.exceptions.RequestException as e:
             raise PluginError(f"OKX API 请求失败: {str(e)}")
     
-    def get_candlesticks(
+    def _get_candlesticks_impl(
         self,
         symbol: str,
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
     ) -> List[CandleData]:
-        """获取 K线数据
+        """获取 K线数据的内部实现（已转换为 OKX 格式）
         
         API 文档: https://www.okx.com/docs-v5/en/#rest-api-market-data-get-candlesticks
         """
         try:
-            # 转换 bar 格式
-            okx_bar = self._convert_bar(bar)
             params = {
-                "instId": symbol,
-                "bar": okx_bar,
+                "instId": symbol,  # 已转换为 "BTC-USDT" 格式
+                "bar": bar,        # 已转换为 "1H" 格式
                 "limit": str(min(limit, 300))
             }
             if before:
-                params["before"] = str(before * 1000)  # 转为毫秒
+                params["before"] = str(before)  # 已转换为毫秒
             
             result = self._request("/market/candles", params)
             
@@ -164,8 +194,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"OKX 获取 K线数据失败: {e}")
             raise PluginError(f"OKX 获取 K线数据失败: {str(e)}")
     
-    def get_ticker(self, symbol: str) -> TickerData:
-        """获取行情数据
+    def _get_ticker_impl(self, symbol: str) -> TickerData:
+        """获取行情数据的内部实现（已转换为 OKX 格式）
         
         API 文档: https://www.okx.com/docs-v5/en/#rest-api-market-data-get-ticker
         """
