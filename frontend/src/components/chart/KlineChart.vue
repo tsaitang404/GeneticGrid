@@ -2,6 +2,7 @@
   <div class="kline-chart-container">
     <!-- 顶部工具栏 -->
     <div class="chart-toolbar">
+      <!-- 行情信息行 -->
       <div class="toolbar-info-row">
         <div class="info-item">
           <span class="label">交易对</span>
@@ -31,34 +32,48 @@
           <span class="label">24h成交量</span>
           <span class="value">{{ displayTicker.vol24h }}</span>
         </div>
+      </div>
 
-        <div class="toolbar-controls">
+      <!-- 控制工具行 -->
+      <div class="toolbar-controls-row">
+        <div class="controls-group market-group">
+          <div class="group-label">市场</div>
+          <SourceSelector
+            v-model="source"
+            @sourceChanged="handleSourceChange"
+          />
+          <div class="divider-vertical"></div>
           <SymbolSelector
             v-model="symbol"
             :symbols="availableSymbols"
+            :source="source"
           />
+        </div>
 
+        <div class="controls-group chart-group">
+          <div class="group-label">图表</div>
           <TimeframeSelector
             v-model="bar"
             :timeframes="availableTimeframes"
           />
-          
+          <div class="divider-vertical"></div>
           <IndicatorSelector
             :indicators="indicators"
             @toggle="toggleIndicator"
           />
+        </div>
 
-          <SourceSelector
-            v-model="source"
-            :sources="availableSources"
-          />
-          
+        <div class="controls-group actions-group">
           <button 
             @click="toggleAutoRefresh" 
-            :class="['refresh-btn', { active: autoRefreshEnabled }]"
+            :class="['action-btn', 'refresh-btn', { active: autoRefreshEnabled }]"
             :title="autoRefreshEnabled ? '关闭自动刷新' : '开启自动刷新'"
           >
-            {{ autoRefreshEnabled ? '✓ 自动刷新' : '自动刷新' }}
+            <svg class="icon" width="16" height="16" viewBox="0 0 16 16">
+              <path d="M13.65 2.35A7.5 7.5 0 0 0 3.5 4.5M2.35 13.65A7.5 7.5 0 0 0 12.5 11.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <path d="M12.5 4.5v-2h2M3.5 11.5v2h-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>{{ autoRefreshEnabled ? '自动刷新' : '手动刷新' }}</span>
           </button>
         </div>
       </div>
@@ -224,12 +239,32 @@ const autoRefreshTimer = ref<number | null>(null)
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
 const availableTimeframes = ref<string[]>(['tick', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
-const availableSources = [
-  { value: 'tradingview', label: 'TradingView' },
-  { value: 'binance', label: 'Binance' },
-  { value: 'coingecko', label: 'CoinGecko' },
-  { value: 'okx', label: 'OKX' }
-]
+
+// Handle source change to update available symbols and timeframes
+const handleSourceChange = (sourceData: any) => {
+  console.log('Source changed:', sourceData)
+  
+  // Update available symbols
+  if (sourceData.supported_symbols && sourceData.supported_symbols.length > 0) {
+    availableSymbols.value = sourceData.supported_symbols
+    // If current symbol is not available in new source, select the first one
+    if (!availableSymbols.value.includes(symbol.value)) {
+      symbol.value = availableSymbols.value[0]
+    }
+  }
+  
+  // Update available timeframes
+  if (sourceData.candlestick_granularities && sourceData.candlestick_granularities.length > 0) {
+    availableTimeframes.value = sourceData.candlestick_granularities
+    // If current bar is not available in new source, select the first one
+    if (!availableTimeframes.value.includes(bar.value)) {
+      // Try to find a similar timeframe or fall back to first available
+      const fallback = availableTimeframes.value.find(tf => ['1h', '1d', '15m', '5m', '1m'].includes(tf)) 
+                      || availableTimeframes.value[0]
+      bar.value = fallback
+    }
+  }
+}
 
 const quoteCandidates = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'CNY', 'JPY', 'KRW', 'GBP']
 
@@ -670,6 +705,23 @@ watch([allCandles, hasMoreData], () => {
 
 // Lifecycle
 onMounted(async () => {
+  // Load initial source data to set available timeframes and symbols
+  try {
+    const response = await fetch('/api/sources/')
+    const data = await response.json()
+    if (data.code === 0 && data.data && data.data[source.value]) {
+      const sourceInfo = data.data[source.value]
+      if (sourceInfo.capability.candlestick_granularities) {
+        availableTimeframes.value = sourceInfo.capability.candlestick_granularities
+      }
+      if (sourceInfo.capability.supported_symbols && sourceInfo.capability.supported_symbols.length > 0) {
+        availableSymbols.value = sourceInfo.capability.supported_symbols
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load initial source data:', e)
+  }
+  
   // Initialize chart with auto-refresh
   await initialize()
   loadCandlesticks()
@@ -703,9 +755,95 @@ onUnmounted(() => {
 
 .chart-toolbar {
   display: flex;
-  padding: 12px 16px;
+  flex-direction: column;
+  padding: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+}
+
+.toolbar-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.toolbar-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  flex-wrap: wrap;
+}
+
+.controls-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.controls-group:hover {
+  border-color: rgba(41, 98, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-right: 4px;
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+}
+
+.actions-group {
+  margin-left: auto;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.action-btn .icon {
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background: rgba(41, 98, 255, 0.1);
+  color: var(--blue-accent);
+}
+
+.action-btn.active {
+  background: rgba(38, 166, 154, 0.15);
+  color: #26a69a;
+}
+
+.action-btn.refresh-btn.active:hover {
+  background: rgba(38, 166, 154, 0.25);
 }
 
 .toolbar-info-row {
@@ -777,19 +915,11 @@ onUnmounted(() => {
 }
 
 .toolbar-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-  flex: 0 0 auto;
-}
-
-.toolbar-controls > * {
-  flex: 0 0 auto;
+  display: none; /* Hide old controls */
 }
 
 .refresh-btn {
+  /* Keep old styles for backward compatibility but they won't be used */
   padding: 6px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
