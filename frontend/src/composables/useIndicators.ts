@@ -234,39 +234,41 @@ export function useIndicators(
 
     if (key === 'ma') {
       indicators.ma.series = [
-        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MA7' }),
-        chart.value.addLineSeries({ color: '#FF9800', lineWidth: 1, title: 'MA25' }),
-        chart.value.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'MA99' })
+        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#FF9800', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#9C27B0', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
     } else if (key === 'ema') {
       indicators.ema.series = [
-        chart.value.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'EMA7' }),
-        chart.value.addLineSeries({ color: '#FFC107', lineWidth: 1, title: 'EMA25' }),
-        chart.value.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'EMA99' })
+        chart.value.addLineSeries({ color: '#00BCD4', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#FFC107', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#E91E63', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
     } else if (key === 'boll') {
       indicators.boll.series = [
-        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'BOLL Upper' }),
-        chart.value.addLineSeries({ color: '#FFC107', lineWidth: 1, title: 'BOLL Middle' }),
-        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'BOLL Lower' })
+        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#FFC107', lineWidth: 1, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
       ]
     } else if (key === 'sar') {
       indicators.sar.series = chart.value.addLineSeries({ 
         color: '#FF6D00', 
         lineWidth: 2, 
         lineStyle: 2,
-        title: 'SAR' 
+        lastValueVisible: false,
+        priceLineVisible: false
       })
     } else if (key === 'supertrend') {
       indicators.supertrend.series = chart.value.addLineSeries({ 
         color: '#26a69a', 
         lineWidth: 2, 
-        title: 'SuperTrend' 
+        lastValueVisible: false,
+        priceLineVisible: false
       })
     } else if (key === 'sr') {
       indicators.sr.series = [
-        chart.value.addLineSeries({ color: '#ef5350', lineWidth: 1, lineStyle: 2, title: 'Resistance' }),
-        chart.value.addLineSeries({ color: '#26a69a', lineWidth: 1, lineStyle: 2, title: 'Support' })
+        chart.value.addLineSeries({ color: '#ef5350', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false }),
+        chart.value.addLineSeries({ color: '#26a69a', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false })
       ]
     }
   }
