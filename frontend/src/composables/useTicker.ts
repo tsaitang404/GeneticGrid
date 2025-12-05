@@ -69,6 +69,12 @@ export function useTicker(
       const response = await fetch(
         `/api/ticker/?symbol=${symbol.value}&source=${source.value}`
       )
+      
+      // 检查响应状态
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const result: APIResponse<any> = await response.json()
 
       if (result.code === 0 && result.data) {
@@ -83,8 +89,10 @@ export function useTicker(
         ticker.isUp = last >= open
         ticker.high24h = (parseFloat(t.high24h) * rate).toLocaleString()
         ticker.low24h = (parseFloat(t.low24h) * rate).toLocaleString()
-        ticker.vol24h = parseFloat(t.vol24h).toLocaleString()
+        ticker.vol24h = parseFloat(t.vol24h || '0').toLocaleString()
         ticker.open24h = open.toLocaleString()
+      } else {
+        console.warn('Ticker API returned error:', result)
       }
     } catch (error) {
       console.error('Failed to load ticker:', error)
