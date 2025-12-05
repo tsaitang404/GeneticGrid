@@ -2,6 +2,7 @@ import { reactive, computed, nextTick, type Ref, type ComputedRef } from 'vue'
 import { createChart, type IChartApi, ColorType } from 'lightweight-charts'
 import type { IndicatorConfig, Indicators, Candle } from '@/types'
 import { useIndicatorWorker } from './useIndicatorWorker'
+import { useTimeScaleSync } from './useTimeScaleSync'
 
 export function useIndicators(
   chart: Ref<IChartApi | null>, 
@@ -9,6 +10,7 @@ export function useIndicators(
   allCandles: Ref<Candle[]>
 ) {
   const { calculateIndicators, terminateWorker } = useIndicatorWorker()
+  const { isSyncingTimeScale } = useTimeScaleSync()
   
   const indicators = reactive<Partial<Indicators>>({
     vol: { 
@@ -258,10 +260,27 @@ export function useIndicators(
 
     subCharts.value[key] = subChart
 
-    // Sync time scale with main chart (sub-chart → main chart)
-    // Note: Main chart also syncs to sub-charts, so we don't need bidirectional sync here
-    // The main chart's sync will handle updating all sub-charts
-    // This subscription is kept for direct user interaction on sub-charts only
+    // 双向同步时间轴：副图 → 主图 + 其他副图
+    subChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (isSyncingTimeScale.value || !range) return
+      
+      isSyncingTimeScale.value = true
+      try {
+        // 同步到主图
+        if (chart.value) {
+          chart.value.timeScale().setVisibleLogicalRange(range)
+        }
+        
+        // 同步到其他副图
+        Object.entries(subCharts.value).forEach(([subKey, subChart]) => {
+          if (subKey !== key && subChart) {
+            subChart.timeScale().setVisibleLogicalRange(range)
+          }
+        })
+      } finally {
+        isSyncingTimeScale.value = false
+      }
+    })
 
     // Create series based on indicator type
     createSubIndicatorSeries(key, subChart)
