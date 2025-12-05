@@ -37,7 +37,7 @@ import { usePreferencesStore } from './stores/preferences'
 
 const initialSymbol = ref<string>('BTCUSDT')
 const initialBar = ref<string>('1h')
-const initialSource = ref<string>('tradingview')
+const initialSource = ref<string>('okx')
 const showSettings = ref<boolean>(false)
 
 const preferences = usePreferencesStore()
