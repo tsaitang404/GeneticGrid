@@ -260,6 +260,15 @@ export function useIndicators(
 
     subCharts.value[key] = subChart
 
+    // 立即同步主图的时间轴状态到新创建的副图
+    if (chart.value) {
+      const mainTimeScale = chart.value.timeScale()
+      const visibleRange = mainTimeScale.getVisibleLogicalRange()
+      if (visibleRange) {
+        subChart.timeScale().setVisibleLogicalRange(visibleRange)
+      }
+    }
+
     // 双向同步时间轴：副图 → 主图 + 其他副图
     subChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
       if (isSyncingTimeScale.value || !range) return
