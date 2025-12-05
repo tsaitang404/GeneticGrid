@@ -2,7 +2,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import cache_page
 from django.views.generic import TemplateView
-from .services import MarketAPIError, MARKET_SERVICES
+from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
 from .proxy_config import is_proxy_available, get_proxy_url, get_okx_proxy, PROXY_CONFIG

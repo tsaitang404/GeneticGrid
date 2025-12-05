@@ -6,6 +6,7 @@ CoinGecko 数据聚合器插件
 from typing import List, Optional
 from datetime import datetime
 import logging
+import requests
 
 from ..base import (
     MarketDataSourcePlugin,
@@ -16,8 +17,6 @@ from ..base import (
     SourceType,
     PluginError,
 )
-from ..proxy_injector import inject_proxy_to_service
-from core import services as legacy_services
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,24 @@ logger = logging.getLogger(__name__)
 class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
     """CoinGecko 数据聚合器插件"""
     
+    BASE_URL = "https://api.coingecko.com/api/v3"
+    
+    # 币种 ID 映射
+    COIN_ID_MAP = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum",
+        "SOL": "solana",
+        "XRP": "ripple",
+        "DOGE": "dogecoin",
+        "ADA": "cardano",
+        "AVAX": "avalanche-2",
+        "LINK": "chainlink",
+        "DOT": "polkadot",
+        "MATIC": "matic-network",
+    }
+    
     def __init__(self):
-        self._legacy_service = None
+        self._session = None
         super().__init__()
     
     def _get_metadata(self) -> DataSourceMetadata:
@@ -68,13 +83,23 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         )
     
     @property
-    def _service(self):
-        """延迟加载旧服务并注入代理"""
-        if self._legacy_service is None:
-            self._legacy_service = legacy_services.CoinGeckoMarketService()
-            # 根据元数据配置注入代理
-            inject_proxy_to_service(self._legacy_service, self._metadata.requires_proxy)
-        return self._legacy_service
+    def _get_session(self):
+        """获取 requests session"""
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update({
+                'User-Agent': 'GeneticGrid/1.0'
+            })
+        return self._session
+    
+    def _get_coin_id(self, symbol: str) -> str:
+        """获取 CoinGecko 币种 ID"""
+        # 从 BTC-USDT 提取 BTC
+        base = symbol.split('-')[0].upper()
+        coin_id = self.COIN_ID_MAP.get(base)
+        if not coin_id:
+            raise PluginError(f"不支持的币种: {base}")
+        return coin_id
     
     def get_candlesticks(
         self,
@@ -89,18 +114,50 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
     def get_ticker(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
-            response = self._service.get_ticker(inst_id=symbol)
+            coin_id = self._get_coin_id(symbol)
+            
+            # CoinGecko API - Simple Price
+            url = f"{self.BASE_URL}/simple/price"
+            params = {
+                "ids": coin_id,
+                "vs_currencies": "usd",
+                "include_24hr_change": "true",
+                "include_24hr_vol": "true",
+            }
+            
+            response = self._get_session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if coin_id not in data:
+                raise PluginError(f"CoinGecko 未返回 {coin_id} 数据")
+            
+            coin_data = data[coin_id]
+            last_price = float(coin_data.get('usd', 0))
+            change_24h_pct = float(coin_data.get('usd_24h_change', 0)) or None
+            
+            # 计算24h变化金额
+            change_24h = None
+            if change_24h_pct and last_price:
+                change_24h = last_price * (change_24h_pct / 100)
             
             return TickerData(
                 inst_id=symbol,
-                last=float(response['last']),
-                bid=float(response.get('bid', 0)) or None,
-                ask=float(response.get('ask', 0)) or None,
-                high_24h=float(response.get('high_24h', 0)) or None,
-                low_24h=float(response.get('low_24h', 0)) or None,
-                change_24h=float(response.get('change_24h', 0)) or None,
-                change_24h_pct=float(response.get('change_24h_pct', 0)) or None,
+                last=last_price,
+                bid=None,  # CoinGecko 不提供买卖价
+                ask=None,
+                high_24h=None,  # 简单接口不提供高低价
+                low_24h=None,
+                change_24h=change_24h,
+                change_24h_pct=change_24h_pct,
             )
+            
+        except requests.exceptions.Timeout:
+            logger.error("CoinGecko API 连接超时")
+            raise PluginError("CoinGecko API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"CoinGecko 获取行情数据失败: {e}")
+            raise PluginError(f"CoinGecko 获取行情数据失败: {e}")
         except Exception as e:
             logger.error(f"CoinGecko 获取行情数据失败: {e}")
             raise PluginError(f"CoinGecko 获取行情数据失败: {e}")

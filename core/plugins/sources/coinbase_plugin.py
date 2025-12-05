@@ -6,6 +6,7 @@ Coinbase 交易所数据源插件
 from typing import List, Optional
 from datetime import datetime
 import logging
+import requests
 
 from ..base import (
     MarketDataSourcePlugin,
@@ -16,8 +17,6 @@ from ..base import (
     SourceType,
     PluginError,
 )
-from ..proxy_injector import inject_proxy_to_service
-from core import services as legacy_services
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,10 @@ logger = logging.getLogger(__name__)
 class CoinbaseMarketPlugin(MarketDataSourcePlugin):
     """Coinbase 交易所数据源插件"""
     
+    BASE_URL = "https://api.exchange.coinbase.com"
+    
     def __init__(self):
-        self._legacy_service = None
+        self._session = None
         super().__init__()
     
     def _get_metadata(self) -> DataSourceMetadata:
@@ -69,13 +70,30 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
         )
     
     @property
-    def _service(self):
-        """延迟加载旧服务并注入代理"""
-        if self._legacy_service is None:
-            self._legacy_service = legacy_services.CoinbaseMarketService()
-            # 根据元数据配置注入代理
-            inject_proxy_to_service(self._legacy_service, self._metadata.requires_proxy)
-        return self._legacy_service
+    def _get_session(self):
+        """获取 requests session"""
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update({
+                'User-Agent': 'GeneticGrid/1.0'
+            })
+        return self._session
+    
+    def _convert_symbol(self, inst_id: str) -> str:
+        """将标准格式转换为 Coinbase 格式: BTC-USDT -> BTC-USD"""
+        # Coinbase 使用 USD 而不是 USDT
+        return inst_id.replace('USDT', 'USD')
+    
+    def _convert_bar(self, bar: str) -> int:
+        """将时间周期转换为 Coinbase 格式（秒）"""
+        mapping = {
+            "1m": 60, "5m": 300, "15m": 900,
+            "1h": 3600, "1H": 3600,
+            "4h": 14400, "4H": 14400,
+            "1d": 86400, "1D": 86400,
+            "1w": 604800, "1W": 604800,
+        }
+        return mapping.get(bar, 3600)
     
     def get_candlesticks(
         self,
@@ -86,23 +104,43 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
-            response = self._service.get_candlesticks(
-                inst_id=symbol,
-                bar=bar,
-                limit=min(limit, 350),
-            )
+            coinbase_symbol = self._convert_symbol(symbol)
+            granularity = self._convert_bar(bar)
             
+            # Coinbase Pro API
+            url = f"{self.BASE_URL}/products/{coinbase_symbol}/candles"
+            params = {
+                "granularity": granularity,
+            }
+            
+            response = self._get_session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data:
+                raise PluginError("Coinbase 返回数据为空")
+            
+            # Coinbase 返回格式: [[time, low, high, open, close, volume], ...]
+            # 数据是倒序的（最新的在前）
             candles = []
-            for item in response:
+            for item in reversed(data[:limit]):
                 candles.append(CandleData(
-                    time=int(item['time']),  # 旧服务已转为秒
-                    open=float(item['open']),
-                    high=float(item['high']),
-                    low=float(item['low']),
-                    close=float(item['close']),
-                    volume=float(item['volume']),
+                    time=int(item[0]),  # Unix timestamp
+                    open=float(item[3]),
+                    high=float(item[2]),
+                    low=float(item[1]),
+                    close=float(item[4]),
+                    volume=float(item[5]),
                 ))
+            
             return candles
+            
+        except requests.exceptions.Timeout:
+            logger.error("Coinbase API 连接超时")
+            raise PluginError("Coinbase API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Coinbase 获取 K线数据失败: {e}")
+            raise PluginError(f"Coinbase 获取 K线数据失败: {e}")
         except Exception as e:
             logger.error(f"Coinbase 获取 K线数据失败: {e}")
             raise PluginError(f"Coinbase 获取 K线数据失败: {e}")
@@ -110,18 +148,45 @@ class CoinbaseMarketPlugin(MarketDataSourcePlugin):
     def get_ticker(self, symbol: str) -> TickerData:
         """获取行情数据"""
         try:
-            response = self._service.get_ticker(inst_id=symbol)
+            coinbase_symbol = self._convert_symbol(symbol)
+            
+            # Coinbase Pro API - Ticker
+            url = f"{self.BASE_URL}/products/{coinbase_symbol}/ticker"
+            
+            response = self._get_session.get(url, timeout=10)
+            response.raise_for_status()
+            ticker = response.json()
+            
+            # 获取 24h 统计数据
+            stats_url = f"{self.BASE_URL}/products/{coinbase_symbol}/stats"
+            stats_response = self._get_session.get(stats_url, timeout=10)
+            stats_response.raise_for_status()
+            stats = stats_response.json()
+            
+            last_price = float(ticker.get('price', 0))
+            open_24h = float(stats.get('open', 0))
+            
+            # 计算24h涨跌
+            change_24h = last_price - open_24h if open_24h else None
+            change_24h_pct = (change_24h / open_24h * 100) if open_24h and change_24h else None
             
             return TickerData(
                 inst_id=symbol,
-                last=float(response['last']),
-                bid=float(response.get('bid', 0)) or None,
-                ask=float(response.get('ask', 0)) or None,
-                high_24h=float(response.get('high_24h', 0)) or None,
-                low_24h=float(response.get('low_24h', 0)) or None,
-                change_24h=float(response.get('change_24h', 0)) or None,
-                change_24h_pct=float(response.get('change_24h_pct', 0)) or None,
+                last=last_price,
+                bid=float(ticker.get('bid', 0)) or None,
+                ask=float(ticker.get('ask', 0)) or None,
+                high_24h=float(stats.get('high', 0)) or None,
+                low_24h=float(stats.get('low', 0)) or None,
+                change_24h=change_24h,
+                change_24h_pct=change_24h_pct,
             )
+            
+        except requests.exceptions.Timeout:
+            logger.error("Coinbase API 连接超时")
+            raise PluginError("Coinbase API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Coinbase 获取行情数据失败: {e}")
+            raise PluginError(f"Coinbase 获取行情数据失败: {e}")
         except Exception as e:
             logger.error(f"Coinbase 获取行情数据失败: {e}")
             raise PluginError(f"Coinbase 获取行情数据失败: {e}")
