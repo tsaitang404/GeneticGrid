@@ -11,28 +11,160 @@ export function useIndicators(
   const { calculateIndicators, terminateWorker } = useIndicatorWorker()
   
   const indicators = reactive<Partial<Indicators>>({
-    vol: { enabled: true, name: 'VOL', series: null },
-    ma: { enabled: false, name: 'MA', series: [] },
-    ema: { enabled: false, name: 'EMA', series: [] },
-    boll: { enabled: false, name: 'BOLL', series: [] },
-    sar: { enabled: false, name: 'SAR', series: [] },
-    supertrend: { enabled: false, name: 'SuperTrend', series: [] },
-    sr: { enabled: false, name: 'S/R', series: [] },
-    macd: { enabled: false, name: 'MACD', series: [] },
-    kdj: { enabled: false, name: 'KDJ', series: [] },
-    rsi: { enabled: false, name: 'RSI', series: [] },
-    stochrsi: { enabled: false, name: 'StochRSI', series: [] },
-    cci: { enabled: false, name: 'CCI', series: [] },
-    dmi: { enabled: false, name: 'DMI', series: [] },
-    wr: { enabled: false, name: 'WR', series: [] },
-    obv: { enabled: false, name: 'OBV', series: [] },
-    trix: { enabled: false, name: 'TRIX', series: [] },
-    roc: { enabled: false, name: 'ROC', series: [] },
-    mtm: { enabled: false, name: 'MTM', series: [] },
-    dma: { enabled: false, name: 'DMA', series: [] },
-    vr: { enabled: false, name: 'VR', series: [] },
-    brar: { enabled: false, name: 'BRAR', series: [] },
-    psy: { enabled: false, name: 'PSY', series: [] }
+    vol: { 
+      enabled: true, 
+      name: 'VOL', 
+      zhName: '成交量',
+      description: '显示某时段内的成交量，通常用柱状图表示。成交量大小反映市场活跃度，价涨量增为强势，价涨量减为弱势。',
+      series: null 
+    },
+    ma: { 
+      enabled: false, 
+      name: 'MA', 
+      zhName: '移动平均线',
+      description: '简单移动平均线(Simple Moving Average)，计算N日收盘价的算术平均值。可识别趋势方向，金叉看涨，死叉看跌。常用周期：MA7、MA25、MA99。',
+      series: [] 
+    },
+    ema: { 
+      enabled: false, 
+      name: 'EMA', 
+      zhName: '指数移动平均线',
+      description: '指数平滑移动平均线(Exponential Moving Average)，对近期价格赋予更高权重。相比MA更敏感，能更快反应价格变化。常用周期：EMA7、EMA25、EMA99。',
+      series: [] 
+    },
+    boll: { 
+      enabled: false, 
+      name: 'BOLL', 
+      zhName: '布林带',
+      description: '布林带(Bollinger Bands)由中轨(MA)、上轨(MA+2倍标准差)、下轨(MA-2倍标准差)组成。价格在上下轨间波动，触及上轨可能回调，触及下轨可能反弹。带宽收窄预示突破。',
+      series: [] 
+    },
+    sar: { 
+      enabled: false, 
+      name: 'SAR', 
+      zhName: '抛物线转向',
+      description: '抛物线转向指标(Stop And Reverse)，以点状显示止损位。点在价格下方为多头，上方为空头。点位翻转提示趋势转换，适合跟踪趋势交易。',
+      series: [] 
+    },
+    supertrend: { 
+      enabled: false, 
+      name: 'SuperTrend', 
+      zhName: '超级趋势',
+      description: '基于ATR的趋势跟踪指标，结合价格和波动率计算支撑/阻力带。线在价格下方显示上升趋势，上方显示下降趋势。简单直观，适合趋势交易。',
+      series: [] 
+    },
+    sr: { 
+      enabled: false, 
+      name: 'S/R', 
+      zhName: '支撑阻力',
+      description: '支撑与阻力线(Support/Resistance)，基于历史高低点自动识别关键价格位。支撑线为买方力量强区，阻力线为卖方力量强区。突破后角色互换。',
+      series: [] 
+    },
+    macd: { 
+      enabled: false, 
+      name: 'MACD', 
+      zhName: '指数平滑异同平均线',
+      description: '由快线DIF(12日EMA-26日EMA)、慢线DEA(DIF的9日EMA)和柱状图(DIF-DEA)组成。DIF上穿DEA金叉看涨，下穿死叉看跌。柱状图表示多空力量强弱。',
+      series: [] 
+    },
+    kdj: { 
+      enabled: false, 
+      name: 'KDJ', 
+      zhName: '随机指标',
+      description: '随机指标(Stochastic)，包含K值、D值(K的移动平均)、J值(3K-2D)。取值0-100，>80超买，<20超卖。K线上穿D线金叉看涨，下穿死叉看跌。J值更敏感。',
+      series: [] 
+    },
+    rsi: { 
+      enabled: false, 
+      name: 'RSI', 
+      zhName: '相对强弱指标',
+      description: '相对强弱指标(Relative Strength Index)，衡量价格涨跌速度，取值0-100。>70超买区，<30超卖区，50为强弱分界线。可用于判断背离和反转信号。',
+      series: [] 
+    },
+    stochrsi: { 
+      enabled: false, 
+      name: 'StochRSI', 
+      zhName: '随机相对强弱指标',
+      description: '将Stochastic公式应用于RSI值，比RSI更敏感。取值0-1，>0.8超买，<0.2超卖。K线上穿D线金叉看涨，下穿死叉看跌。适合捕捉短期机会。',
+      series: [] 
+    },
+    cci: { 
+      enabled: false, 
+      name: 'CCI', 
+      zhName: '顺势指标',
+      description: '顺势指标(Commodity Channel Index)，衡量价格偏离统计平均值程度。>+100超买，<-100超卖，±100间为常态区。穿越±100线产生交易信号。',
+      series: [] 
+    },
+    dmi: { 
+      enabled: false, 
+      name: 'DMI', 
+      zhName: '趋向指标',
+      description: '趋向指标(Directional Movement Index)，包含PDI(上升动向)、MDI(下降动向)、ADX(趋势强度)。PDI>MDI多头市场，MDI>PDI空头市场。ADX>25趋势强劲。',
+      series: [] 
+    },
+    wr: { 
+      enabled: false, 
+      name: 'WR', 
+      zhName: '威廉指标',
+      description: '威廉指标(Williams %R)，反映超买超卖和价格动量。取值0到-100，>-20超买，<-80超卖。从超卖区向上突破-80为买入信号，从超买区向下突破-20为卖出信号。',
+      series: [] 
+    },
+    obv: { 
+      enabled: false, 
+      name: 'OBV', 
+      zhName: '能量潮',
+      description: '能量潮(On-Balance Volume)，累计成交量指标。涨日加成交量，跌日减成交量。OBV上升表明资金流入，下降表明资金流出。与价格背离预示反转。',
+      series: [] 
+    },
+    trix: { 
+      enabled: false, 
+      name: 'TRIX', 
+      zhName: '三重指数平滑平均线',
+      description: '三重指数平滑移动平均(Triple Exponentially Smoothed Average)，对价格进行三次指数平滑计算变化率。过滤短期波动，识别长期趋势。上穿零轴看涨，下穿看跌。',
+      series: [] 
+    },
+    roc: { 
+      enabled: false, 
+      name: 'ROC', 
+      zhName: '变动率指标',
+      description: '变动率(Rate of Change)，当前价格相对N日前价格的百分比变化。正值表示上涨，负值表示下跌。可识别超买超卖和背离，配合其他指标使用。',
+      series: [] 
+    },
+    mtm: { 
+      enabled: false, 
+      name: 'MTM', 
+      zhName: '动量指标',
+      description: '动量指标(Momentum)，当前收盘价减N日前收盘价。测量价格变化速度，>0上涨动能，<0下跌动能。与价格背离可预示反转。常用周期12日。',
+      series: [] 
+    },
+    dma: { 
+      enabled: false, 
+      name: 'DMA', 
+      zhName: '平行线差指标',
+      description: '平行线差(Different of Moving Average)，短期均线减长期均线及其移动平均。DMA上穿AMA金叉看涨，下穿死叉看跌。反映短期趋势偏离长期趋势程度。',
+      series: [] 
+    },
+    vr: { 
+      enabled: false, 
+      name: 'VR', 
+      zhName: '成交量比率',
+      description: '成交量比率(Volume Ratio)，上涨日成交量与下跌日成交量的比值。>160%过热，<70%低迷，70-160%正常。极端值往往预示反转。',
+      series: [] 
+    },
+    brar: { 
+      enabled: false, 
+      name: 'BRAR', 
+      zhName: '情绪指标',
+      description: '人气指标AR(买卖气势)和意愿指标BR(买卖意愿)。AR反映市场人气，BR反映市场意愿。AR/BR>1多头，<1空头。两者配合判断市场情绪和潜在转折点。',
+      series: [] 
+    },
+    psy: { 
+      enabled: false, 
+      name: 'PSY', 
+      zhName: '心理线',
+      description: '心理线(Psychological Line)，N日内上涨天数占比。取值0-100%，>75%超买，<25%超卖，50%为多空平衡。反映市场心理，配合其他指标判断买卖时机。',
+      series: [] 
+    }
   }) as Indicators
 
   const subChartRefs: Record<string, HTMLElement> = {}

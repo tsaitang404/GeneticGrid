@@ -60,6 +60,8 @@ export interface IndicatorConfig {
   series: any | any[]
   label?: string
   title?: string
+  zhName?: string  // 中文名称
+  description?: string  // 指标说明
 }
 
 export interface Indicators {
