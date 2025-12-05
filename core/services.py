@@ -331,7 +331,7 @@ MARKET_SERVICES = {
 }
 
 
-def get_market_service(source: str = "tradingview"):
+def get_market_service(source: str = "okx"):
     """获取指定数据源的行情服务"""
     service_class = MARKET_SERVICES.get(source.lower())
     if not service_class:
