@@ -770,15 +770,49 @@ function calculateVR(candles, period) {
     return result;
 }
 
-// BRAR - Simplified
-function calculateBRAR(candles, period) {
+// BRAR (情绪指标)
+function calculateBRAR(candles, period = 26) {
+    if (candles.length < period + 1) {
+        return { br: [], ar: [] };
+    }
+    
     const br = [];
     const ar = [];
     
     for (let i = period; i < candles.length; i++) {
-        // Simplified calculation
-        br.push({ time: candles[i].time, value: 100 });
-        ar.push({ time: candles[i].time, value: 100 });
+        let sumBRUp = 0;    // BR分子：今日最高价-昨日收盘价的累加
+        let sumBRDown = 0;  // BR分母：昨日收盘价-今日最低价的累加
+        let sumARUp = 0;    // AR分子：今日最高价-今日开盘价的累加
+        let sumARDown = 0;  // AR分母：今日开盘价-今日最低价的累加
+        
+        for (let j = 0; j < period; j++) {
+            const idx = i - j;
+            const candle = candles[idx];
+            const prevClose = idx > 0 ? candles[idx - 1].close : candle.open;
+            
+            // BR 计算
+            const brUp = candle.high - prevClose;
+            const brDown = prevClose - candle.low;
+            
+            sumBRUp += Math.max(0, brUp);
+            sumBRDown += Math.max(0, brDown);
+            
+            // AR 计算
+            const arUp = candle.high - candle.open;
+            const arDown = candle.open - candle.low;
+            
+            sumARUp += arUp;
+            sumARDown += arDown;
+        }
+        
+        // BR = (sumBRUp / sumBRDown) * 100
+        const brValue = sumBRDown === 0 ? 100 : (sumBRUp / sumBRDown) * 100;
+        
+        // AR = (sumARUp / sumARDown) * 100
+        const arValue = sumARDown === 0 ? 100 : (sumARUp / sumARDown) * 100;
+        
+        br.push({ time: candles[i].time, value: brValue });
+        ar.push({ time: candles[i].time, value: arValue });
     }
     
     return { br, ar };
