@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -120,3 +121,39 @@ STATICFILES_DIRS = [
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# 实时采集服务配置
+REALTIME_INGESTION_AUTO_START = os.environ.get(
+    'REALTIME_INGESTION_AUTO_START',
+    'true'
+).lower() in ('true', '1', 'yes')
+
+REALTIME_INGESTION_STREAMS = [
+    {'source': 'okx', 'symbol': 'BTCUSDT', 'bar': '1s'},
+    {'source': 'okx', 'symbol': 'BTCUSDT', 'bar': '1m'},
+    {'source': 'okx', 'symbol': 'ETHUSDT', 'bar': '1s'},
+    {'source': 'okx', 'symbol': 'ETHUSDT', 'bar': '1m'},
+]
+_raw_realtime_streams = os.environ.get('REALTIME_INGESTION_STREAMS')
+if _raw_realtime_streams:
+    try:
+        parsed = json.loads(_raw_realtime_streams)
+        if isinstance(parsed, list):
+            REALTIME_INGESTION_STREAMS = parsed
+    except json.JSONDecodeError:
+        fallback = []
+        for item in _raw_realtime_streams.split(','):
+            parts = [p.strip() for p in item.split(':') if p.strip()]
+            if not parts:
+                continue
+            stream = {
+                'source': parts[0],
+                'symbol': parts[1] if len(parts) > 1 else 'BTCUSDT',
+                'bar': parts[2] if len(parts) > 2 else '1s'
+            }
+            if len(parts) > 3:
+                stream['poll_interval'] = float(parts[3])
+            if len(parts) > 4:
+                stream['batch_size'] = int(parts[4])
+            fallback.append(stream)
+        REALTIME_INGESTION_STREAMS = fallback
