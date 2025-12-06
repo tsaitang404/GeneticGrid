@@ -275,6 +275,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             ticker = data[0]
             last = float(ticker.get('last', 0))
             open_24h = float(ticker.get('open24h', 0))
+            volume_24h = float(ticker.get('vol24h', 0) or 0)
+            volume_24h = volume_24h if volume_24h > 0 else None
         
             # 计算24h涨跌
             change_24h = last - open_24h if open_24h else None
@@ -289,6 +291,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
                 low_24h=float(ticker.get('low24h', 0)) or None,
                 change_24h=change_24h,
                 change_24h_pct=change_24h_pct,
+                volume_24h=volume_24h,
             )
             
         except PluginError:

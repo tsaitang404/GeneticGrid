@@ -89,7 +89,8 @@ export function useTicker(
         ticker.isUp = last >= open
         ticker.high24h = (parseFloat(t.high24h) * rate).toLocaleString()
         ticker.low24h = (parseFloat(t.low24h) * rate).toLocaleString()
-        ticker.vol24h = parseFloat(t.vol24h || '0').toLocaleString()
+        const volValue = parseFloat(t.vol24h ?? '0')
+        ticker.vol24h = Number.isFinite(volValue) && volValue > 0 ? volValue.toLocaleString() : '--'
         ticker.open24h = open.toLocaleString()
       } else {
         console.warn('Ticker API returned error:', result)
