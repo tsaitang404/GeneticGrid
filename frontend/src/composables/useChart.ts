@@ -711,7 +711,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     
     try {
       // oldestTimestamp is in seconds, API expects milliseconds
-      if (oldestTimestamp.value === null) {
+      if (oldestTimestamp.value === null || allCandles.value.length === 0) {
+        hasMoreData.value = false
         isLoadingMore.value = false
         return
       }
@@ -736,8 +737,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         }))
         
         // 过滤重复数据，只保留比当前最早时间更早的数据
-        const firstCurrentTime = allCandles.value[0].time
-        const uniqueNewCandles = newCandles.filter(c => c.time < firstCurrentTime)
+        const firstCurrentTime = allCandles.value.length ? allCandles.value[0].time : undefined
+        const uniqueNewCandles = firstCurrentTime === undefined
+          ? newCandles
+          : newCandles.filter(c => c.time < firstCurrentTime)
         
         if (uniqueNewCandles.length > 0) {
           // 优化：使用 concat 而不是展开运算符，对于大数组性能更好

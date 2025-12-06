@@ -6,6 +6,7 @@ OKX 交易所数据源插件 - 使用 REST API
 from typing import List, Optional
 from datetime import datetime
 import logging
+import time
 import requests
 
 from ..base import (
@@ -17,6 +18,7 @@ from ..base import (
     SourceType,
     PluginError,
 )
+from .okx_stream import get_realtime_manager as get_okx_realtime_manager
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,36 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     BASE_URL = "https://www.okx.com/api/v5"
     
     def __init__(self):
+        self._realtime = get_okx_realtime_manager()
         super().__init__()
+
+    def _get_realtime_candles(
+        self,
+        inst_id: str,
+        limit: int,
+        wait_timeout: float = 3.0,
+        poll_interval: float = 0.25,
+    ) -> List[CandleData]:
+        """从 WebSocket 缓冲区获取 1s K 线，必要时短暂等待以填充数据"""
+        if not self._realtime.enabled:
+            logger.warning("OKX 实时流不可用（websocket-client 未安装）")
+            return []
+
+        deadline = time.time() + max(wait_timeout, 0.0)
+        fetch_size = min(max(limit * 2, limit + 100), 7200)
+        candles: List[CandleData] = []
+
+        while True:
+            candles = self._realtime.get_latest_candles(inst_id, "1s", fetch_size)
+            if candles or time.time() >= deadline:
+                break
+            time.sleep(poll_interval)
+
+        if candles:
+            return candles[-limit:]
+
+        logger.warning("OKX 实时流在 %.1fs 内未返回数据 (%s, limit=%s)", wait_timeout, inst_id, limit)
+        return []
     
     def _normalize_symbol(self, symbol: str) -> str:
         """标准格式 "BTCUSDT" -> OKX 格式 "BTC-USDT" """
@@ -53,6 +84,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     def _normalize_granularity(self, bar: str) -> str:
         """标准格式 "1h" -> OKX 格式 "1H" """
         mapping = {
+            "tick": "1s",
+            "1s": "1s",
             "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
             "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H",
             "1d": "1D", "3d": "3D", "1w": "1W", "1M": "1M",
@@ -89,6 +122,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
+                "1s",
                 "1m", "3m", "5m", "15m", "30m",
                 "1h", "2h", "4h", "6h", "12h",
                 "1d", "3d", "1w", "1M"
@@ -110,7 +144,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             requires_proxy=True,  # 使用代理更稳定
             has_rate_limit=True,
             rate_limit_per_minute=600,
-            supports_real_time=False,
+            supports_real_time=True,
             supports_websocket=True,
         )
     
@@ -170,6 +204,21 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         - 要获取更新数据（更晚），使用 before 参数
         """
         try:
+            normalized_bar = bar.lower()
+            if normalized_bar in {"tick", "1s"}:
+                if before:
+                    logger.info("OKX 1s 粒度不支持 before 参数，直接返回空结果 (%s)", symbol)
+                    return []
+
+                candles = self._get_realtime_candles(symbol, limit)
+                if candles:
+                    logger.debug(
+                        "⚡ 使用 OKX WebSocket 实时缓存 (%s) 返回 %d 条数据",
+                        symbol,
+                        len(candles)
+                    )
+                return candles
+
             params = {
                 "instId": symbol,  # 已转换为 "BTC-USDT" 格式
                 "bar": bar,        # 已转换为 "1H" 格式
