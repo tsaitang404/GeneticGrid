@@ -446,38 +446,57 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     // Full update: replace all data
     // Note: setData() will preserve the current scroll position automatically
     
-    if (isTimelineMode.value && lineSeries.value) {
-      // Timeline mode: use close price for line chart
-      const lineData = allCandles.value.map(c => ({
-        time: c.time as any,
-        value: c.close
-      }))
-      lineSeries.value.setData(lineData)
-    } else if (candleSeries.value) {
-      // Candlestick mode
-      const candleData = allCandles.value.map(c => ({
-        time: c.time as any,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close
-      }))
-      candleSeries.value.setData(candleData)
-    }
-
     const volumeUpColor = getVolumeUpColor()
     const volumeDownColor = getVolumeDownColor()
-    const volumeData = allCandles.value.map(c => ({
-      time: c.time as any,
-      value: c.volume,
-      color: c.close >= c.open ? volumeUpColor : volumeDownColor
-    }))
+    const candles = allCandles.value
+    const len = candles.length
 
-    volumeSeries.value.setData(volumeData)
+    // 优化：一次遍历生成所有数据，减少数组迭代开销
+    if (isTimelineMode.value && lineSeries.value) {
+      const lineData = new Array(len)
+      const volumeData = new Array(len)
+      
+      for (let i = 0; i < len; i++) {
+        const c = candles[i]
+        const time = c.time as any
+        lineData[i] = { time, value: c.close }
+        volumeData[i] = {
+          time,
+          value: c.volume,
+          color: c.close >= c.open ? volumeUpColor : volumeDownColor
+        }
+      }
+      
+      lineSeries.value.setData(lineData)
+      volumeSeries.value.setData(volumeData)
+    } else if (candleSeries.value) {
+      const candleData = new Array(len)
+      const volumeData = new Array(len)
+      
+      for (let i = 0; i < len; i++) {
+        const c = candles[i]
+        const time = c.time as any
+        candleData[i] = {
+          time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close
+        }
+        volumeData[i] = {
+          time,
+          value: c.volume,
+          color: c.close >= c.open ? volumeUpColor : volumeDownColor
+        }
+      }
+      
+      candleSeries.value.setData(candleData)
+      volumeSeries.value.setData(volumeData)
+    }
 
     // Update price info
-    if (allCandles.value.length > 0 && options.onPriceUpdate) {
-      const latest = allCandles.value[allCandles.value.length - 1]
+    if (len > 0 && options.onPriceUpdate) {
+      const latest = candles[len - 1]
       const price = latest.close
       
       // Update latest price line
@@ -624,8 +643,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     const visibleToIndex = Math.min(allCandles.value.length - 1, Math.ceil(range.to || allCandles.value.length - 1))
     const visibleRange = visibleToIndex - visibleFromIndex
     
-    // Much larger buffer zone to trigger preload earlier (100% of visible range, min 1000, max 3000)
-    const bufferZone = Math.max(1000, Math.min(3000, Math.floor(visibleRange * 1.0)))
+    // 动态缓冲区：可视范围的 3 倍，最小 1000，最大 5000
+    // 增大缓冲区，提前触发加载
+    const bufferZone = Math.max(1000, Math.min(5000, Math.floor(visibleRange * 3.0)))
     
     // Clear existing debounce timer
     if (loadDebounceTimer) {
@@ -639,35 +659,22 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     
     // Debug logging
     if (shouldLoadHistory || shouldLoadNewer) {
-      // Debounce: wait 50ms to avoid loading during active dragging (reduced for faster response)
+      // Debounce: 200ms - 给用户更多拖动时间，减少请求频率
       loadDebounceTimer = window.setTimeout(() => {
         // Double-check conditions haven't changed during debounce
         if (shouldLoadHistory && !isLoadingMore.value && hasMoreData.value) {
-          // Calculate gap: how much data is missing before the start
-          const gap = Math.abs(visibleFromIndex)
-          
-          // Aggressive load count for smooth dragging:
-          // 1. If gap is negative (we're in the data), load 8x visible range
-          // 2. If gap exists, load gap + 10x visible range to ensure smooth scrolling
-          // 3. Minimum 8000 (for generous buffer), maximum 15000
-          let loadCount: number
-          if (gap <= 0) {
-            // Normal scrolling near beginning - load generously
-            loadCount = Math.max(8000, visibleRange * 8)
-          } else {
-            // Large gap detected (fast drag or zoom out) - load even more
-            loadCount = Math.max(10000, gap + visibleRange * 10)
-          }
-          
-          // Cap at 15000 (backend cache makes this fast)
-          loadCount = Math.min(15000, Math.ceil(loadCount))
+          // 计算需要加载的数量
+          // 基础加载量：可视范围的 10 倍
+          // 最小 5000 (保证足够数据)，最大 10000 (一次加载更多)
+          let loadCount = Math.max(5000, visibleRange * 10)
+          loadCount = Math.min(10000, Math.ceil(loadCount))
           
           loadMoreHistory(loadCount)
         } else if (shouldLoadNewer && !isLoadingNewer.value && hasNewerData.value) {
           loadMoreNewerUntilEnough()
         }
         loadDebounceTimer = null
-      }, 100)
+      }, 200)
     }
     
     updateNoDataOverlay()
@@ -709,7 +716,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         return
       }
       const beforeMs = oldestTimestamp.value * 1000
-      const limit = Math.min(count, 15000) // Increased max to 15000 (backend has cache)
+      // 限制单次请求最大 10000 条，满足用户对更大预加载数据的需求
+      const limit = Math.min(count, 10000)
       const backendBar = getBackendBar(options.bar.value)
       const url = `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=${limit}&source=${options.source.value}&before=${beforeMs}`
       
@@ -727,13 +735,15 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           close: candle.close * rate
         }))
         
-        // Prepend new data and remove duplicates
-        const existingTimes = new Set(allCandles.value.map(c => c.time))
-        const uniqueNewCandles = newCandles.filter(c => !existingTimes.has(c.time))
+        // 过滤重复数据，只保留比当前最早时间更早的数据
+        const firstCurrentTime = allCandles.value[0].time
+        const uniqueNewCandles = newCandles.filter(c => c.time < firstCurrentTime)
         
         if (uniqueNewCandles.length > 0) {
-          allCandles.value = [...uniqueNewCandles, ...allCandles.value]
-          allCandles.value.sort((a, b) => (a.time as number) - (b.time as number))
+          // 优化：使用 concat 而不是展开运算符，对于大数组性能更好
+          allCandles.value = uniqueNewCandles.concat(allCandles.value)
+          // 确保排序正确（虽然理论上应该是排好的）
+          // allCandles.value.sort((a, b) => (a.time as number) - (b.time as number))
           
           const newOldestTime = allCandles.value[0].time
           

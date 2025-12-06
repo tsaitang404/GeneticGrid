@@ -905,10 +905,18 @@ export function useIndicators(
   }
 
   // 监听数据变化，更新对齐序列并触发指标计算
-  watch(allCandles, (newCandles) => {
+  // 优化：移除 deep: true，改用多源监听以提高性能
+  watch([
+    () => allCandles.value, // 监听引用变化（历史数据加载）
+    () => allCandles.value.length, // 监听长度变化（新K线生成）
+    () => allCandles.value[allCandles.value.length - 1] // 监听最新K线变化（实时更新）
+  ], () => {
+    const newCandles = allCandles.value
     if (newCandles.length === 0) return
     
     // 1. 更新所有副图的对齐序列，确保时间轴同步
+    // 优化：仅在数据长度变化或引用变化时更新对齐序列，实时更新不需要重置整个时间轴
+    // 但为了简单起见和确保一致性，这里暂时保持全量更新，因为 alignmentSeries 只是 {time, 0}，开销相对较小
     const alignData = newCandles.map(c => ({ time: c.time as any, value: 0 }))
     Object.values(alignmentSeries).forEach(series => {
       try {
@@ -920,7 +928,7 @@ export function useIndicators(
     
     // 2. 触发指标计算
     triggerWorkerCalculation()
-  }, { deep: true })
+  })
 
   return {
     indicators,
