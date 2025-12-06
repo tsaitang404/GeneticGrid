@@ -1,5 +1,5 @@
 import { reactive, computed, nextTick, type Ref, type ComputedRef } from 'vue'
-import { createChart, type IChartApi, ColorType } from 'lightweight-charts'
+import { createChart, type IChartApi, ColorType, type LogicalRange } from 'lightweight-charts'
 import type { IndicatorConfig, Indicators, Candle } from '@/types'
 import { useIndicatorWorker } from './useIndicatorWorker'
 import { useTimeScaleSync } from './useTimeScaleSync'
@@ -11,6 +11,11 @@ export function useIndicators(
 ) {
   const { calculateIndicators, terminateWorker } = useIndicatorWorker()
   const { isSyncingTimeScale } = useTimeScaleSync()
+
+  const captureVisibleRange = (): LogicalRange | null => {
+    if (!chart.value) return null
+    return chart.value.timeScale().getVisibleLogicalRange() ?? null
+  }
   
   const indicators = reactive<Partial<Indicators>>({
     vol: { 
@@ -216,6 +221,39 @@ export function useIndicators(
     }
   }
 
+  // Helpers to create standardized series for sub indicators
+  const createLine = (
+    subChart: IChartApi,
+    color: string,
+    title: string,
+    extra: Parameters<IChartApi['addLineSeries']>[0] = {}
+  ) => {
+    return subChart.addLineSeries({
+      color,
+      lineWidth: 1,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      title,
+      ...extra
+    })
+  }
+
+  const createHistogram = (
+    subChart: IChartApi,
+    color: string,
+    title: string,
+    extra: Parameters<IChartApi['addHistogramSeries']>[0] = {}
+  ) => {
+    return subChart.addHistogramSeries({
+      color,
+      priceFormat: { type: 'volume' },
+      title,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      ...extra
+    })
+  }
+
   const initSubChart = (key: string): void => {
     if (!subChartRefs[key]) {
       console.warn(`Sub chart ref for ${key} not found`)
@@ -298,120 +336,77 @@ export function useIndicators(
   const createSubIndicatorSeries = (key: string, subChart: IChartApi): void => {
     if (key === 'macd' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addHistogramSeries({
-          color: '#26a69a',
-          priceFormat: { type: 'volume' },
-          title: 'MACD',
-          lastValueVisible: false
-        }),
-        subChart.addLineSeries({ 
-          color: '#2962FF', 
-          lineWidth: 1, 
-          title: 'DIF',
-          lastValueVisible: false,
-          priceLineVisible: false
-        }),
-        subChart.addLineSeries({ 
-          color: '#FF6D00', 
-          lineWidth: 1, 
-          title: 'DEA',
-          lastValueVisible: false,
-          priceLineVisible: false
-        })
+        createHistogram(subChart, '#26a69a', 'MACD'),
+        createLine(subChart, '#2962FF', 'DIF'),
+        createLine(subChart, '#FF6D00', 'DEA')
       ]
     } else if (key === 'rsi' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ 
-          color: '#9C27B0', 
-          lineWidth: 1, 
-          title: 'RSI',
-          lastValueVisible: false,
-          priceLineVisible: false
-        })
+        createLine(subChart, '#9C27B0', 'RSI')
       ]
     } else if (key === 'kdj' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ 
-          color: '#2962FF', 
-          lineWidth: 1, 
-          title: 'K',
-          lastValueVisible: false,
-          priceLineVisible: false
-        }),
-        subChart.addLineSeries({ 
-          color: '#FF6D00', 
-          lineWidth: 1, 
-          title: 'D',
-          lastValueVisible: false,
-          priceLineVisible: false
-        }),
-        subChart.addLineSeries({ 
-          color: '#E91E63', 
-          lineWidth: 1, 
-          title: 'J',
-          lastValueVisible: false,
-          priceLineVisible: false
-        })
+        createLine(subChart, '#2962FF', 'K'),
+        createLine(subChart, '#FF6D00', 'D'),
+        createLine(subChart, '#E91E63', 'J')
       ]
     } else if (key === 'stochrsi' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'StochRSI K', lastValueVisible: false, priceLineVisible: false }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'StochRSI D', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#2962FF', 'StochRSI K'),
+        createLine(subChart, '#FF6D00', 'StochRSI D')
       ]
     } else if (key === 'cci' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'CCI', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#9C27B0', 'CCI')
       ]
     } else if (key === 'dmi' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'PDI', lastValueVisible: false, priceLineVisible: false }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'MDI', lastValueVisible: false, priceLineVisible: false }),
-        subChart.addLineSeries({ color: '#26a69a', lineWidth: 1, title: 'ADX', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#2962FF', 'PDI'),
+        createLine(subChart, '#FF6D00', 'MDI'),
+        createLine(subChart, '#26a69a', 'ADX')
       ]
     } else if (key === 'wr' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'WR', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#E91E63', 'WR')
       ]
     } else if (key === 'obv' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#00BCD4', lineWidth: 1, title: 'OBV', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#00BCD4', 'OBV')
       ]
     } else if (key === 'trix' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#FFC107', lineWidth: 1, title: 'TRIX', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#FFC107', 'TRIX')
       ]
     } else if (key === 'roc' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#9C27B0', lineWidth: 1, title: 'ROC', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#9C27B0', 'ROC')
       ]
     } else if (key === 'mtm' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2196F3', lineWidth: 1, title: 'MTM', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#2196F3', 'MTM')
       ]
     } else if (key === 'dma' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'DMA1', lastValueVisible: false, priceLineVisible: false }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'DMA2', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#2962FF', 'DMA1'),
+        createLine(subChart, '#FF6D00', 'DMA2')
       ]
     } else if (key === 'vr' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#26a69a', lineWidth: 1, title: 'VR', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#26a69a', 'VR')
       ]
     } else if (key === 'brar' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#2962FF', lineWidth: 1, title: 'BR', lastValueVisible: false, priceLineVisible: false }),
-        subChart.addLineSeries({ color: '#FF6D00', lineWidth: 1, title: 'AR', lastValueVisible: false, priceLineVisible: false })
+        createLine(subChart, '#2962FF', 'BR'),
+        createLine(subChart, '#FF6D00', 'AR')
       ]
     } else if (key === 'psy' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ color: '#E91E63', lineWidth: 1, title: 'PSY' })
+        createLine(subChart, '#E91E63', 'PSY')
       ]
     } else if (key === 'atr' && indicators[key as keyof Indicators]) {
       indicators[key]!.series = [
-        subChart.addLineSeries({ 
-          color: '#FF9800', 
-          lineWidth: 2, 
-          title: 'ATR',
+        createLine(subChart, '#FF9800', 'ATR', {
+          lineWidth: 2,
           lastValueVisible: true,
           priceLineVisible: true,
           priceLineWidth: 1,
