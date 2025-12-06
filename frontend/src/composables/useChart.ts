@@ -522,15 +522,38 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     const volumeDownColor = getVolumeDownColor()
 
     try {
+      const requestSymbol = options.symbol.value
+      const requestBar = options.bar.value
+      const requestSource = options.source.value
+      const requestNewestTs = newestTimestamp.value
+
       // Use 'after' parameter to get only newer data than we have
-      const afterMs = newestTimestamp.value * 1000
-      const backendBar = getBackendBar(options.bar.value)
+      const afterMs = requestNewestTs * 1000
+      const backendBar = getBackendBar(requestBar)
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=100&source=${options.source.value}&after=${afterMs}`
+        `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=100&source=${requestSource}&after=${afterMs}`
       )
       const result: APIResponse<Candle[]> = await response.json()
 
+      // 如果期间切换了交易对/周期/数据源，放弃这次更新
+      if (
+        options.symbol.value !== requestSymbol ||
+        options.bar.value !== requestBar ||
+        options.source.value !== requestSource
+      ) {
+        return
+      }
+
       if (result.code === 0 && result.data && result.data.length > 0) {
+        // 状态可能在请求期间被重置，重新验证
+        if (allCandles.value.length === 0) {
+          return
+        }
+        const lastCandle = allCandles.value[allCandles.value.length - 1]
+        if (!lastCandle || lastCandle.time === undefined || lastCandle.time === null) {
+          return
+        }
+
         // 应用汇率转换
         const rate = options.exchangeRate?.value || 1
         const newCandles = result.data.map(candle => ({
@@ -540,11 +563,18 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           low: candle.low * rate,
           close: candle.close * rate
         }))
-        
-        const lastCandle = allCandles.value[allCandles.value.length - 1]
+
+        // 避免 newestTimestamp 在调用期间被重置导致写回旧数据
+        if (!newestTimestamp.value || newestTimestamp.value < lastCandle.time) {
+          newestTimestamp.value = lastCandle.time as number
+        }
+
         let hasNewData = false
 
         for (const newCandle of newCandles) {
+          if (!newCandle || newCandle.time === undefined || newCandle.time === null) {
+            continue
+          }
           if (newCandle.time === lastCandle.time) {
             // Update existing candle (current period may still be updating)
             allCandles.value[allCandles.value.length - 1] = newCandle
