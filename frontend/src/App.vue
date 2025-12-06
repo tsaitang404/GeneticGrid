@@ -96,7 +96,7 @@ onMounted(() => {
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
   background: #0d0d0d;
   color: #d1d4dc;
 }
@@ -146,6 +146,7 @@ onMounted(() => {
 
 .app-main {
   flex: 1;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 </style>
