@@ -375,8 +375,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       // For timeline mode, limit to today's data only (or recent period)
       let limit = 2000
       if (isTimeline) {
-        // For 1s data: 1 day = 86400 seconds, use smaller limit
-        limit = Math.min(500, 2000) // Start with less data for intraday view
+        // 1s 分时模式下使用较大的缓存以支持多次刷新
+        limit = 5000
       }
       
       const response = await fetch(
@@ -569,7 +569,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
           newestTimestamp.value = lastCandle.time as number
         }
 
-        let hasNewData = false
+  let hasNewData = false
+  let needsFullRefresh = false
 
         for (const newCandle of newCandles) {
           if (!newCandle || newCandle.time === undefined || newCandle.time === null) {
@@ -638,6 +639,13 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
             }
             newestTimestamp.value = newCandle.time as number
             hasNewData = true
+          } else if (newCandle.time < lastCandle.time && isTimelineMode.value) {
+            // 如果上一次返回的是未来时间，新数据比最新蜡烛还早，则说明历史被覆盖，重建时间线
+            allCandles.value = [...allCandles.value.filter(item => (item.time as number) < newCandle.time), newCandle]
+            allCandles.value.sort((a, b) => (a.time as number) - (b.time as number))
+            newestTimestamp.value = allCandles.value[allCandles.value.length - 1]?.time as number
+            hasNewData = true
+            needsFullRefresh = true
           }
         }
         
@@ -658,6 +666,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
             changeNum >= 0 ? `+${change}` : change,
             latest.close >= latest.open
           )
+        }
+
+        if (needsFullRefresh) {
+          updateChartData()
         }
       }
     } catch (err) {
