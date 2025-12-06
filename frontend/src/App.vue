@@ -10,14 +10,27 @@
     </header>
 
     <main class="app-main">
-      <KlineChart
-        :initial-symbol="initialSymbol"
-        :initial-bar="initialBar"
-        :initial-source="initialSource"
-        :ticker="ticker"
-        :currency="currency"
-        @symbol-change="handleSymbolChange"
-      />
+      <div class="main-content">
+        <section class="chart-column">
+          <KlineChart
+            :initial-symbol="initialSymbol"
+            :initial-bar="initialBar"
+            :initial-source="initialSource"
+            :ticker="ticker"
+            :currency="currency"
+            @symbol-change="handleSymbolChange"
+            @source-change="handleSourceChange"
+          />
+        </section>
+        <aside class="market-column">
+          <MarketInfoPanel
+            :symbol="currentSymbol"
+            :source="currentSource"
+            :ticker="ticker"
+            :currency="currency"
+          />
+        </aside>
+      </div>
     </main>
 
     <SettingsModal
@@ -32,6 +45,7 @@ import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import KlineChart from './components/chart/KlineChart.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
+import MarketInfoPanel from './components/market/MarketInfoPanel.vue'
 import { useTicker } from './composables/useTicker'
 import { usePreferencesStore } from './stores/preferences'
 
@@ -55,6 +69,10 @@ const toggleSettings = (): void => {
 
 const handleSymbolChange = (symbol: string): void => {
   currentSymbol.value = symbol
+}
+
+const handleSourceChange = (source: string): void => {
+  currentSource.value = source
 }
 
 onMounted(() => {
@@ -148,5 +166,38 @@ onMounted(() => {
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
+  background: radial-gradient(circle at top, rgba(41, 98, 255, 0.07), transparent 40%);
+}
+
+.main-content {
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.chart-column {
+  flex: 3;
+  min-width: 0;
+}
+
+.market-column {
+  flex: 1;
+  min-width: 280px;
+  position: sticky;
+  top: 24px;
+  align-self: flex-start;
+}
+
+@media (max-width: 1200px) {
+  .main-content {
+    flex-direction: column;
+  }
+  .market-column {
+    position: static;
+    width: 100%;
+  }
 }
 </style>

@@ -2,38 +2,6 @@
   <div class="kline-chart-container">
     <!-- 顶部工具栏 -->
     <div class="chart-toolbar">
-      <!-- 行情信息行 -->
-      <div class="toolbar-info-row">
-        <div class="info-item">
-          <span class="label">交易对</span>
-          <span class="value pair-value">
-            <span class="pair-base">{{ symbolParts.base }}</span>
-            <span class="divider">/</span>
-            <span class="pair-quote">{{ symbolParts.quote }}</span>
-          </span>
-        </div>
-        <div class="info-item">
-          <span class="label">最新价 ({{ currencyLabel }})</span>
-          <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.last }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">24h涨跌幅</span>
-          <span class="value" :class="displayTicker.isUp ? 'up' : 'down'">{{ displayTicker.changePercent }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">24h最高</span>
-          <span class="value">{{ displayTicker.high24h }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">24h最低</span>
-          <span class="value">{{ displayTicker.low24h }}</span>
-        </div>
-        <div class="info-item">
-          <span class="label">24h成交量</span>
-          <span class="value">{{ displayTicker.vol24h }}</span>
-        </div>
-      </div>
-
       <!-- 控制工具行 -->
       <div class="toolbar-controls-row">
         <div class="controls-group market-group">
@@ -61,17 +29,14 @@
             :indicators="indicators"
             @toggle="toggleIndicator"
           />
-        </div>
-
-        <div class="controls-group actions-group">
           <button 
             @click="toggleAutoRefresh" 
             :class="['action-btn', 'refresh-btn', { active: autoRefreshEnabled }]"
             :title="autoRefreshEnabled ? '关闭自动刷新' : '开启自动刷新'"
           >
-            <svg class="icon" width="16" height="16" viewBox="0 0 16 16">
-              <path d="M13.65 2.35A7.5 7.5 0 0 0 3.5 4.5M2.35 13.65A7.5 7.5 0 0 0 12.5 11.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-              <path d="M12.5 4.5v-2h2M3.5 11.5v2h-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg class="icon" width="14" height="14" viewBox="0 0 16 16">
+              <path d="M13.65 2.35A7.5 7.5 0 0 0 3.5 4.5M2.35 13.65A7.5 7.5 0 0 0 12.5 11.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+              <path d="M12.5 4.5v-2h2M3.5 11.5v2h-2" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <span>{{ autoRefreshEnabled ? '自动刷新' : '手动刷新' }}</span>
           </button>
@@ -258,6 +223,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'symbol-change': [symbol: string]
   'bar-change': [bar: string]
+  'source-change': [source: string]
 }>()
 
 const preferences = usePreferencesStore()
@@ -812,9 +778,10 @@ watch(bar, (newBar) => {
 })
 
 // Watch for source changes to reload data
-watch(source, () => {
+watch(source, (newSource) => {
   resetSelection()
   chartError.value = { show: false, message: '' } // 清除错误状态
+  emit('source-change', newSource)
   stopAutoRefresh()
   initChart()
   rebuildSubCharts() // 重建副图
@@ -903,17 +870,8 @@ onUnmounted(() => {
 .chart-toolbar {
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 4px 0 0;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.toolbar-info-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px 24px;
-  padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -921,7 +879,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   flex-wrap: wrap;
 }
 
@@ -1042,44 +1000,25 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.toolbar-info-row .label {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.toolbar-info-row .value {
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--text-primary);
-}
-
-.toolbar-info-row .value.up {
-  color: var(--up-color);
-}
-
-.toolbar-info-row .value.down {
-  color: var(--down-color);
-}
-
-.toolbar-controls {
-  display: none; /* Hide old controls */
-}
-
 .refresh-btn {
-  /* Keep old styles for backward compatibility but they won't be used */
-  padding: 6px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  padding: 4px 10px;
+  background: rgba(41, 98, 255, 0.08);
+  border: 1px solid rgba(41, 98, 255, 0.3);
+  border-radius: 999px;
   color: var(--text-primary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   transition: all 0.2s;
-  height: 36px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  margin-left: 12px;
 }
 
 .refresh-btn:hover {
-  background: rgba(41, 98, 255, 0.15);
+  background: rgba(41, 98, 255, 0.18);
   border-color: var(--blue-accent);
 }
 
@@ -1087,6 +1026,10 @@ onUnmounted(() => {
   background: rgba(41, 98, 255, 0.2);
   border-color: var(--blue-accent);
   color: var(--blue-accent);
+}
+
+.refresh-btn .icon {
+  flex-shrink: 0;
 }
 
 .chart-area {
