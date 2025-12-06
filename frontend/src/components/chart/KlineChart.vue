@@ -295,12 +295,18 @@ const handleSourceChange = (sourceData: any) => {
   
   // Update available timeframes
   if (sourceData.candlestick_granularities && sourceData.candlestick_granularities.length > 0) {
-    availableTimeframes.value = sourceData.candlestick_granularities
+    const baseTimeframes = Array.from(new Set<string>(sourceData.candlestick_granularities as string[]))
+    if (baseTimeframes.includes('1s') && !baseTimeframes.includes('tick')) {
+      baseTimeframes.unshift('tick')
+    }
+    availableTimeframes.value = baseTimeframes
     // If current bar is not available in new source, select the first one
     if (!availableTimeframes.value.includes(bar.value)) {
       // Try to find a similar timeframe or fall back to first available
-      const fallback = availableTimeframes.value.find(tf => ['1h', '1d', '15m', '5m', '1m'].includes(tf)) 
-                      || availableTimeframes.value[0]
+      const aliasFallback = bar.value === 'tick' && baseTimeframes.includes('1s') ? 'tick' : null
+      const fallback = aliasFallback
+        || availableTimeframes.value.find(tf => ['tick', '1h', '1d', '15m', '5m', '1m'].includes(tf)) 
+        || availableTimeframes.value[0]
       bar.value = fallback
     }
   }
