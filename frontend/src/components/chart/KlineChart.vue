@@ -1113,10 +1113,10 @@ onUnmounted(() => {
   flex-direction: row;
   gap: 20px;
   max-width: calc(100% - 220px);
-  background: rgba(19, 23, 34, 0.75);
+  background: transparent;
   padding: 8px 14px;
   border-radius: 4px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   font-size: 12px;
   font-weight: 500;
   pointer-events: none;
