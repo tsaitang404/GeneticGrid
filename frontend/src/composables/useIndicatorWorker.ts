@@ -43,7 +43,6 @@ export function useIndicatorWorker() {
         console.error('BASE_URL:', import.meta.env.BASE_URL)
       }
       
-      console.log('✅ Indicator worker initialized:', workerPath)
     } catch (error) {
       console.error('Failed to initialize indicator worker:', error)
     }

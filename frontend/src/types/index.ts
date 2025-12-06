@@ -36,7 +36,7 @@ export interface BOLLData {
 }
 
 // Drawing types
-export type DrawingType = 'cursor' | 'line' | 'ray' | 'horizontal' | 'fib' | 'parallel' | 'delete'
+export type DrawingType = 'cursor' | 'line' | 'ray' | 'horizontal' | 'ratio' | 'parallel' | 'delete'
 
 export interface LogicalPoint {
   time: number
@@ -48,9 +48,14 @@ export interface ScreenPoint {
   y: number
 }
 
+export interface DrawingMeta {
+  parallelLineCount?: number
+}
+
 export interface Drawing {
   type: DrawingType
   points: LogicalPoint[]
+  meta?: DrawingMeta
 }
 
 // Indicator config types
@@ -60,12 +65,16 @@ export interface IndicatorConfig {
   series: any | any[]
   label?: string
   title?: string
+  zhName?: string  // 中文名称
+  description?: string  // 指标说明
 }
 
 export interface Indicators {
   vol: IndicatorConfig
   ma: IndicatorConfig
+  maWithMacd: IndicatorConfig
   ema: IndicatorConfig
+  emaFib: IndicatorConfig
   boll: IndicatorConfig
   sar: IndicatorConfig
   supertrend: IndicatorConfig
@@ -85,6 +94,7 @@ export interface Indicators {
   vr: IndicatorConfig
   brar: IndicatorConfig
   psy: IndicatorConfig
+  atr: IndicatorConfig
 }
 
 export interface ChartColorRefs {
@@ -99,6 +109,7 @@ export interface ChartOptions {
   symbol: { value: string }
   bar: { value: string }
   source: { value: string }
+  exchangeRate?: { value: number }
   colors?: ChartColorRefs
   onLoading?: (loading: boolean) => void
   onError?: (error: ChartError) => void
