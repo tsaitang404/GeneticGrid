@@ -233,6 +233,7 @@ class TickerData:
     low_24h: Optional[float] = None
     change_24h: Optional[float] = None
     change_24h_pct: Optional[float] = None
+    volume_24h: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -245,6 +246,7 @@ class TickerData:
             'low_24h': self.low_24h,
             'change_24h': self.change_24h,
             'change_24h_pct': self.change_24h_pct,
+            'volume_24h': self.volume_24h,
         }
 
 

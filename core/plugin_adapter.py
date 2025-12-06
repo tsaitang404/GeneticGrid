@@ -50,6 +50,8 @@ class PluginAdapter:
             result['high24h'] = str(ticker.high_24h)
         if ticker.low_24h is not None:
             result['low24h'] = str(ticker.low_24h)
+        if ticker.volume_24h is not None:
+            result['vol24h'] = str(ticker.volume_24h)
         
         # 计算 open24h (如果有涨跌幅)
         if ticker.change_24h_pct is not None:
@@ -61,6 +63,8 @@ class PluginAdapter:
             result['high_24h'] = result['high24h']
         if 'low24h' in result:
             result['low_24h'] = result['low24h']
+        if 'vol24h' in result:
+            result['vol_24h'] = result['vol24h']
         
         return result
     

@@ -230,6 +230,8 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             # 计算24h涨跌
             change_24h = last - open_price
             change_24h_pct = (change_24h / open_price * 100) if open_price else None
+            volume_24h = float(data.get('volume', 0) or 0)
+            volume_24h = volume_24h if volume_24h > 0 else None
             
             return TickerData(
                 inst_id=symbol,
@@ -240,6 +242,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                 low_24h=float(data.get('lowPrice', 0)) or None,
                 change_24h=change_24h,
                 change_24h_pct=change_24h_pct,
+                volume_24h=volume_24h,
             )
             
         except requests.exceptions.Timeout:
