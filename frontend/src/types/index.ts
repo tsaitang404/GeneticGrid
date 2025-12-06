@@ -36,7 +36,7 @@ export interface BOLLData {
 }
 
 // Drawing types
-export type DrawingType = 'cursor' | 'line' | 'ray' | 'horizontal' | 'fib' | 'parallel' | 'delete'
+export type DrawingType = 'cursor' | 'line' | 'ray' | 'horizontal' | 'ratio' | 'parallel' | 'delete'
 
 export interface LogicalPoint {
   time: number
