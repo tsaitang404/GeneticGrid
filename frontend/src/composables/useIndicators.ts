@@ -1,4 +1,4 @@
-import { reactive, computed, nextTick, type Ref, type ComputedRef } from 'vue'
+import { reactive, computed, nextTick, watch, type Ref, type ComputedRef } from 'vue'
 import { createChart, type IChartApi, ColorType, type LogicalRange } from 'lightweight-charts'
 import type { IndicatorConfig, Indicators, Candle } from '@/types'
 import { useIndicatorWorker } from './useIndicatorWorker'
@@ -215,6 +215,9 @@ export function useIndicators(
     atr: 180
   })
 
+  // 用于保持副图时间轴与主图完全一致的隐形序列
+  const alignmentSeries = reactive<Record<string, ISeriesApi<'Line'>>>({})
+
   const setSubChartRef = (el: HTMLElement | null, key: string): void => {
     if (el) {
       subChartRefs[key] = el
@@ -265,6 +268,9 @@ export function useIndicators(
       subCharts.value[key].remove()
       delete subCharts.value[key]
     }
+    if (alignmentSeries[key]) {
+      delete alignmentSeries[key]
+    }
 
     const parentWidth = subChartRefs[key].clientWidth || 800
     const parentHeight = subChartRefs[key].clientHeight || 180
@@ -297,6 +303,19 @@ export function useIndicators(
     })
 
     subCharts.value[key] = subChart
+
+    // 创建隐形对齐序列，确保时间轴包含所有K线时间点，从而保证 LogicalRange 与主图完全一致
+    const alignSeries = subChart.addLineSeries({
+      visible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+      autoscaleInfoProvider: () => null // 不参与自动缩放计算
+    })
+    if (allCandles.value.length > 0) {
+      alignSeries.setData(allCandles.value.map(c => ({ time: c.time as any, value: 0 })))
+    }
+    alignmentSeries[key] = alignSeries
 
     // 立即同步主图的时间轴状态到新创建的副图
     if (chart.value) {
@@ -811,6 +830,9 @@ export function useIndicators(
     Object.keys(subCharts.value).forEach(key => {
       subCharts.value[key].remove()
     })
+    Object.keys(alignmentSeries).forEach(key => {
+      delete alignmentSeries[key]
+    })
   }
 
   const toggleIndicator = (key: keyof Indicators): void => {
@@ -851,6 +873,9 @@ export function useIndicators(
         subCharts.value[key].remove()
         delete subCharts.value[key]
       }
+      if (alignmentSeries[key]) {
+        delete alignmentSeries[key]
+      }
       indicators[key]!.series = []
     }
   }
@@ -866,6 +891,9 @@ export function useIndicators(
           subCharts.value[key].remove()
           delete subCharts.value[key]
         }
+        if (alignmentSeries[key]) {
+          delete alignmentSeries[key]
+        }
         // 重新初始化
         nextTick(() => {
           setTimeout(() => {
@@ -875,6 +903,24 @@ export function useIndicators(
       }
     })
   }
+
+  // 监听数据变化，更新对齐序列并触发指标计算
+  watch(allCandles, (newCandles) => {
+    if (newCandles.length === 0) return
+    
+    // 1. 更新所有副图的对齐序列，确保时间轴同步
+    const alignData = newCandles.map(c => ({ time: c.time as any, value: 0 }))
+    Object.values(alignmentSeries).forEach(series => {
+      try {
+        series.setData(alignData)
+      } catch (e) {
+        // 忽略已销毁对象的错误
+      }
+    })
+    
+    // 2. 触发指标计算
+    triggerWorkerCalculation()
+  }, { deep: true })
 
   return {
     indicators,
