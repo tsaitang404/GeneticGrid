@@ -91,7 +91,7 @@ const tools: Array<{ id: DrawingType; name: string; icon: string }> = [
   { id: 'line', name: '直线', icon: '╱' },
   { id: 'ray', name: '射线', icon: '➚' },
   { id: 'horizontal', name: '横线', icon: '─' },
-  { id: 'fib', name: '斐波那契', icon: '≡' },
+  { id: 'ratio', name: '等比通道', icon: '≡' },
   { id: 'parallel', name: '等距通道', icon: '∥' }
 ]
 

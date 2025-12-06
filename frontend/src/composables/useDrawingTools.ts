@@ -30,6 +30,22 @@ export function useDrawingTools(
 
   const horizontalPriceLines = new Map<Drawing, HorizontalPriceLineRef>()
   const horizontalPriceLabels = new Map<Drawing, HTMLDivElement>()
+  const RATIO_STEP_COUNT = 6
+  const RATIO_EPSILON = 1e-6
+
+  const formatRatioPercent = (ratio: number): string => {
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      return ''
+    }
+    if (Math.abs(ratio - 1) < RATIO_EPSILON) {
+      return '100%'
+    }
+    const percent = ratio * 100
+    const formatted = percent.toFixed(2)
+    const numeric = Number.parseFloat(formatted)
+    const clean = Number.isFinite(numeric) ? numeric.toString() : formatted
+    return `${clean}%`
+  }
 
   const clampParallelLineCount = (value: number): number => {
     const num = Number.isFinite(value) ? Math.round(value) : DEFAULT_PARALLEL_LINE_COUNT
@@ -76,6 +92,7 @@ export function useDrawingTools(
 
   const findDrawingNearPoint = (point: ScreenPoint, tolerance = DELETE_TOLERANCE): Drawing | null => {
     const toleranceSquared = tolerance * tolerance
+    const drawableMetrics = getDrawableMetrics()
     for (let i = drawings.length - 1; i >= 0; i -= 1) {
       const drawing = drawings[i]
       if (drawing.type === 'delete') continue
@@ -99,6 +116,29 @@ export function useDrawingTools(
           }
         }
         continue
+      }
+
+      if (drawing.type === 'ratio' && drawing.points.length >= 2) {
+        if (drawableMetrics) {
+          const segments = buildRatioSegments(
+            drawing.points,
+            drawableMetrics.drawableX,
+            drawableMetrics.drawableWidth
+          )
+          for (const segment of segments) {
+            if (distanceToSegmentSquared(point, segment.start, segment.end) <= toleranceSquared) {
+              return drawing
+            }
+          }
+        } else {
+          const fallbackFirst = logicalToPoint(drawing.points[0])
+          const fallbackSecond = logicalToPoint(drawing.points[1])
+          if (fallbackFirst && fallbackSecond) {
+            if (distanceToSegmentSquared(point, fallbackFirst, fallbackSecond) <= toleranceSquared) {
+              return drawing
+            }
+          }
+        }
       }
 
       if (drawing.type === 'horizontal' && screenPoints[0]) {
@@ -146,6 +186,8 @@ export function useDrawingTools(
     switch (type) {
       case 'horizontal':
         return 1
+      case 'ratio':
+        return 2
       case 'parallel':
         return 3
       case 'line':
@@ -185,7 +227,7 @@ export function useDrawingTools(
   ): { drawing: Drawing, pointIndex: number, toolType: DrawingType } | null => {
     const suppressClick = options?.suppressUpcomingClick ?? false
     const shouldStartEdit = options?.startEdit ?? true
-  for (const toolType of ['line', 'ray', 'horizontal', 'parallel'] as DrawingType[]) {
+  for (const toolType of ['line', 'ray', 'horizontal', 'parallel', 'ratio'] as DrawingType[]) {
       const controlPoint = findControlPoint(screenPoint, toolType)
       if (controlPoint) {
         if (shouldStartEdit) {
@@ -430,6 +472,103 @@ export function useDrawingTools(
     return segments
   }
 
+  interface RatioSegment {
+    start: ScreenPoint
+    end: ScreenPoint
+    label: string
+  }
+
+  const getDrawableMetrics = () => {
+    if (!canvasRef.value || !chart.value) return null
+
+    const width = canvasRef.value.width
+    const height = canvasRef.value.height
+    const timeScale = chart.value.timeScale()
+    const activeSeries = getActiveSeries()
+    if (!activeSeries) return null
+
+    const priceScale = activeSeries.priceScale()
+    const drawableWidth = Math.max(0, width - priceScale.width())
+    const drawableHeight = Math.max(0, height - timeScale.height())
+
+    return {
+      drawableX: 0,
+      drawableY: 0,
+      drawableWidth,
+      drawableHeight
+    }
+  }
+
+  const buildRatioSegments = (
+    points: LogicalPoint[],
+    drawableX: number,
+    drawableWidth: number
+  ): RatioSegment[] => {
+    if (points.length < 2) return []
+    if (drawableWidth <= 0) return []
+
+    const activeSeries = getActiveSeries()
+    if (!activeSeries) return []
+
+    const basePrice = points[0].price
+    const targetPrice = points[1].price
+
+    if (!Number.isFinite(basePrice) || !Number.isFinite(targetPrice)) {
+      return []
+    }
+
+    if (Math.abs(basePrice) < RATIO_EPSILON) {
+      return []
+    }
+
+    const percent = (targetPrice - basePrice) / basePrice
+    const percentAbs = Math.abs(percent)
+
+    const segments: RatioSegment[] = []
+
+    const pushSegment = (price: number, ratioValue: number) => {
+      if (!Number.isFinite(price) || !Number.isFinite(ratioValue)) {
+        return
+      }
+
+      const y = activeSeries.priceToCoordinate(price)
+      if (y === null) return
+
+      const label = formatRatioPercent(ratioValue)
+      if (!label) return
+
+      segments.push({
+        start: { x: drawableX, y },
+        end: { x: drawableX + drawableWidth, y },
+        label
+      })
+    }
+
+    pushSegment(basePrice, 1)
+
+    if (percentAbs < RATIO_EPSILON) {
+      return segments
+    }
+
+    const upwardFactor = 1 + percentAbs
+    const downwardFactor = 1 - percentAbs
+
+    for (let step = 1; step <= RATIO_STEP_COUNT; step += 1) {
+      const ratioValue = upwardFactor ** step
+      pushSegment(basePrice * ratioValue, ratioValue)
+    }
+
+    if (downwardFactor > RATIO_EPSILON) {
+      for (let step = 1; step <= RATIO_STEP_COUNT; step += 1) {
+        const ratioValue = downwardFactor ** step
+        if (ratioValue < RATIO_EPSILON) break
+        pushSegment(basePrice * ratioValue, ratioValue)
+      }
+    }
+
+    return segments
+  }
+
   const renderDrawings = (): void => {
     if (!canvasRef.value || !chart.value) return
     
@@ -438,23 +577,13 @@ export function useDrawingTools(
     
     const width = canvasRef.value.width
     const height = canvasRef.value.height
-    
+    const drawableMetrics = getDrawableMetrics()
+    const activeSeries = getActiveSeries()
+    if (!drawableMetrics || !activeSeries) return
+
     ctx.clearRect(0, 0, width, height)
 
-    // Get price scale width (right side) and time scale height (bottom)
-    const timeScale = chart.value.timeScale()
-  const activeSeries = getActiveSeries()
-    if (!activeSeries) return
-    
-    const priceScale = activeSeries.priceScale()
-    const priceScaleWidth = priceScale.width()
-    const timeScaleHeight = timeScale.height()
-    
-    // Calculate drawable area (excluding axes)
-    const drawableX = 0
-    const drawableY = 0
-    const drawableWidth = width - priceScaleWidth
-    const drawableHeight = height - timeScaleHeight
+    const { drawableX, drawableY, drawableWidth, drawableHeight } = drawableMetrics
     
     // Save context state
     ctx.save()
@@ -481,7 +610,7 @@ export function useDrawingTools(
         previewPoint.value &&
         basePoints.length >= 1
       ) {
-        if (d.type === 'line' || d.type === 'ray') {
+        if (d.type === 'line' || d.type === 'ray' || d.type === 'ratio') {
           pointsForRendering = [basePoints[0], previewPoint.value]
         } else if (d.type === 'parallel') {
           const requiredPoints = requiredPointsForType('parallel')
@@ -512,8 +641,33 @@ export function useDrawingTools(
       } else if (d.type === 'horizontal') {
         const p1 = logicalToPoint(pointsForRendering[0])
         if (p1) {
-          ctx.moveTo(0, p1.y)
-          ctx.lineTo(width, p1.y)
+          ctx.moveTo(drawableX, p1.y)
+          ctx.lineTo(drawableX + drawableWidth, p1.y)
+        }
+      } else if (d.type === 'ratio') {
+        if (pointsForRendering.length >= 2 && drawableWidth > 0) {
+          const segments = buildRatioSegments(pointsForRendering, drawableX, drawableWidth)
+          segments.forEach(segment => {
+            ctx.moveTo(segment.start.x, segment.start.y)
+            ctx.lineTo(segment.end.x, segment.end.y)
+
+            if (segment.label) {
+              const textX = drawableX + drawableWidth - 6
+              const textY = segment.start.y
+
+              ctx.save()
+              ctx.font = '12px sans-serif'
+              ctx.fillStyle = '#ffffff'
+              ctx.textAlign = 'right'
+              ctx.textBaseline = 'middle'
+              ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'
+              ctx.shadowBlur = 4
+              ctx.shadowOffsetX = 0
+              ctx.shadowOffsetY = 0
+              ctx.fillText(segment.label, textX, textY)
+              ctx.restore()
+            }
+          })
         }
       } else if (d.type === 'parallel') {
         if (pointsForRendering.length >= 2) {
@@ -828,8 +982,8 @@ export function useDrawingTools(
     if (!currentDrawing.value) return
     if (isDragging.value) return
 
-    const type = currentDrawing.value.type
-    if (type !== 'line' && type !== 'ray' && type !== 'parallel') return
+  const type = currentDrawing.value.type
+  if (type !== 'line' && type !== 'ray' && type !== 'parallel' && type !== 'ratio') return
 
     const logical = getLogicalFromClient(clientX, clientY)
     if (!logical) {
