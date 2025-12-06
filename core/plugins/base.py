@@ -36,6 +36,10 @@ class Granularity:
     # 标准粒度到秒数的映射
     GRANULARITIES = {
         "tick": 0,          # 分时（实时tick数据，特殊值）
+        "1s": 1,            # 1秒
+        "5s": 5,            # 5秒
+        "15s": 15,          # 15秒
+        "30s": 30,          # 30秒
         "1m": 60,           # 1分钟
         "3m": 180,          # 3分钟
         "5m": 300,          # 5分钟
@@ -56,13 +60,14 @@ class Granularity:
     
     # 粒度优先级（按时间从小到大，用于查找最接近的粒度）
     PRIORITY = [
-        "tick", "1m", "3m", "5m", "10m", "15m", "30m",
+        "tick", "1s", "5s", "15s", "30s",
+        "1m", "3m", "5m", "10m", "15m", "30m",
         "1h", "2h", "4h", "6h", "12h",
         "1d", "2d", "3d", "1w", "1M"
     ]
     
     # 推荐粒度（常用粒度，建议插件优先实现）
-    RECOMMENDED = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]
+    RECOMMENDED = ["1s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]
     
     @classmethod
     def is_valid(cls, bar: str) -> bool:

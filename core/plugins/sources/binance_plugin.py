@@ -18,6 +18,7 @@ from ..base import (
     PluginError,
 )
 from core.proxy_config import get_proxy
+from .binance_stream import get_realtime_manager
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     
     def __init__(self):
         self._session = None
+        self._realtime = get_realtime_manager()
         super().__init__()
     
     def _get_metadata(self) -> DataSourceMetadata:
@@ -53,6 +55,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         return Capability(
             supports_candlesticks=True,
             candlestick_granularities=[
+                "1s",
                 "1m", "3m", "5m", "15m", "30m",
                 "1h", "2h", "4h", "6h", "12h",
                 "1d", "3d", "1w", "1M"
@@ -107,11 +110,64 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     def _convert_bar(self, bar: str) -> str:
         """将时间周期转换为 Binance 格式"""
         mapping = {
+            "tick": "1s",
+            "1s": "1s",
             "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
             "1h": "1h", "2h": "2h", "4h": "4h", "6h": "6h", "12h": "12h",
             "1d": "1d", "3d": "3d", "1w": "1w", "1M": "1M"
         }
         return mapping.get(bar, "1h")
+
+    def _fetch_rest_candles(
+        self,
+        binance_symbol: str,
+        interval: str,
+        limit: int,
+        before: Optional[int]
+    ) -> List[CandleData]:
+        """通过 REST API 获取 K 线数据"""
+        url = f"{self.BASE_URL}/api/v3/klines"
+        params = {
+            "symbol": binance_symbol,
+            "interval": interval,
+            "limit": min(limit, 1000)
+        }
+        if before:
+            params["endTime"] = before * 1000
+
+        response = self._get_session.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        if not data:
+            raise PluginError("Binance 返回数据为空")
+
+        candles = []
+        for item in data:
+            candles.append(CandleData(
+                time=int(item[0]) // 1000,
+                open=float(item[1]),
+                high=float(item[2]),
+                low=float(item[3]),
+                close=float(item[4]),
+                volume=float(item[5]),
+            ))
+        return candles
+
+    def _merge_realtime_data(
+        self,
+        rest_candles: List[CandleData],
+        realtime_candles: List[CandleData],
+        limit: int
+    ) -> List[CandleData]:
+        if not realtime_candles:
+            return rest_candles
+
+        merged = {c.time: c for c in rest_candles}
+        for candle in realtime_candles:
+            merged[candle.time] = candle
+        ordered = sorted(merged.values(), key=lambda c: c.time)
+        return ordered[-limit:]
     
     def _get_candlesticks_impl(
         self,
@@ -124,37 +180,27 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         try:
             binance_symbol = self._convert_symbol(symbol)
             interval = self._convert_bar(bar)
-            
-            url = f"{self.BASE_URL}/api/v3/klines"
-            params = {
-                "symbol": binance_symbol,
-                "interval": interval,
-                "limit": min(limit, 1000)
-            }
-            
-            # Binance 使用 endTime 参数（毫秒）
-            if before:
-                params["endTime"] = before * 1000
-            
-            response = self._get_session.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            
-            if not data:
-                raise PluginError("Binance 返回数据为空")
-            
-            candles = []
-            for item in data:
-                candles.append(CandleData(
-                    time=int(item[0]) // 1000,  # 毫秒转秒
-                    open=float(item[1]),
-                    high=float(item[2]),
-                    low=float(item[3]),
-                    close=float(item[4]),
-                    volume=float(item[5]),
-                ))
-            
-            return candles
+            use_realtime = (interval == "1s" and before is None and self._realtime.enabled)
+
+            realtime_candles: List[CandleData] = []
+            if use_realtime:
+                realtime_candles = self._realtime.get_latest_candles(
+                    binance_symbol,
+                    interval,
+                    limit * 2
+                )
+                if len(realtime_candles) >= limit:
+                    logger.debug("⚡ 使用 Binance WebSocket 实时缓存 (%s) 返回 %d 条数据", symbol, len(realtime_candles))
+                    return realtime_candles[-limit:]
+
+            rest_candles = self._fetch_rest_candles(binance_symbol, interval, limit, before)
+
+            if use_realtime and realtime_candles:
+                merged = self._merge_realtime_data(rest_candles, realtime_candles, limit)
+                logger.debug("🔄 合并实时与 REST 数据: REST=%d, WS=%d", len(rest_candles), len(realtime_candles))
+                return merged
+
+            return rest_candles
             
         except requests.exceptions.Timeout:
             logger.error("Binance API 连接超时")
