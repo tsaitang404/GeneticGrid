@@ -206,17 +206,38 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         try:
             normalized_bar = bar.lower()
             if normalized_bar in {"tick", "1s"}:
-                if before:
-                    logger.info("OKX 1s 粒度不支持 before 参数，直接返回空结果 (%s)", symbol)
-                    return []
+                use_realtime = before is None
+                candles: List[CandleData] = []
 
-                candles = self._get_realtime_candles(symbol, limit)
-                if candles:
+                if use_realtime:
+                    candles = self._get_realtime_candles(symbol, limit)
+                    if candles:
+                        logger.debug(
+                            "⚡ 使用 OKX WebSocket 实时缓存 (%s) 返回 %d 条数据",
+                            symbol,
+                            len(candles)
+                        )
+                        return candles
+                else:
                     logger.debug(
-                        "⚡ 使用 OKX WebSocket 实时缓存 (%s) 返回 %d 条数据",
+                        "OKX 1s 粒度分页请求改用 REST 接口 (symbol=%s, before=%s)",
                         symbol,
-                        len(candles)
+                        before
                     )
+
+                if not candles:
+                    if use_realtime:
+                        logger.warning(
+                            "OKX 实时流在 %.1fs 内未返回数据 (%s, limit=%s)",
+                            3.0,
+                            symbol,
+                            limit
+                        )
+                    else:
+                        logger.info(
+                            "OKX 1s 历史数据暂不支持 REST 分页 (symbol=%s)",
+                            symbol
+                        )
                 return candles
 
             params = {

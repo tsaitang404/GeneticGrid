@@ -32,14 +32,23 @@ def _build_proxy_kwargs() -> Dict[str, object]:
     if not parsed.hostname or not parsed.port:
         return {}
 
+    scheme = (parsed.scheme or '').lower()
+    allowed_types = {'http', 'socks4', 'socks5', ''}
+    if scheme not in allowed_types:
+        logger.warning("OKX WS 代理协议 %s 不受支持，已忽略", scheme)
+        return {}
+
     proxy_kwargs: Dict[str, object] = {
         "http_proxy_host": parsed.hostname,
         "http_proxy_port": parsed.port,
     }
     if parsed.username:
         proxy_kwargs["http_proxy_auth"] = (parsed.username, parsed.password)
-    if parsed.scheme and parsed.scheme.lower().startswith("socks"):
-        proxy_kwargs["proxy_type"] = parsed.scheme
+    if scheme.startswith("socks"):
+        proxy_kwargs["proxy_type"] = scheme
+    else:
+        # websocket-client 默认 http，不支持 https，强制降级为 http
+        proxy_kwargs["proxy_type"] = "http"
     return proxy_kwargs
 
 
@@ -52,13 +61,15 @@ class _RealtimeStats:
 class OKXStreamWorker:
     """管理单个 instId@interval 的 OKX 实时订阅"""
 
-    WS_URL = "wss://ws.okx.com:8443/ws/v5/public"
+    PUBLIC_WS_URL = "wss://ws.okx.com:8443/ws/v5/public"
+    BUSINESS_WS_URL = "wss://ws.okx.com:8443/ws/v5/business"
     BUFFER_SIZE = 7200  # 约 2 小时的 1s 数据
 
     def __init__(self, inst_id: str, interval: str = "1S") -> None:
         self.inst_id = inst_id.upper()
-        self.interval = interval.upper()
+        self.interval = interval.lower()
         self.channel = f"candle{self.interval}"
+        self._ws_url = self.BUSINESS_WS_URL if self.interval == "1s" else self.PUBLIC_WS_URL
         self._buffer: Deque[CandleData] = deque(maxlen=self.BUFFER_SIZE)
         self._buffer_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -82,7 +93,7 @@ class OKXStreamWorker:
         while not self._stop_event.is_set():
             try:
                 ws = websocket.WebSocketApp(  # type: ignore
-                    self.WS_URL,
+                    self._ws_url,
                     on_open=self._on_open,
                     on_message=self._on_message,
                     on_error=self._on_error,
