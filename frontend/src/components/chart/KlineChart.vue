@@ -892,7 +892,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  padding: 16px 20px 20px;
   background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
 }
 
 .chart-toolbar {
