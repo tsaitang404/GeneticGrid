@@ -250,11 +250,15 @@ const exchangeRate = computed(() => getRate())
 // 监听 currency prop 变化
 watch(() => props.currency, (newCurrency) => {
   currencyRef.value = newCurrency
+  resetSelection()
   // 汇率变化时重新加载数据
   chartError.value = { show: false, message: '' }
   stopAutoRefresh()
   initChart()
+  rebuildMainIndicators()
+  rebuildSubCharts()
   loadCandlesticks().then(() => {
+    triggerWorkerCalculation()
     if (autoRefreshEnabled.value) {
       startAutoRefresh()
     }
@@ -301,39 +305,6 @@ const handleSourceChange = (sourceData: any) => {
     }
   }
 }
-
-const quoteCandidates = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'BNB', 'EUR', 'CNY', 'JPY', 'KRW', 'GBP']
-
-const symbolParts = computed(() => {
-  const upper = symbol.value?.toUpperCase() || '--'
-  if (upper.includes('-')) {
-    const [base, quote] = upper.split('-')
-    return { base: base || '--', quote: quote || '--' }
-  }
-  for (const quote of quoteCandidates) {
-    if (upper.endsWith(quote)) {
-      return {
-        base: upper.slice(0, Math.max(upper.length - quote.length, 1)) || '--',
-        quote
-      }
-    }
-  }
-  return { base: upper || '--', quote: '--' }
-})
-
-const currencyLabel = computed(() => props.currency?.toUpperCase() || 'USDT')
-
-const displayTicker = computed(() => {
-  const t = props.ticker
-  return {
-    last: t?.last ?? latestPrice.value,
-    changePercent: t ? `${t.isUp ? '+' : ''}${t.changePercent}%` : `${priceChange.value}${priceChange.value === '--' ? '' : '%'}`,
-    isUp: t?.isUp ?? (priceChangeClass.value === 'up'),
-    high24h: t?.high24h ?? '--',
-    low24h: t?.low24h ?? '--',
-    vol24h: t?.vol24h ?? '--'
-  }
-})
 
 const isTooltipLocked = computed(() => lockedCandle.value !== null)
 
@@ -409,6 +380,7 @@ const {
   mainChartLegends,
   setSubChartRef,
   triggerWorkerCalculation,
+  rebuildMainIndicators,
   rebuildSubCharts,
   cleanup: cleanupIndicators
 } = useIndicators(chart, subCharts, allCandles)
@@ -752,6 +724,7 @@ watch(symbol, (newSymbol) => {
   // 切换币对时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
   initChart()
+  rebuildMainIndicators()
   rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     // 数据加载完成后重新启动自动刷新
@@ -768,6 +741,7 @@ watch(bar, (newBar) => {
   // 切换周期时停止自动刷新，重新初始化图表并加载数据
   stopAutoRefresh()
   initChart()
+  rebuildMainIndicators()
   rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     // 数据加载完成后重新启动自动刷新
@@ -784,6 +758,7 @@ watch(source, (newSource) => {
   emit('source-change', newSource)
   stopAutoRefresh()
   initChart()
+  rebuildMainIndicators()
   rebuildSubCharts() // 重建副图
   loadCandlesticks().then(() => {
     if (autoRefreshEnabled.value) {

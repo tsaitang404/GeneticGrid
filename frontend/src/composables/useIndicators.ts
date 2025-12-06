@@ -1,5 +1,5 @@
 import { reactive, computed, nextTick, watch, type Ref, type ComputedRef } from 'vue'
-import { createChart, type IChartApi, ColorType, type LogicalRange } from 'lightweight-charts'
+import { createChart, type IChartApi, type ISeriesApi, ColorType } from 'lightweight-charts'
 import type { IndicatorConfig, Indicators, Candle } from '@/types'
 import { useIndicatorWorker } from './useIndicatorWorker'
 import { useTimeScaleSync } from './useTimeScaleSync'
@@ -12,11 +12,6 @@ export function useIndicators(
   const { calculateIndicators, terminateWorker } = useIndicatorWorker()
   const { isSyncingTimeScale } = useTimeScaleSync()
 
-  const captureVisibleRange = (): LogicalRange | null => {
-    if (!chart.value) return null
-    return chart.value.timeScale().getVisibleLogicalRange() ?? null
-  }
-  
   const indicators = reactive<Partial<Indicators>>({
     vol: { 
       enabled: true, 
@@ -844,10 +839,8 @@ export function useIndicators(
     indicators[key]!.enabled = !indicators[key]!.enabled
 
     // Handle main indicators (overlays on main chart)
-    if (['vol', 'ma', 'maWithMacd', 'ema', 'emaFib', 'boll', 'sar', 'supertrend', 'sr'].includes(key)) {
-      if (key === 'vol' && indicators.vol && indicators.vol.series) {
-        indicators.vol.series.applyOptions({ visible: indicators.vol.enabled })
-      } else if (indicators[key]!.enabled) {
+    if (['ma', 'maWithMacd', 'ema', 'emaFib', 'boll', 'sar', 'supertrend', 'sr'].includes(key)) {
+      if (indicators[key]!.enabled) {
         // Create series for main indicators
         createMainIndicatorSeries(key)
         triggerWorkerCalculation()
@@ -878,6 +871,31 @@ export function useIndicators(
       }
       indicators[key]!.series = []
     }
+  }
+
+  const resetMainIndicatorSeries = (key: keyof Indicators): void => {
+    const target = indicators[key]
+    if (!target) return
+
+    const series = target.series
+    if (Array.isArray(series)) {
+      target.series = []
+    } else {
+      target.series = null
+    }
+  }
+
+  const rebuildMainIndicators = (): void => {
+    if (!chart.value) return
+
+    const mainIndicatorKeys: Array<keyof Indicators> = ['ma', 'maWithMacd', 'ema', 'emaFib', 'boll', 'sar', 'supertrend', 'sr']
+
+    mainIndicatorKeys.forEach(key => {
+      resetMainIndicatorSeries(key)
+      if (indicators[key]?.enabled) {
+        createMainIndicatorSeries(key)
+      }
+    })
   }
 
   const rebuildSubCharts = (): void => {
@@ -939,6 +957,7 @@ export function useIndicators(
     mainChartLegends,
     setSubChartRef,
     triggerWorkerCalculation,
+    rebuildMainIndicators,
     rebuildSubCharts,
     cleanup
   }
