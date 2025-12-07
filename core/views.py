@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
+from .derivative_cache import DerivativeDataCacheService
 from .proxy_config import is_proxy_available, get_proxy_url, get_proxy, PROXY_CONFIG
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
@@ -174,6 +175,20 @@ def api_funding_rate(request):
     
     logger.info(f"💰 资金费率请求: {symbol} ({source})")
     
+    # 尝试从缓存获取
+    cached_data = DerivativeDataCacheService.get_funding_rate_from_cache(source, symbol)
+    if cached_data:
+        logger.info(f"✅ 资金费率缓存命中: {symbol}")
+        response = JsonResponse({
+            'code': 0,
+            'data': cached_data,
+            'symbol': symbol,
+            'source': source,
+            'cached': True
+        })
+        response['Cache-Control'] = 'public, max-age=30'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -192,14 +207,19 @@ def api_funding_rate(request):
             }, status=400)
         
         funding_data = plugin.get_funding_rate(symbol=symbol)
+        data_dict = funding_data.to_dict()
+        
+        # 保存到缓存
+        DerivativeDataCacheService.save_funding_rate_to_cache(source, symbol, data_dict)
         
         response = JsonResponse({
             'code': 0,
-            'data': funding_data.to_dict(),
+            'data': data_dict,
             'symbol': symbol,
             'source': source,
+            'cached': False
         })
-        response['Cache-Control'] = 'public, max-age=30'  # 缓存30秒
+        response['Cache-Control'] = 'public, max-age=30'
         return response
         
     except PluginError as e:
@@ -226,6 +246,21 @@ def api_funding_rate_history(request):
     
     logger.info(f"📈 资金费率历史请求: {symbol} ({source}) limit={limit}")
     
+    # 尝试从缓存获取
+    cached_history = DerivativeDataCacheService.get_funding_history_from_cache(source, symbol)
+    if cached_history and len(cached_history) >= limit:
+        logger.info(f"✅ 资金费率历史缓存命中: {symbol}, {len(cached_history)}条")
+        # 返回最近的limit条
+        response = JsonResponse({
+            'code': 0,
+            'data': cached_history[-limit:],
+            'symbol': symbol,
+            'source': source,
+            'cached': True
+        })
+        response['Cache-Control'] = 'public, max-age=300'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -246,11 +281,16 @@ def api_funding_rate_history(request):
         # 调用插件的历史数据方法
         history_data = plugin.get_funding_rate_history(symbol=symbol, limit=limit)
         
+        # 保存到缓存
+        if history_data:
+            DerivativeDataCacheService.save_funding_history_to_cache(source, symbol, history_data)
+        
         response = JsonResponse({
             'code': 0,
             'data': history_data,
             'symbol': symbol,
             'source': source,
+            'cached': False
         })
         response['Cache-Control'] = 'public, max-age=300'  # 缓存5分钟
         return response
@@ -279,6 +319,20 @@ def api_contract_basis_history(request):
     
     logger.info(f"📈 合约基差历史请求: {symbol} ({source}) type={contract_type}")
     
+    # 尝试从缓存获取
+    cached_history = DerivativeDataCacheService.get_basis_history_from_cache(source, symbol, contract_type)
+    if cached_history:
+        logger.info(f"✅ 合约基差历史缓存命中: {symbol}, {len(cached_history)}条")
+        response = JsonResponse({
+            'code': 0,
+            'data': cached_history,
+            'symbol': symbol,
+            'source': source,
+            'cached': True
+        })
+        response['Cache-Control'] = 'public, max-age=300'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -302,11 +356,16 @@ def api_contract_basis_history(request):
             contract_type=contract_type
         )
         
+        # 保存到缓存
+        if history_data:
+            DerivativeDataCacheService.save_basis_history_to_cache(source, symbol, contract_type, history_data)
+        
         response = JsonResponse({
             'code': 0,
             'data': history_data,
             'symbol': symbol,
             'source': source,
+            'cached': False
         })
         response['Cache-Control'] = 'public, max-age=300'  # 缓存5分钟
         return response
@@ -335,6 +394,20 @@ def api_contract_basis(request):
     
     logger.info(f"📊 合约基差请求: {symbol} ({source}) type={contract_type}")
     
+    # 尝试从缓存获取
+    cached_data = DerivativeDataCacheService.get_basis_from_cache(source, symbol, contract_type)
+    if cached_data:
+        logger.info(f"✅ 合约基差缓存命中: {symbol}")
+        response = JsonResponse({
+            'code': 0,
+            'data': cached_data,
+            'symbol': symbol,
+            'source': source,
+            'cached': True
+        })
+        response['Cache-Control'] = 'public, max-age=30'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -356,14 +429,19 @@ def api_contract_basis(request):
             symbol=symbol,
             contract_type=contract_type
         )
+        data_dict = basis_data.to_dict()
+        
+        # 保存到缓存
+        DerivativeDataCacheService.save_basis_to_cache(source, symbol, contract_type, data_dict)
         
         response = JsonResponse({
             'code': 0,
-            'data': basis_data.to_dict(),
+            'data': data_dict,
             'symbol': symbol,
             'source': source,
+            'cached': False
         })
-        response['Cache-Control'] = 'public, max-age=30'  # 缓存30秒
+        response['Cache-Control'] = 'public, max-age=30'
         return response
         
     except PluginError as e:
