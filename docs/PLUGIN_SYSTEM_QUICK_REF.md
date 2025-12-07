@@ -79,8 +79,8 @@ python demo_plugins.py
 **必须实现的方法:**
 - `_get_metadata()` → DataSourceMetadata
 - `_get_capability()` → Capability
-- `get_candlesticks(symbol, bar, limit, before)` → List[CandleData]
-- `get_ticker(symbol)` → TickerData
+- `get_candlesticks(symbol, bar, limit, before, mode='spot')` → List[CandleData]
+- `get_ticker(symbol, mode='spot')` → TickerData
 
 **可选的方法:**
 - `get_funding_rate(symbol)` → FundingRateData
@@ -93,6 +93,8 @@ python demo_plugins.py
 - `validate_symbol(symbol)` → bool
 - `validate_granularity(bar)` → bool
 - `get_closest_granularity(bar)` → Optional[str]
+
+> `mode` 参数遵循 `SymbolMode`（`spot` 或 `contract`）。插件需在 `Capability.symbol_modes` 中声明支持的模式，接口会自动校验。
 
 ### DataSourceMetadata
 
@@ -122,6 +124,7 @@ class Capability:
     ticker_update_frequency: Optional[int]
     supported_symbols: List[str]
     symbol_format: str
+    symbol_modes: List[str]          # ['spot', 'contract'] 支持的交易模式
     requires_api_key: bool
     has_rate_limit: bool
     rate_limit_per_minute: Optional[int]
