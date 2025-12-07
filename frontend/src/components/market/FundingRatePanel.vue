@@ -26,30 +26,23 @@
       </div>
     </div>
 
-    <!-- 粒度选择器 -->
-    <div class="chart-controls">
-      <div class="granularity-tabs">
-        <button
-          v-for="g in granularities"
-          :key="g.value"
-          :class="['granularity-btn', { active: selectedGranularity === g.value }]"
-          @click="changeGranularity(g.value)"
-        >
-          {{ g.label }}
-        </button>
+    <!-- 历史费率图表 (8小时粒度) -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <h3>历史费率走势</h3>
+        <span class="chart-info">8小时粒度，近30天</span>
       </div>
-    </div>
-
-    <!-- 历史费率图表 -->
-    <div class="chart-container">
-      <div v-if="chartLoading" class="chart-loading">
-        <div class="spinner"></div>
+      
+      <div class="chart-container">
+        <div v-if="chartLoading" class="chart-loading">
+          <div class="spinner"></div>
+        </div>
+        <div v-else-if="chartError" class="chart-error">
+          <p>{{ chartError }}</p>
+          <button @click="loadHistory" class="retry-btn">重试</button>
+        </div>
+        <canvas v-else ref="chartCanvas" class="rate-chart"></canvas>
       </div>
-      <div v-else-if="chartError" class="chart-error">
-        <p>{{ chartError }}</p>
-        <button @click="loadHistory" class="retry-btn">重试</button>
-      </div>
-      <canvas v-else ref="chartCanvas" class="rate-chart"></canvas>
     </div>
 
     <!-- 市场情绪 -->
@@ -85,19 +78,12 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const selectedGranularity = ref('1h')
+const selectedGranularity = ref('8h')
 const chartLoading = ref(false)
 const chartError = ref('')
 const historyData = ref<any[]>([])
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
 let chartInstance: Chart | null = null
-
-const granularities = [
-  { value: '1m', label: '1分钟', interval: 60 },
-  { value: '5m', label: '5分钟', interval: 300 },
-  { value: '1h', label: '1小时', interval: 3600 },
-  { value: '1d', label: '1天', interval: 86400 }
-]
 
 const formattedRate = computed(() => {
   if (!props.fundingData) return '--'
@@ -159,12 +145,11 @@ async function loadHistory() {
   chartError.value = ''
   
   try {
-    const limit = selectedGranularity.value === '1m' ? 60 : 
-                  selectedGranularity.value === '5m' ? 288 :
-                  selectedGranularity.value === '1h' ? 168 : 30
+    // 8小时粒度，90条数据 = 30天
+    const limit = 90
     
     const response = await fetch(
-      `/api/funding-rate/history/?symbol=${props.symbol}&source=${props.source}&limit=${limit}`
+      `/api/funding-rate/history/?symbol=${props.symbol}&source=${props.source}&granularity=${selectedGranularity.value}&limit=${limit}`
     )
     
     if (!response.ok) {
@@ -240,6 +225,7 @@ function updateChart() {
           callbacks: {
             label: (context) => {
               const value = context.parsed.y
+              if (value == null) return 'N/A'
               return `费率: ${value >= 0 ? '+' : ''}${value.toFixed(4)}%`
             }
           }
@@ -275,11 +261,6 @@ function updateChart() {
   }
   
   chartInstance = new Chart(ctx, config)
-}
-
-function changeGranularity(granularity: string) {
-  selectedGranularity.value = granularity
-  loadHistory()
 }
 
 watch(() => [props.symbol, props.source], () => {

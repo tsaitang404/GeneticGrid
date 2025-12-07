@@ -538,15 +538,19 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     def get_contract_basis_history(
         self, 
         symbol: str, 
-        contract_type: str = "perpetual"
+        contract_type: str = "perpetual",
+        limit: int = 720,
+        granularity: str = "1h"
     ) -> List[dict]:
-        """获取合约基差历史数据（最近1个月）
+        """获取合约基差历史数据
         
-        通过获取1小时K线数据来计算基差历史
+        通过获取K线数据来计算基差历史
         
         Args:
             symbol: 交易对 (BTCUSDT格式)
             contract_type: 合约类型
+            limit: 数据条数
+            granularity: 时间粒度 (1m, 5m, 1h, 1d等)
             
         Returns:
             基差历史数据列表
@@ -558,14 +562,14 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         spot_symbol = formatted_symbol  # BTC-USDT
         
         try:
-            # 获取最近30天的1小时K线（约720条数据）
-            limit = 720
+            # 转换粒度为OKX格式
+            okx_bar = self._convert_bar(granularity)
             
             # 获取合约K线
             contract_candles_result = self._request("/market/candles", {
                 "instId": inst_id,
-                "bar": "1H",
-                "limit": str(limit)
+                "bar": okx_bar,
+                "limit": str(min(limit, 1440))  # OKX限制最多1440条
             })
             
             if contract_candles_result.get("code") != "0":
@@ -574,8 +578,8 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             # 获取现货K线
             spot_candles_result = self._request("/market/candles", {
                 "instId": spot_symbol,
-                "bar": "1H",
-                "limit": str(limit)
+                "bar": okx_bar,
+                "limit": str(min(limit, 1440))  # OKX限制最多1440条
             })
             
             if spot_candles_result.get("code") != "0":
