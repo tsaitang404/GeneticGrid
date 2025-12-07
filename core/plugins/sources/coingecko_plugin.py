@@ -16,6 +16,7 @@ from ..base import (
     TickerData,
     SourceType,
     PluginError,
+    SymbolMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,11 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         self._session = None
         super().__init__()
     
-    def _normalize_symbol(self, symbol: str) -> str:
+    def _normalize_symbol(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> str:
         """标准格式 "BTCUSDT" -> CoinGecko 格式 "bitcoin" """
         symbol = symbol.upper().replace('-', '').replace('/', '')
         
@@ -101,6 +106,7 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
                 "ADAUSDT", "AVAXUSDT", "LINKUSDT", "BNBUSDT"
             ],
             symbol_format="BTCUSDT",  # 标准格式
+            symbol_modes=[SymbolMode.SPOT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=False,  # CoinGecko 全球可直连
@@ -126,13 +132,20 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """CoinGecko 不支持 K线数据"""
         raise PluginError("CoinGecko 不支持 K线数据，仅支持行情数据")
     
-    def _get_ticker_impl(self, coin_id: str) -> TickerData:
+    def _get_ticker_impl(
+        self,
+        coin_id: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> TickerData:
         """获取行情数据的内部实现（coin_id 已转换为 bitcoin 等）"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("CoinGecko 仅提供现货行情数据")
             # coin_id 已经通过 _normalize_symbol 转换了，直接使用
             # CoinGecko API - Simple Price
             url = f"{self.BASE_URL}/simple/price"
@@ -160,7 +173,7 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
                 change_24h = last_price * (change_24h_pct / 100)
             
             return TickerData(
-                inst_id=symbol,
+                inst_id=coin_id,
                 last=last_price,
                 bid=None,  # CoinGecko 不提供买卖价
                 ask=None,

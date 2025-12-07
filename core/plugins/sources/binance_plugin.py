@@ -16,6 +16,7 @@ from ..base import (
     TickerData,
     SourceType,
     PluginError,
+    SymbolMode,
 )
 from core.proxy_config import get_proxy
 from .binance_stream import get_realtime_manager
@@ -73,7 +74,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                 # Binance 支持 1000+ 交易对
             ],
             symbol_format="BTCUSDT",  # 币安格式
-            symbol_modes=["spot"],
+            symbol_modes=[SymbolMode.SPOT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=True,
@@ -176,10 +177,12 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
-        mode: str = "spot",
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Binance 插件暂不支持合约模式")
             binance_symbol = self._convert_symbol(symbol)
             interval = self._convert_bar(bar)
             use_realtime = (interval == "1s" and before is None and self._realtime.enabled)
@@ -214,9 +217,15 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Binance 获取 K线数据失败: {e}")
             raise PluginError(f"Binance 获取 K线数据失败: {e}")
     
-    def _get_ticker_impl(self, symbol: str, mode: str = "spot") -> TickerData:
+    def _get_ticker_impl(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> TickerData:
         """获取行情数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Binance 插件暂不支持合约模式")
             binance_symbol = self._convert_symbol(symbol)
             
             url = f"{self.BASE_URL}/api/v3/ticker/24hr"

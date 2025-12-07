@@ -19,6 +19,7 @@ from ..base import (
     ContractBasisData,
     SourceType,
     PluginError,
+    SymbolMode,
 )
 from .okx_stream import get_realtime_manager as get_okx_realtime_manager
 
@@ -67,7 +68,11 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         logger.warning("OKX 实时流在 %.1fs 内未返回数据 (%s, limit=%s)", wait_timeout, inst_id, limit)
         return []
     
-    def _normalize_symbol(self, symbol: str) -> str:
+    def _normalize_symbol(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> str:
         """标准格式 "BTCUSDT" -> OKX 格式 "BTC-USDT" """
         # 解析交易对
         symbol = symbol.upper().replace('-', '').replace('/', '')
@@ -142,6 +147,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
                 # 更多交易对可通过 OKX API 动态获取
             ],
             symbol_format="BTCUSDT",  # 标准格式
+            symbol_modes=[SymbolMode.SPOT.value, SymbolMode.CONTRACT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=True,  # 使用代理更稳定
@@ -217,6 +223,7 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """获取 K线数据的内部实现（已转换为 OKX 格式）
         
@@ -233,43 +240,51 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         """
         try:
             normalized_bar = bar.lower()
+            inst_id = (
+                self._resolve_contract_inst_id(symbol)
+                if mode == SymbolMode.CONTRACT.value
+                else symbol
+            )
             if normalized_bar in {"tick", "1s"}:
-                use_realtime = before is None
+                use_realtime = (
+                    before is None
+                    and mode == SymbolMode.SPOT.value
+                )
                 candles: List[CandleData] = []
 
                 if use_realtime:
-                    candles = self._get_realtime_candles(symbol, limit)
+                    candles = self._get_realtime_candles(inst_id, limit)
                     if candles:
                         logger.debug(
                             "⚡ 使用 OKX WebSocket 实时缓存 (%s) 返回 %d 条数据",
-                            symbol,
+                            inst_id,
                             len(candles)
                         )
                         return candles
                 else:
-                    logger.debug(
-                        "OKX 1s 粒度分页请求改用 REST 接口 (symbol=%s, before=%s)",
-                        symbol,
-                        before
-                    )
+                        logger.debug(
+                            "OKX 1s 粒度分页请求改用 REST 接口 (symbol=%s, before=%s)",
+                            inst_id,
+                            before
+                        )
 
                 if not candles:
                     if use_realtime:
                         logger.warning(
                             "OKX 实时流在 %.1fs 内未返回数据 (%s, limit=%s)",
                             3.0,
-                            symbol,
+                            inst_id,
                             limit
                         )
                     else:
                         logger.info(
                             "OKX 1s 历史数据暂不支持 REST 分页 (symbol=%s)",
-                            symbol
+                            inst_id
                         )
                 return candles
 
             params = {
-                "instId": symbol,  # 已转换为 "BTC-USDT" 格式
+                "instId": inst_id,  # 已转换为 "BTC-USDT" 或带 SWAP 的格式
                 "bar": bar,        # 已转换为 "1H" 格式
                 "limit": str(min(limit, 300))
             }
@@ -306,13 +321,22 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"OKX 获取 K线数据失败: {e}")
             raise PluginError(f"OKX 获取 K线数据失败: {str(e)}")
     
-    def _get_ticker_impl(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> TickerData:
         """获取行情数据的内部实现（已转换为 OKX 格式）
         
         API 文档: https://www.okx.com/docs-v5/en/#rest-api-market-data-get-ticker
         """
         try:
-            result = self._request("/market/ticker", {"instId": symbol})
+            inst_id = (
+                self._resolve_contract_inst_id(symbol)
+                if mode == SymbolMode.CONTRACT.value
+                else symbol
+            )
+            result = self._request("/market/ticker", {"instId": inst_id})
             
             if result.get("code") != "0":
                 raise PluginError(f"OKX API 错误: {result.get('msg', '未知错误')}")

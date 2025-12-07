@@ -16,6 +16,7 @@ from ..base import (
     TickerData,
     SourceType,
     PluginError,
+    SymbolMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
             ticker_update_frequency=1,
             supported_symbols=[],  # 动态获取
             symbol_format="XBTUSDT",  # Kraken 使用 XBT 代替 BTC
+            symbol_modes=[SymbolMode.SPOT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=False,
@@ -103,9 +105,12 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Kraken 插件仅支持现货模式")
             kraken_symbol = self._convert_symbol(symbol)
             interval = self._convert_bar(bar)
             
@@ -156,9 +161,15 @@ class KrakenMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Kraken 获取 K线数据失败: {e}")
             raise PluginError(f"Kraken 获取 K线数据失败: {e}")
     
-    def _get_ticker_impl(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> TickerData:
         """获取行情数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Kraken 插件仅支持现货模式")
             kraken_symbol = self._convert_symbol(symbol)
             
             url = f"{self.BASE_URL}/Ticker"
