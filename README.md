@@ -31,13 +31,13 @@
 ./scripts/dev.sh
 ```
 
-脚本会尝试激活根目录下的 `.venv`、通过 `nvm use 20.17.0` 切换到指定 Node 版本，并分别运行 `python manage.py runserver` 与 `npm run dev -- --host 0.0.0.0`。可通过环境变量来自定义监听地址：
+脚本会自动创建缺失的 `.venv`、安装 `requirements.txt`，然后依据 `.python-version` 使用 `pyenv` 激活对应解释器；接着读取 `.nvmrc`（若缺失则回退到 20.17.0）并通过 `nvm use` 启动对应的 Node 版本，最后分别运行 `python manage.py runserver` 与 `npm run dev -- --host 0.0.0.0`。可通过环境变量来自定义监听地址：
 
 ```bash
 DJANGO_ADDR=0.0.0.0:8000 VITE_HOST=127.0.0.1 ./scripts/dev.sh
 ```
 
-> 提示：脚本会在启动前执行 `pyenv init -`，因此可直接依赖 `.python-version` 中声明的解释器版本。
+> 提示：脚本会在启动前执行 `pyenv init -` 并读取 `.python-version` / `.nvmrc`，确保 Python 与 Node 均使用项目锁定的版本。
 
 按 `Ctrl+C` 将同时停止前后端进程。
 ### Python（pyenv）
