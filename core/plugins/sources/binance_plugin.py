@@ -137,10 +137,16 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         binance_symbol: str,
         interval: str,
         limit: int,
-        before: Optional[int]
+        before: Optional[int],
+        mode: str = SymbolMode.SPOT.value
     ) -> List[CandleData]:
         """通过 REST API 获取 K 线数据"""
-        url = f"{self.BASE_URL}/api/v3/klines"
+        # 根据模式选择不同的API端点
+        if mode == SymbolMode.CONTRACT.value:
+            url = f"{self.FAPI_BASE_URL}/fapi/v1/klines"
+        else:
+            url = f"{self.BASE_URL}/api/v3/klines"
+            
         params = {
             "symbol": binance_symbol,
             "interval": interval,
@@ -193,11 +199,16 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
-            if mode != SymbolMode.SPOT.value:
-                raise PluginError("Binance 插件暂不支持合约K线")
             binance_symbol = self._convert_symbol(symbol, mode)
             interval = self._convert_bar(bar)
-            use_realtime = (interval == "1s" and before is None and self._realtime.enabled)
+            
+            # 合约模式暂不支持实时WebSocket
+            use_realtime = (
+                mode == SymbolMode.SPOT.value and 
+                interval == "1s" and 
+                before is None and 
+                self._realtime.enabled
+            )
 
             realtime_candles: List[CandleData] = []
             if use_realtime:
@@ -210,7 +221,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                     logger.debug("⚡ 使用 Binance WebSocket 实时缓存 (%s) 返回 %d 条数据", symbol, len(realtime_candles))
                     return realtime_candles[-limit:]
 
-            rest_candles = self._fetch_rest_candles(binance_symbol, interval, limit, before)
+            rest_candles = self._fetch_rest_candles(binance_symbol, interval, limit, before, mode)
 
             if use_realtime and realtime_candles:
                 merged = self._merge_realtime_data(rest_candles, realtime_candles, limit)
@@ -236,11 +247,14 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     ) -> TickerData:
         """获取行情数据"""
         try:
-            if mode != SymbolMode.SPOT.value:
-                raise PluginError("Binance 插件暂不支持合约Ticker")
             binance_symbol = self._convert_symbol(symbol, mode)
             
-            url = f"{self.BASE_URL}/api/v3/ticker/24hr"
+            # 根据模式选择不同的API端点
+            if mode == SymbolMode.CONTRACT.value:
+                url = f"{self.FAPI_BASE_URL}/fapi/v1/ticker/24hr"
+            else:
+                url = f"{self.BASE_URL}/api/v3/ticker/24hr"
+                
             params = {"symbol": binance_symbol}
             
             response = self._get_session.get(url, params=params, timeout=15)
