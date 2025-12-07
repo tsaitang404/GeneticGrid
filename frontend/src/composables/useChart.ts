@@ -3,6 +3,35 @@ import { createChart, type IChartApi, type ISeriesApi, ColorType } from 'lightwe
 import type { Candle, ChartOptions, APIResponse, SymbolMode } from '@/types'
 import { useTimeScaleSync } from './useTimeScaleSync'
 
+interface RealtimePriceSnapshot {
+  price: number
+  time: number
+}
+
+const BAR_SECOND_MAP: Record<string, number> = {
+  tick: 1,
+  '1s': 1,
+  '5s': 5,
+  '15s': 15,
+  '30s': 30,
+  '1m': 60,
+  '3m': 180,
+  '5m': 300,
+  '10m': 600,
+  '15m': 900,
+  '30m': 1800,
+  '1h': 3600,
+  '2h': 7200,
+  '4h': 14400,
+  '6h': 21600,
+  '12h': 43200,
+  '1d': 86400,
+  '2d': 172800,
+  '3d': 259200,
+  '1w': 604800,
+  '1M': 2592000
+}
+
 export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOptions) {
   const { isSyncingTimeScale } = useTimeScaleSync()
   const chart = ref<IChartApi | null>(null)
@@ -56,6 +85,161 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       return '1s' // Use 1s data for timeline display with second precision
     }
     return bar
+  }
+
+  const getBarDurationSeconds = (bar: string): number | null => {
+    const backendBar = getBackendBar(bar)
+    if (!backendBar) return null
+    if (BAR_SECOND_MAP[backendBar] !== undefined) {
+      return BAR_SECOND_MAP[backendBar]
+    }
+    const lower = backendBar.toLowerCase()
+    if (BAR_SECOND_MAP[lower] !== undefined) {
+      return BAR_SECOND_MAP[lower]
+    }
+    return null
+  }
+
+  const emitPriceUpdateFromCandle = (candle: Candle): void => {
+    if (!options.onPriceUpdate) return
+    const price = typeof candle.close === 'number' ? candle.close : Number(candle.close)
+    if (!Number.isFinite(price)) return
+    const openPrice = typeof candle.open === 'number' && candle.open !== 0 ? candle.open : price
+    const changeNum = openPrice ? ((price - openPrice) / openPrice * 100) : 0
+    const change = changeNum.toFixed(2)
+    options.onPriceUpdate(
+      price.toLocaleString(),
+      changeNum >= 0 ? `+${change}` : change,
+      typeof candle.open === 'number' ? price >= candle.open : true
+    )
+  }
+
+  const shouldUseRealtimePriceFeed = (): boolean => {
+    const barValue = (options.bar.value || '').toLowerCase()
+    if (!barValue) return false
+    if (checkIsTimelineMode(barValue)) return false
+    return barValue !== '1s'
+  }
+
+  let realtimePriceFailureCount = 0
+  let realtimePriceCooldownUntil = 0
+  let realtimePriceRequestActive = false
+
+  const fetchRealtimePriceSnapshot = async (): Promise<RealtimePriceSnapshot | null> => {
+    if (!shouldUseRealtimePriceFeed()) return null
+    const now = Date.now()
+    if (now < realtimePriceCooldownUntil) {
+      return null
+    }
+
+    const requestSymbol = options.symbol.value
+    const requestSource = options.source.value
+    const requestMode = getModeParam()
+    const requestBar = options.bar.value
+    const rate = options.exchangeRate?.value || 1
+
+    try {
+      const response = await fetch(
+        `/api/candlesticks/?symbol=${requestSymbol}&bar=1s&limit=1&source=${requestSource}&mode=${requestMode}`
+      )
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const result: APIResponse<Candle[]> = await response.json()
+
+      if (
+        options.symbol.value !== requestSymbol ||
+        options.source.value !== requestSource ||
+        options.bar.value !== requestBar ||
+        getModeParam() !== requestMode
+      ) {
+        return null
+      }
+
+      if (result.code === 0 && Array.isArray(result.data) && result.data.length > 0) {
+        realtimePriceFailureCount = 0
+        const candle = result.data[result.data.length - 1]
+        return {
+          price: candle.close * rate,
+          time: candle.time
+        }
+      }
+
+      realtimePriceFailureCount += 1
+    } catch (error) {
+      realtimePriceFailureCount += 1
+      console.debug('Realtime price fetch failed:', error)
+    }
+
+    if (realtimePriceFailureCount >= 3) {
+      realtimePriceCooldownUntil = Date.now() + 30000
+      realtimePriceFailureCount = 0
+    }
+    return null
+  }
+
+  const applyRealtimeSnapshotToLatestCandle = (snapshot: RealtimePriceSnapshot): Candle | null => {
+    if (isTimelineMode.value) return null
+    if (!candleSeries.value || allCandles.value.length === 0) return null
+
+    const backendBar = getBackendBar(options.bar.value)
+    if (!backendBar || backendBar === '1s' || backendBar === 'tick') return null
+    const duration = getBarDurationSeconds(options.bar.value)
+    if (!duration) return null
+
+    const latestIndex = allCandles.value.length - 1
+    const latest = allCandles.value[latestIndex]
+    const latestTime = typeof latest.time === 'number' ? latest.time : Number(latest.time)
+    if (!Number.isFinite(latestTime)) return null
+
+    const bucketTime = Math.floor(snapshot.time / duration) * duration
+    if (bucketTime !== latestTime) {
+      return null
+    }
+
+    const prevHigh = typeof latest.high === 'number' ? latest.high : snapshot.price
+    const prevLow = typeof latest.low === 'number' ? latest.low : snapshot.price
+
+    const updated: Candle = {
+      ...latest,
+      close: snapshot.price,
+      high: Math.max(prevHigh, snapshot.price),
+      low: Math.min(prevLow, snapshot.price)
+    }
+    allCandles.value[latestIndex] = updated
+
+    candleSeries.value.update({
+      time: updated.time as any,
+      open: updated.open,
+      high: updated.high,
+      low: updated.low,
+      close: updated.close
+    })
+
+    return updated
+  }
+
+  const updateRealtimePriceLine = async (): Promise<void> => {
+    if (!shouldUseRealtimePriceFeed()) return
+    if (realtimePriceRequestActive) return
+    realtimePriceRequestActive = true
+    try {
+      const snapshot = await fetchRealtimePriceSnapshot()
+      if (snapshot === null) {
+        return
+      }
+      if (latestPriceValue !== null && Math.abs(latestPriceValue - snapshot.price) < 1e-9) {
+        updatePriceAxisLabel(snapshot.price)
+      } else {
+        createOrUpdateLatestPriceLine(snapshot.price)
+      }
+      const updatedCandle = applyRealtimeSnapshotToLatestCandle(snapshot)
+      if (updatedCandle) {
+        emitPriceUpdateFromCandle(updatedCandle)
+      }
+    } finally {
+      realtimePriceRequestActive = false
+    }
   }
 
   const formatAxisPrice = (price: number): string => {
@@ -511,23 +695,12 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     }
 
     // Update price info
-    if (len > 0 && options.onPriceUpdate) {
+    if (len > 0) {
       const latest = candles[len - 1]
-      const price = latest.close
-      
-      // Update latest price line
-      if (price !== undefined && price !== null) {
-        createOrUpdateLatestPriceLine(price)
+      if (latest.close !== undefined && latest.close !== null) {
+        createOrUpdateLatestPriceLine(latest.close)
       }
-      
-      const changeNum = ((latest.close - latest.open) / latest.open * 100)
-      const change = changeNum.toFixed(2)
-      const isUp = latest.close >= latest.open
-      options.onPriceUpdate(
-        latest.close.toLocaleString(),
-        changeNum >= 0 ? `+${change}` : change,
-        isUp
-      )
+      emitPriceUpdateFromCandle(latest)
     }
   }
 
@@ -668,22 +841,12 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         }
         
         // Update price info
-        if (hasNewData && options.onPriceUpdate) {
+        if (hasNewData) {
           const latest = allCandles.value[allCandles.value.length - 1]
-          const price = latest.close
-          
-          // Update latest price line
-          if (price !== undefined && price !== null) {
-            createOrUpdateLatestPriceLine(price)
+          if (latest.close !== undefined && latest.close !== null) {
+            createOrUpdateLatestPriceLine(latest.close)
           }
-          
-          const changeNum = ((latest.close - latest.open) / latest.open * 100)
-          const change = changeNum.toFixed(2)
-          options.onPriceUpdate(
-            latest.close.toLocaleString(),
-            changeNum >= 0 ? `+${change}` : change,
-            latest.close >= latest.open
-          )
+          emitPriceUpdateFromCandle(latest)
         }
 
         if (needsFullRefresh) {
@@ -1018,6 +1181,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     loadMoreHistory,
     loadMoreNewerUntilEnough,
     updateNoDataOverlay,
-    retryLoad
+    retryLoad,
+    updateRealtimePriceLine
   }
 }
