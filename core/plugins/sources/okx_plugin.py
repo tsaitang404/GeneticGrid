@@ -15,6 +15,8 @@ from ..base import (
     Capability,
     CandleData,
     TickerData,
+    FundingRateData,
+    ContractBasisData,
     SourceType,
     PluginError,
 )
@@ -147,7 +149,32 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
             rate_limit_per_minute=600,
             supports_real_time=True,
             supports_websocket=True,
+            supports_funding_rate=True,
+            funding_rate_interval_hours=8,
+            funding_rate_quote_currency=None,
+            supports_contract_basis=True,
+            contract_basis_types=["perpetual"],
+            contract_basis_tenors=["perpetual"],
         )
+
+    def _parse_quote_currency(self, inst_id: str) -> Optional[str]:
+        parts = inst_id.split('-')
+        if len(parts) >= 2:
+            return parts[1]
+        return None
+
+    def _resolve_contract_inst_id(
+        self,
+        symbol: str,
+        contract_type: str = "perpetual",
+        tenor: Optional[str] = None,
+    ) -> str:
+        ctype = (contract_type or "perpetual").lower()
+        if ctype in {"perpetual", "swap"}:
+            if symbol.endswith("-SWAP"):
+                return symbol
+            return f"{symbol}-SWAP"
+        raise PluginError(f"OKX 暂不支持合约类型: {contract_type}")
     
     def _convert_bar(self, bar: str) -> str:
         """已废弃：使用 _normalize_granularity 代替"""
@@ -321,3 +348,86 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         except Exception as e:
             logger.error(f"OKX 获取行情数据失败: {e}")
             raise PluginError(f"OKX 获取行情数据失败: {str(e)}")
+
+    def _get_funding_rate_impl(self, symbol: str) -> FundingRateData:
+        """获取永续合约资金费率"""
+        inst_id = self._resolve_contract_inst_id(symbol, "perpetual")
+        try:
+            result = self._request("/public/funding-rate", {"instId": inst_id})
+            if result.get("code") != "0":
+                raise PluginError(f"OKX 资金费率接口错误: {result.get('msg', '未知错误')}")
+            data = result.get("data", [])
+            if not data:
+                raise PluginError("OKX 资金费率接口返回空数据")
+            item = data[0]
+            funding_rate = float(item.get("fundingRate", 0.0))
+            predicted = item.get("nextFundingRate")
+            predicted_val = float(predicted) if predicted not in (None, "") else None
+            timestamp_raw = item.get("fundingTime")
+            next_time_raw = item.get("nextFundingTime")
+            funding_time = int(timestamp_raw) // 1000 if timestamp_raw else None
+            next_time = int(next_time_raw) // 1000 if next_time_raw else None
+            quote_ccy = self._parse_quote_currency(inst_id)
+            return FundingRateData(
+                inst_id=inst_id,
+                funding_rate=funding_rate,
+                timestamp=funding_time,
+                funding_interval_hours=8,
+                next_funding_time=next_time,
+                predicted_funding_rate=predicted_val,
+                index_price=None,
+                premium_index=None,
+                quote_currency=quote_ccy,
+            )
+        except PluginError:
+            raise
+        except Exception as exc:
+            logger.error("OKX 获取资金费率失败: %s", exc)
+            raise PluginError(f"OKX 获取资金费率失败: {exc}")
+
+    def _get_contract_basis_impl(
+        self,
+        symbol: str,
+        contract_type: str,
+        reference_symbol: Optional[str] = None,
+        tenor: Optional[str] = None,
+    ) -> ContractBasisData:
+        inst_id = self._resolve_contract_inst_id(symbol, contract_type, tenor)
+        try:
+            result = self._request("/market/premium-index", {"instId": inst_id})
+            if result.get("code") != "0":
+                raise PluginError(f"OKX 基差接口错误: {result.get('msg', '未知错误')}")
+            data = result.get("data", [])
+            if not data:
+                raise PluginError("OKX 基差接口返回空数据")
+            item = data[0]
+            basis_raw = item.get("basis")
+            basis = float(basis_raw) if basis_raw not in (None, "") else 0.0
+            basis_rate_raw = item.get("basisRate")
+            basis_rate = float(basis_rate_raw) if basis_rate_raw not in (None, "") else None
+            contract_price_raw = item.get("markPx")
+            contract_price = float(contract_price_raw) if contract_price_raw not in (None, "") else None
+            reference_price_raw = item.get("indexPx")
+            reference_price = float(reference_price_raw) if reference_price_raw not in (None, "") else None
+            timestamp_raw = item.get("ts")
+            timestamp = int(timestamp_raw) // 1000 if timestamp_raw else None
+            underlying = item.get("uly") or reference_symbol
+            quote_ccy = self._parse_quote_currency(inst_id)
+            tenor_value = "perpetual" if contract_type.lower() in {"perpetual", "swap"} else tenor
+            return ContractBasisData(
+                inst_id=inst_id,
+                contract_type=contract_type,
+                basis=basis,
+                timestamp=timestamp,
+                basis_rate=basis_rate,
+                contract_price=contract_price,
+                reference_symbol=underlying,
+                reference_price=reference_price,
+                tenor=tenor_value,
+                quote_currency=quote_ccy,
+            )
+        except PluginError:
+            raise
+        except Exception as exc:
+            logger.error("OKX 获取合约基差失败: %s", exc)
+            raise PluginError(f"OKX 获取合约基差失败: {exc}")
