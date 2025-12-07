@@ -1,5 +1,5 @@
-import { ref, reactive, watch, type Ref } from 'vue'
-import type { TickerData, APIResponse } from '@/types'
+import { ref, reactive, watch, type Ref, type WatchSource } from 'vue'
+import type { TickerData, APIResponse, SymbolMode } from '@/types'
 
 interface ExchangeRates {
   [key: string]: number
@@ -8,7 +8,8 @@ interface ExchangeRates {
 export function useTicker(
   symbol: Ref<string>,
   source: Ref<string>,
-  currency: Ref<string>
+  currency: Ref<string>,
+  mode?: Ref<SymbolMode>
 ) {
   const ticker = reactive<TickerData>({
     last: '--',
@@ -66,8 +67,9 @@ export function useTicker(
     
     isLoading.value = true
     try {
+      const modeParam = mode?.value ?? 'spot'
       const response = await fetch(
-        `/api/ticker/?symbol=${symbol.value}&source=${source.value}`
+        `/api/ticker/?symbol=${symbol.value}&source=${source.value}&mode=${modeParam}`
       )
       
       // 检查响应状态
@@ -103,7 +105,8 @@ export function useTicker(
   }
 
   // Watch for symbol, source, or currency changes
-  watch([symbol, source, currency], () => {
+  const watchSources: WatchSource[] = mode ? [symbol, source, currency, mode] : [symbol, source, currency]
+  watch(watchSources, () => {
     loadTicker()
   })
 

@@ -1,5 +1,7 @@
 import type { Ref } from 'vue'
 
+export type SymbolMode = 'spot' | 'contract'
+
 // Candle data types
 export interface Candle {
   time: number
@@ -109,6 +111,7 @@ export interface ChartOptions {
   symbol: { value: string }
   bar: { value: string }
   source: { value: string }
+  mode?: { value: SymbolMode }
   exchangeRate?: { value: number }
   colors?: ChartColorRefs
   onLoading?: (loading: boolean) => void

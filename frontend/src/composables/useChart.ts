@@ -1,6 +1,6 @@
 import { ref, onUnmounted, watch, type Ref } from 'vue'
 import { createChart, type IChartApi, type ISeriesApi, ColorType } from 'lightweight-charts'
-import type { Candle, ChartOptions, APIResponse } from '@/types'
+import type { Candle, ChartOptions, APIResponse, SymbolMode } from '@/types'
 import { useTimeScaleSync } from './useTimeScaleSync'
 
 export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOptions) {
@@ -43,6 +43,10 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
   const checkIsTimelineMode = (bar: string): boolean => {
     const barLower = bar.toLowerCase()
     return barLower === 'timeline' || barLower === '分时' || barLower === 'tick'
+  }
+
+  const getModeParam = (): SymbolMode => {
+    return (options.mode?.value ?? 'spot') as SymbolMode
   }
 
   // Helper function to get backend bar parameter
@@ -371,6 +375,9 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const currentBar = options.bar.value
       const backendBar = getBackendBar(currentBar)
       const isTimeline = checkIsTimelineMode(currentBar)
+      const modeParam = getModeParam()
+      const requestSymbol = options.symbol.value
+      const requestSource = options.source.value
       
       // For timeline mode, limit to today's data only (or recent period)
       let limit = 2000
@@ -380,9 +387,18 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       }
       
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=${limit}&source=${options.source.value}`
+        `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=${limit}&source=${requestSource}&mode=${modeParam}`
       )
       const result: APIResponse<Candle[]> = await response.json()
+
+      if (
+        options.symbol.value !== requestSymbol ||
+        options.bar.value !== currentBar ||
+        options.source.value !== requestSource ||
+        getModeParam() !== modeParam
+      ) {
+        return
+      }
 
       if (result.code === 0 && result.data) {
         // 应用汇率转换
@@ -525,13 +541,14 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const requestSymbol = options.symbol.value
       const requestBar = options.bar.value
       const requestSource = options.source.value
+      const requestMode = getModeParam()
       const requestNewestTs = newestTimestamp.value
 
       // Use 'after' parameter to get only newer data than we have
       const afterMs = requestNewestTs * 1000
       const backendBar = getBackendBar(requestBar)
       const response = await fetch(
-        `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=100&source=${requestSource}&after=${afterMs}`
+        `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=100&source=${requestSource}&after=${afterMs}&mode=${requestMode}`
       )
       const result: APIResponse<Candle[]> = await response.json()
 
@@ -539,7 +556,8 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       if (
         options.symbol.value !== requestSymbol ||
         options.bar.value !== requestBar ||
-        options.source.value !== requestSource
+        options.source.value !== requestSource ||
+        getModeParam() !== requestMode
       ) {
         return
       }
@@ -761,12 +779,25 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
       const beforeMs = oldestTimestamp.value * 1000
       // 限制单次请求最大 10000 条，满足用户对更大预加载数据的需求
       const limit = Math.min(count, 10000)
-      const backendBar = getBackendBar(options.bar.value)
-      const url = `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=${limit}&source=${options.source.value}&before=${beforeMs}`
+      const requestSymbol = options.symbol.value
+      const requestSource = options.source.value
+      const requestBar = options.bar.value
+      const modeParam = getModeParam()
+      const backendBar = getBackendBar(requestBar)
+      const url = `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=${limit}&source=${requestSource}&mode=${modeParam}&before=${beforeMs}`
       
       const response = await fetch(url)
       const result: APIResponse<Candle[]> = await response.json()
       
+      if (
+        options.symbol.value !== requestSymbol ||
+        options.source.value !== requestSource ||
+        options.bar.value !== requestBar ||
+        getModeParam() !== modeParam
+      ) {
+        return
+      }
+
       if (result.code === 0 && result.data && result.data.length > 0) {
         // 应用汇率转换
         const rate = options.exchangeRate?.value || 1
@@ -824,11 +855,23 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
         return
       }
       const afterMs = newestTimestamp.value * 1000
-      const backendBar = getBackendBar(options.bar.value)
+      const requestSymbol = options.symbol.value
+      const requestSource = options.source.value
+      const requestBar = options.bar.value
+      const modeParam = getModeParam()
+      const backendBar = getBackendBar(requestBar)
       const response = await fetch(
-        `/api/candlesticks/?symbol=${options.symbol.value}&bar=${backendBar}&limit=2000&source=${options.source.value}&after=${afterMs}`
+        `/api/candlesticks/?symbol=${requestSymbol}&bar=${backendBar}&limit=2000&source=${requestSource}&mode=${modeParam}&after=${afterMs}`
       )
       const result: APIResponse<Candle[]> = await response.json()
+      if (
+        options.symbol.value !== requestSymbol ||
+        options.source.value !== requestSource ||
+        options.bar.value !== requestBar ||
+        getModeParam() !== modeParam
+      ) {
+        return
+      }
       
       if (result.code === 0 && result.data && result.data.length > 0) {
         const newCandles = result.data
@@ -914,8 +957,13 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options: ChartOption
     )
   }
 
-  // Watch for symbol/bar changes
-  watch([() => options.symbol.value, () => options.bar.value], () => {
+  // Watch for symbol/bar/source/mode changes
+  watch([
+    () => options.symbol.value,
+    () => options.bar.value,
+    () => options.source.value,
+    () => getModeParam()
+  ], () => {
     // Reset loading states
     hasMoreData.value = true
     hasNewerData.value = true

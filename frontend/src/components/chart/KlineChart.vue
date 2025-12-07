@@ -10,6 +10,10 @@
             v-model="source"
             @sourceChanged="handleSourceChange"
           />
+          <ModeSelector
+            v-model="mode"
+            :modes="availableModes"
+          />
           <div class="divider-vertical"></div>
           <SymbolSelector
             v-model="symbol"
@@ -192,6 +196,7 @@ import type { MouseEventParams, Time, UTCTimestamp, ISeriesApi, IChartApi, Candl
 import SymbolSelector from './SymbolSelector.vue'
 import TimeframeSelector from './TimeframeSelector.vue'
 import SourceSelector from './SourceSelector.vue'
+import ModeSelector from './ModeSelector.vue'
 import IndicatorSelector from '../indicators/IndicatorSelector.vue'
 import DrawingToolbar from '../tools/DrawingToolbar.vue'
 import CandleTooltip from './CandleTooltip.vue'
@@ -201,13 +206,14 @@ import { useIndicators } from '@/composables/useIndicators'
 import { useDrawingTools } from '@/composables/useDrawingTools'
 import { useChartResize } from '@/composables/useChartResize'
 import { useTicker } from '@/composables/useTicker'
-import type { Candle, ChartError, TooltipData, TickerData, DrawingType } from '@/types'
+import type { Candle, ChartError, TooltipData, TickerData, DrawingType, SymbolMode } from '@/types'
 import { usePreferencesStore } from '@/stores/preferences'
 
 interface Props {
   initialSymbol?: string
   initialBar?: string
   initialSource?: string
+  initialMode?: SymbolMode
   ticker?: TickerData | null
   currency?: string
 }
@@ -216,6 +222,7 @@ const props = withDefaults(defineProps<Props>(), {
   initialSymbol: 'BTCUSDT',
   initialBar: '1h',
   initialSource: 'okx',
+  initialMode: 'spot',
   ticker: null,
   currency: 'USDT'
 })
@@ -224,6 +231,7 @@ const emit = defineEmits<{
   'symbol-change': [symbol: string]
   'bar-change': [bar: string]
   'source-change': [source: string]
+  'mode-change': [mode: SymbolMode]
 }>()
 
 const preferences = usePreferencesStore()
@@ -239,10 +247,12 @@ const noDataOverlayRef = ref<HTMLElement | null>(null)
 const symbol = ref<string>(props.initialSymbol)
 const bar = ref<string>(props.initialBar)
 const source = ref<string>(props.initialSource)
+const mode = ref<SymbolMode>((props.initialMode ?? 'spot') as SymbolMode)
+const availableModes = ref<SymbolMode[]>([mode.value])
 
 // 获取汇率转换函数
 const currencyRef = ref(props.currency)
-const { getRate } = useTicker(symbol, source, currencyRef)
+const { getRate } = useTicker(symbol, source, currencyRef, mode)
 
 // 计算当前汇率
 const exchangeRate = computed(() => getRate())
@@ -283,6 +293,13 @@ const availableTimeframes = ref<string[]>(['tick', '1m', '5m', '15m', '30m', '1h
 
 // Handle source change to update available symbols and timeframes
 const handleSourceChange = (sourceData: any) => {
+  const sourceModes: SymbolMode[] = (sourceData.symbol_modes && sourceData.symbol_modes.length > 0
+    ? sourceData.symbol_modes
+    : ['spot'])
+  availableModes.value = sourceModes as SymbolMode[]
+  if (!availableModes.value.includes(mode.value)) {
+    mode.value = availableModes.value[0]
+  }
   
   // Update available symbols
   if (sourceData.supported_symbols && sourceData.supported_symbols.length > 0) {
@@ -362,6 +379,7 @@ const {
   symbol,
   bar,
   source,
+  mode,
   exchangeRate,
   colors: {
     up: upColor,
@@ -773,6 +791,21 @@ watch(source, (newSource) => {
   })
 })
 
+watch(mode, (newMode) => {
+  resetSelection()
+  chartError.value = { show: false, message: '' }
+  emit('mode-change', newMode)
+  stopAutoRefresh()
+  initChart()
+  rebuildMainIndicators()
+  rebuildSubCharts()
+  loadCandlesticks().then(() => {
+    if (autoRefreshEnabled.value) {
+      startAutoRefresh()
+    }
+  })
+})
+
 // Watch for auto refresh toggle
 watch(autoRefreshEnabled, (enabled) => {
   if (enabled) {
@@ -806,6 +839,13 @@ onMounted(async () => {
       }
       if (sourceInfo.capability.supported_symbols && sourceInfo.capability.supported_symbols.length > 0) {
         availableSymbols.value = sourceInfo.capability.supported_symbols
+      }
+      const sourceModes: SymbolMode[] = (sourceInfo.capability.symbol_modes && sourceInfo.capability.symbol_modes.length > 0
+        ? sourceInfo.capability.symbol_modes
+        : ['spot'])
+      availableModes.value = sourceModes as SymbolMode[]
+      if (!availableModes.value.includes(mode.value)) {
+        mode.value = availableModes.value[0]
       }
     }
   } catch (e) {
