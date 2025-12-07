@@ -2,18 +2,24 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from django.conf import settings
 
-try:
-    import redis  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    redis = None  # type: ignore
+if TYPE_CHECKING:
+    import redis
+else:
+    try:
+        import redis  # type: ignore
+    except ImportError:  # pragma: no cover - optional dependency
+        redis = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-_redis_client: Optional["redis.Redis"] = None
+if TYPE_CHECKING:
+    _redis_client: Optional[redis.Redis] = None
+else:
+    _redis_client = None
 
 
 def redis_cache_enabled() -> bool:
@@ -21,8 +27,12 @@ def redis_cache_enabled() -> bool:
     return bool(getattr(settings, 'REDIS_CACHE_ENABLED', False))
 
 
-def get_redis_client() -> Optional["redis.Redis"]:
-    """Return a singleton Redis client if caching is enabled and available."""
+def get_redis_client():
+    """Return a singleton Redis client if caching is enabled and available.
+    
+    Returns:
+        Optional[redis.Redis]: Redis client instance or None if disabled/unavailable.
+    """
     global _redis_client
 
     if not redis_cache_enabled():

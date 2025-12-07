@@ -154,25 +154,26 @@
 
       <!-- 副图区域 -->
       <div class="sub-charts">
-        <template v-for="(config, key) in enabledSubIndicators" :key="key">
+        <div
+          v-for="(config, key) in enabledSubIndicators"
+          :key="key"
+          v-show="config.enabled"
+          class="sub-chart"
+          :style="{ height: subChartHeights[key] + 'px', position: 'relative' }"
+        >
           <div
-            v-show="config.enabled"
-            class="sub-chart"
-            :style="{ height: subChartHeights[key] + 'px', position: 'relative' }"
+            :ref="(el: any) => setSubChartRef(el, String(key))"
+            class="chart-wrapper"
+          />
+          
+          <!-- 副图无更早数据覆盖层 -->
+          <div
+            v-if="!hasMoreData && allCandles.length > 0 && earliestDataOverlayWidth > 0"
+            class="no-earlier-data-overlay sub-chart-overlay"
+            :style="{ 
+              width: earliestDataOverlayWidth + 'px'
+            }"
           >
-            <div
-              :ref="el => setSubChartRef(el as HTMLElement | null, String(key))"
-              class="chart-wrapper"
-            />
-            
-            <!-- 副图无更早数据覆盖层 -->
-            <div
-              v-if="!hasMoreData && allCandles.length > 0 && earliestDataOverlayWidth > 0"
-              class="no-earlier-data-overlay sub-chart-overlay"
-              :style="{ 
-                width: earliestDataOverlayWidth + 'px'
-              }"
-            >
               <div class="no-earlier-data-content">
                 <span class="no-earlier-data-text">无更早数据</span>
                 <span class="no-earlier-data-icon">▶</span>
@@ -182,8 +183,7 @@
             <ResizeHandle
               @resize-start="startResize(String(key), $event)"
             />
-          </div>
-        </template>
+        </div>
       </div>
     </div>
   </div>
