@@ -28,6 +28,7 @@ class RealtimeIngestionConfig:
 
     source: str
     symbol: str
+    mode: str = "spot"
     bar: str = "1s"
     poll_interval: float = 1.0
     batch_size: int = 300
@@ -35,6 +36,7 @@ class RealtimeIngestionConfig:
     def __post_init__(self) -> None:
         self.source = self.source.lower()
         self.symbol = self._normalize_symbol(self.symbol)
+        self.mode = (self.mode or "spot").lower()
         self.bar = self.bar.lower()
 
         if self.poll_interval <= 0:
@@ -60,6 +62,7 @@ class _StreamContext:
     realtime_manager: Any
     normalized_symbol: str
     normalized_bar: str
+    mode: str
     stop_event: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
     last_timestamp: Optional[int] = None
@@ -109,6 +112,7 @@ class RealtimeIngestionService:
         source: str,
         symbol: str,
         bar: str = "1s",
+        mode: str = "spot",
         poll_interval: float = 1.0,
         batch_size: int = 300,
         autostart: bool = True,
@@ -118,11 +122,12 @@ class RealtimeIngestionService:
         config = RealtimeIngestionConfig(
             source=source,
             symbol=symbol,
+            mode=mode,
             bar=bar,
             poll_interval=poll_interval,
             batch_size=batch_size,
         )
-        key = self._make_key(config.source, config.symbol, config.bar)
+        key = self._make_key(config.source, config.symbol, config.bar, config.mode)
 
         with self._lock:
             existing = self._streams.get(key)
@@ -149,11 +154,11 @@ class RealtimeIngestionService:
                     f"数据源 {config.source} 未提供实时流管理器"
                 )
 
-            normalized_symbol = plugin._normalize_symbol(config.symbol)
+            normalized_symbol = plugin._normalize_symbol(config.symbol, config.mode)
             normalized_bar = plugin._normalize_granularity(config.bar).lower()
 
             cache_info = self._safe_get_cache_range(
-                config.source, config.symbol, config.bar
+                config.source, config.symbol, config.bar, config.mode
             )
 
             context = _StreamContext(
@@ -163,6 +168,7 @@ class RealtimeIngestionService:
                 realtime_manager=realtime_manager,
                 normalized_symbol=normalized_symbol,
                 normalized_bar=normalized_bar,
+                mode=config.mode,
             )
             if cache_info:
                 context.last_timestamp = cache_info.get("newest")
@@ -185,11 +191,12 @@ class RealtimeIngestionService:
         source: str,
         symbol: str,
         bar: str = "1s",
+        mode: str = "spot",
         wait: bool = True,
     ) -> None:
         """停止指定采集线程"""
 
-        key = self._make_key(source, symbol, bar)
+        key = self._make_key(source, symbol, bar, mode)
         with self._lock:
             context = self._streams.get(key)
             if not context:
@@ -202,10 +209,10 @@ class RealtimeIngestionService:
             self._streams.pop(key, None)
         self._logger.info("🛑 停止实时采集: %s", key)
 
-    def run_once(self, source: str, symbol: str, bar: str = "1s") -> bool:
+    def run_once(self, source: str, symbol: str, bar: str = "1s", mode: str = "spot") -> bool:
         """手动执行一次采集循环（主要用于测试）"""
 
-        key = self._make_key(source, symbol, bar)
+        key = self._make_key(source, symbol, bar, mode)
         with self._lock:
             context = self._streams.get(key)
         if not context:
@@ -223,6 +230,7 @@ class RealtimeIngestionService:
                     "source": ctx.config.source,
                     "symbol": ctx.config.symbol,
                     "bar": ctx.config.bar,
+                    "mode": ctx.config.mode,
                     "poll_interval": ctx.config.poll_interval,
                     "batch_size": ctx.config.batch_size,
                     "last_timestamp": ctx.last_timestamp,
@@ -299,6 +307,7 @@ class RealtimeIngestionService:
                 symbol=context.config.symbol,
                 bar=context.config.bar,
                 candles=payload,
+                mode=context.config.mode,
                 max_retries=3,
             )
             context.total_persisted += len(payload)
@@ -379,9 +388,9 @@ class RealtimeIngestionService:
             return None
         return manager
 
-    def _safe_get_cache_range(self, source: str, symbol: str, bar: str) -> Optional[Dict[str, Any]]:
+    def _safe_get_cache_range(self, source: str, symbol: str, bar: str, mode: str) -> Optional[Dict[str, Any]]:
         try:
-            return self._cache_service.get_cache_range(source, symbol, bar)
+            return self._cache_service.get_cache_range(source, symbol, bar, mode)
         except Exception as exc:
             self._logger.debug(
                 "获取缓存范围失败，将从头开始采集 (%s/%s/%s): %s",
@@ -393,8 +402,8 @@ class RealtimeIngestionService:
             return None
 
     @staticmethod
-    def _make_key(source: str, symbol: str, bar: str) -> str:
-        return f"{source.lower()}::{symbol.upper()}::{bar.lower()}"
+    def _make_key(source: str, symbol: str, bar: str, mode: str) -> str:
+        return f"{source.lower()}::{symbol.upper()}::{mode.lower()}::{bar.lower()}"
 
 
 def get_market_service(source: str = "binance"):

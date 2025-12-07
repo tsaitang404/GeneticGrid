@@ -43,14 +43,24 @@ def api_candlesticks(request):
     bar = request.GET.get('bar', '1h')
     limit = int(request.GET.get('limit', 100))
     source = request.GET.get('source', 'okx')
+    mode = request.GET.get('mode', 'spot').lower()
     before = request.GET.get('before')  # 毫秒时间戳
     after = request.GET.get('after')    # 毫秒时间戳
+
+    if mode not in {'spot', 'contract'}:
+        return JsonResponse({
+            'code': -1,
+            'error': f"不支持的交易模式: {mode}",
+            'symbol': symbol,
+            'bar': bar,
+            'source': source,
+        }, status=400)
     
     # 转换时间戳：前端传毫秒，插件需要秒
     before_sec = int(before) // 1000 if before else None
     after_sec = int(after) // 1000 if after else None
     
-    logger.info(f"📊 K线请求: {symbol}, {bar}, {source}")
+    logger.info(f"📊 K线请求: {symbol}, {bar}, {source}, mode={mode}")
 
     try:
         # 插件会自动处理格式转换（BTCUSDT -> BTC-USDT, 1h -> 1H）
@@ -58,13 +68,14 @@ def api_candlesticks(request):
             source=source,
             symbol=symbol,  # 标准格式
             bar=bar,        # 标准格式
+            mode=mode,
             limit=limit,
             before=before_sec,
             after=after_sec
         )
         
         # 获取缓存统计信息
-        cache_info = CandlestickCacheService.get_cache_range(source, symbol, bar)
+        cache_info = CandlestickCacheService.get_cache_range(source, symbol, bar, mode)
         
         response = JsonResponse({
             'code': 0,
@@ -72,6 +83,7 @@ def api_candlesticks(request):
             'symbol': symbol,
             'bar': bar,
             'source': source,
+            'mode': mode,
             'cache_info': {
                 'count': cache_info['count'],
                 'oldest': cache_info['oldest'],
@@ -95,6 +107,7 @@ def api_candlesticks(request):
             'symbol': symbol,
             'bar': bar,
             'source': source,
+            'mode': mode,
         }, status=500)
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
@@ -104,6 +117,7 @@ def api_candlesticks(request):
             'symbol': symbol,
             'bar': bar,
             'source': source,
+            'mode': mode,
         }, status=500)
 
 
@@ -112,13 +126,21 @@ def api_ticker(request):
     # 前端使用标准格式
     symbol = request.GET.get('symbol', 'BTCUSDT')
     source = request.GET.get('source', 'okx')
+    mode = request.GET.get('mode', 'spot').lower()
     
-    logger.info(f"📈 行情请求: {symbol} ({source})")
+    if mode not in {'spot', 'contract'}:
+        return JsonResponse({
+            'code': -1,
+            'error': f"不支持的交易模式: {mode}",
+            'source': source,
+        }, status=400)
+
+    logger.info(f"📈 行情请求: {symbol} ({source}) mode={mode}")
     
     try:
         # 插件会自动处理格式转换（BTCUSDT -> BTC-USDT）
         service = get_unified_service(source)
-        ticker = service.get_ticker(inst_id=symbol)
+        ticker = service.get_ticker(inst_id=symbol, mode=mode)
         
         # 日志标记数据来源
         if service.is_using_plugin:
@@ -131,6 +153,7 @@ def api_ticker(request):
             'data': ticker,
             'symbol': symbol,
             'source': source,
+            'mode': mode,
             'using_plugin': service.is_using_plugin,
         })
         response['Cache-Control'] = 'public, max-age=3'  # 行情缓存3秒
@@ -140,6 +163,7 @@ def api_ticker(request):
             'code': -1,
             'error': str(e),
             'source': source,
+            'mode': mode,
         }, status=500)
 
 

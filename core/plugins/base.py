@@ -22,6 +22,12 @@ class SourceType(Enum):
     CHARTING = "charting"          # 制图工具
 
 
+class SymbolMode(Enum):
+    """交易对模式"""
+    SPOT = "spot"
+    CONTRACT = "contract"
+
+
 class Granularity:
     """标准协议粒度定义
     
@@ -128,6 +134,7 @@ class Capability:
     # 交易对相关
     supported_symbols: List[str] = field(default_factory=list)
     symbol_format: str = "BASE-QUOTE"  # 如 "BTC-USDT" 或 "BTCUSDT"
+    symbol_modes: List[str] = field(default_factory=lambda: [SymbolMode.SPOT.value])
     
     # 其他特性
     requires_api_key: bool = False
@@ -159,6 +166,7 @@ class Capability:
             'ticker_update_frequency': self.ticker_update_frequency,
             'supported_symbols': self.supported_symbols,
             'symbol_format': self.symbol_format,
+            'symbol_modes': self.symbol_modes,
             'requires_api_key': self.requires_api_key,
             'requires_authentication': self.requires_authentication,
             'requires_proxy': self.requires_proxy,
@@ -173,6 +181,19 @@ class Capability:
             'contract_basis_types': self.contract_basis_types,
             'contract_basis_tenors': self.contract_basis_tenors,
         }
+
+    def __post_init__(self) -> None:
+        if not self.symbol_modes:
+            self.symbol_modes = [SymbolMode.SPOT.value]
+        normalized = []
+        for mode in self.symbol_modes:
+            normalized_mode = (mode or SymbolMode.SPOT.value).lower()
+            normalized.append(normalized_mode)
+        seen: List[str] = []
+        for mode in normalized:
+            if mode not in seen:
+                seen.append(mode)
+        self.symbol_modes = seen
 
 
 @dataclass
@@ -358,7 +379,7 @@ class MarketDataSourcePlugin(ABC):
         """获取数据源能力（由子类实现）"""
         pass
     
-    def _normalize_symbol(self, symbol: str) -> str:
+    def _normalize_symbol(self, symbol: str, mode: str = SymbolMode.SPOT.value) -> str:
         """标准化交易对格式（由子类覆盖实现内部转换）
         
         输入：标准格式 "BTCUSDT"
@@ -515,6 +536,20 @@ class MarketDataSourcePlugin(ABC):
             result.append(merged)
         
         return result
+
+    def _normalize_symbol_mode(self, mode: Optional[str]) -> str:
+        normalized = (mode or SymbolMode.SPOT.value).lower()
+        if normalized not in {SymbolMode.SPOT.value, SymbolMode.CONTRACT.value}:
+            raise PluginError(f"未知交易模式: {mode}")
+        return normalized
+
+    def _ensure_mode_supported(self, mode: Optional[str]) -> str:
+        normalized = self._normalize_symbol_mode(mode)
+        if normalized not in self._capability.symbol_modes:
+            raise PluginError(
+                f"数据源 {self._metadata.name} 不支持交易模式 {normalized}"
+            )
+        return normalized
     
     @abstractmethod
     def _get_candlesticks_impl(
@@ -523,12 +558,13 @@ class MarketDataSourcePlugin(ABC):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """获取 K线数据的内部实现（由子类实现，使用数据源格式）"""
         pass
     
     @abstractmethod
-    def _get_ticker_impl(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str, mode: str = SymbolMode.SPOT.value) -> TickerData:
         """获取行情数据的内部实现（由子类实现，使用数据源格式）"""
         pass
     
@@ -556,6 +592,7 @@ class MarketDataSourcePlugin(ABC):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """
         获取 K线数据（统一接口，支持自动粒度聚合）
@@ -577,14 +614,22 @@ class MarketDataSourcePlugin(ABC):
             将自动获取细粒度数据并聚合为请求的粒度。
             例如：请求 10m，数据源只有 5m，则获取 5m 数据并合并。
         """
+        mode = self._ensure_mode_supported(mode)
+
         # 检查是否直接支持该粒度
         if bar in self._capability.candlestick_granularities:
             # 直接支持，正常获取
-            source_symbol = self._normalize_symbol(symbol)
+            source_symbol = self._normalize_symbol(symbol, mode)
             source_bar = self._normalize_granularity(bar)
             source_before = self._normalize_timestamp(before)
             
-            candles = self._get_candlesticks_impl(source_symbol, source_bar, limit, source_before)
+            candles = self._get_candlesticks_impl(
+                source_symbol,
+                source_bar,
+                limit,
+                source_before,
+                mode=mode,
+            )
             
             # 确保时间戳标准化
             for candle in candles:
@@ -615,7 +660,7 @@ class MarketDataSourcePlugin(ABC):
         )
         
         # 获取细粒度数据
-        source_symbol = self._normalize_symbol(symbol)
+        source_symbol = self._normalize_symbol(symbol, mode)
         source_fine_bar = self._normalize_granularity(fine_bar)
         source_before = self._normalize_timestamp(before)
         
@@ -623,7 +668,8 @@ class MarketDataSourcePlugin(ABC):
             source_symbol, 
             source_fine_bar, 
             fine_limit, 
-            source_before
+            source_before,
+            mode=mode,
         )
         
         # 标准化时间戳
@@ -636,7 +682,7 @@ class MarketDataSourcePlugin(ABC):
         # 限制返回数量
         return aggregated_candles[-limit:] if len(aggregated_candles) > limit else aggregated_candles
     
-    def get_ticker(self, symbol: str) -> TickerData:
+    def get_ticker(self, symbol: str, mode: str = SymbolMode.SPOT.value) -> TickerData:
         """
         获取最新行情数据（统一接口）
         
@@ -649,11 +695,12 @@ class MarketDataSourcePlugin(ABC):
         Raises:
             PluginError: 如果数据源不支持或发生错误
         """
+        mode = self._ensure_mode_supported(mode)
         # 转换为数据源格式
-        source_symbol = self._normalize_symbol(symbol)
+        source_symbol = self._normalize_symbol(symbol, mode)
         
         # 调用子类实现
-        ticker = self._get_ticker_impl(source_symbol)
+        ticker = self._get_ticker_impl(source_symbol, mode)
         
         # 标准化交易对名称
         ticker.inst_id = symbol
@@ -666,7 +713,8 @@ class MarketDataSourcePlugin(ABC):
             raise PluginError(
                 f"数据源 {self._metadata.name} 未声明资金费率能力"
             )
-        source_symbol = self._normalize_symbol(symbol)
+        self._ensure_mode_supported(SymbolMode.CONTRACT.value)
+        source_symbol = self._normalize_symbol(symbol, SymbolMode.CONTRACT.value)
         funding = self._get_funding_rate_impl(source_symbol)
         funding.inst_id = symbol
         if (
@@ -693,9 +741,10 @@ class MarketDataSourcePlugin(ABC):
             raise PluginError(
                 f"数据源 {self._metadata.name} 未声明合约基差能力"
             )
-        source_symbol = self._normalize_symbol(symbol)
+        self._ensure_mode_supported(SymbolMode.CONTRACT.value)
+        source_symbol = self._normalize_symbol(symbol, SymbolMode.CONTRACT.value)
         source_reference_symbol = (
-            self._normalize_symbol(reference_symbol)
+            self._normalize_symbol(reference_symbol, SymbolMode.CONTRACT.value)
             if reference_symbol is not None
             else None
         )

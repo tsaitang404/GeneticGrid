@@ -16,6 +16,7 @@ from ..base import (
     TickerData,
     SourceType,
     PluginError,
+    SymbolMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
             ticker_update_frequency=1,
             supported_symbols=[],  # 动态获取
             symbol_format="BTCUSDT",  # Bybit 格式
+            symbol_modes=[SymbolMode.SPOT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=False,
@@ -100,9 +102,12 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = SymbolMode.SPOT.value,
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Bybit 插件暂不支持合约模式")
             bybit_symbol = self._convert_symbol(symbol)
             interval = self._convert_bar(bar)
             
@@ -157,9 +162,15 @@ class BybitMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Bybit 获取 K线数据失败: {e}")
             raise PluginError(f"Bybit 获取 K线数据失败: {e}")
     
-    def _get_ticker_impl(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(
+        self,
+        symbol: str,
+        mode: str = SymbolMode.SPOT.value,
+    ) -> TickerData:
         """获取行情数据"""
         try:
+            if mode != SymbolMode.SPOT.value:
+                raise PluginError("Bybit 插件暂不支持合约模式")
             bybit_symbol = self._convert_symbol(symbol)
             
             # Bybit V5 API - Tickers
