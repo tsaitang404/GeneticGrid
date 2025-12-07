@@ -34,6 +34,13 @@
                   <span class="source-badge" :class="getSourceBadgeClass(src)">
                     {{ getSourceBadge(src) }}
                   </span>
+                  <span
+                    v-for="modeLabel in getModeLabels(src)"
+                    :key="modeLabel"
+                    class="mode-badge"
+                  >
+                    {{ modeLabel }}
+                  </span>
                   <span v-if="src.requires_proxy" class="proxy-badge">🔒</span>
                   <span v-if="!src.supports_candlesticks" class="ticker-only-badge">仅行情</span>
                 </span>
@@ -61,6 +68,7 @@ interface Source {
   requires_proxy: boolean
   supported_symbols: string[]
   candlestick_granularities: string[]
+  symbol_modes: string[]
   rate_limit_per_minute?: number
 }
 
@@ -107,6 +115,7 @@ const loadSources = async () => {
         requires_proxy: info.capability.requires_proxy,
         supported_symbols: info.capability.supported_symbols || [],
         candlestick_granularities: info.capability.candlestick_granularities || [],
+        symbol_modes: info.capability.symbol_modes?.length ? info.capability.symbol_modes : ['spot'],
         rate_limit_per_minute: info.capability.rate_limit_per_minute
       }))
       
@@ -153,6 +162,15 @@ const getSourceBadge = (source: Source): string => {
 
 const getSourceBadgeClass = (source: Source): string => {
   return `badge-${source.source_type}`
+}
+
+const modeLabels: Record<string, string> = {
+  spot: '现货',
+  contract: '永续'
+}
+
+const getModeLabels = (source: Source): string[] => {
+  return source.symbol_modes?.map(mode => modeLabels[mode] || mode) ?? ['现货']
 }
 
 onMounted(() => {
@@ -302,6 +320,15 @@ onUnmounted(() => {
   border-radius: 3px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.mode-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
 }
 
 .badge-exchange {

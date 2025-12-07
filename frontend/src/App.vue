@@ -16,10 +16,12 @@
             :initial-symbol="initialSymbol"
             :initial-bar="initialBar"
             :initial-source="initialSource"
+            :initial-mode="initialMode"
             :ticker="ticker"
             :currency="currency"
             @symbol-change="handleSymbolChange"
             @source-change="handleSourceChange"
+            @mode-change="handleModeChange"
           />
         </section>
         <aside class="market-column">
@@ -48,10 +50,12 @@ import SettingsModal from './components/settings/SettingsModal.vue'
 import MarketInfoPanel from './components/market/MarketInfoPanel.vue'
 import { useTicker } from './composables/useTicker'
 import { usePreferencesStore } from './stores/preferences'
+import type { SymbolMode } from '@/types'
 
 const initialSymbol = ref<string>('BTCUSDT')
 const initialBar = ref<string>('1h')
 const initialSource = ref<string>('okx')
+const initialMode = ref<SymbolMode>('spot')
 const showSettings = ref<boolean>(false)
 
 const preferences = usePreferencesStore()
@@ -60,8 +64,9 @@ const { currency } = storeToRefs(preferences)
 // Symbol and source for ticker
 const currentSymbol = ref<string>(initialSymbol.value)
 const currentSource = ref<string>(initialSource.value)
+const currentMode = ref<SymbolMode>(initialMode.value)
 
-const { ticker, loadTicker } = useTicker(currentSymbol, currentSource, currency)
+const { ticker, loadTicker } = useTicker(currentSymbol, currentSource, currency, currentMode)
 
 const toggleSettings = (): void => {
   showSettings.value = !showSettings.value
@@ -73,6 +78,10 @@ const handleSymbolChange = (symbol: string): void => {
 
 const handleSourceChange = (source: string): void => {
   currentSource.value = source
+}
+
+const handleModeChange = (mode: SymbolMode): void => {
+  currentMode.value = mode
 }
 
 onMounted(() => {

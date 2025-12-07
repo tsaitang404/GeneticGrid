@@ -2,10 +2,11 @@
 from .models import CandlestickCache
 from .plugin_adapter import get_unified_service
 from .services import MarketAPIError
-from django.db import transaction
+from django.db import transaction, close_old_connections
 from django.db.utils import OperationalError
 from decimal import Decimal
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 class CandlestickCacheService:
     """K线数据缓存服务 - 负责数据库缓存的读写"""
+
+    # SQLite 在并发写入时容易触发 database is locked，这里用进程内锁串行化写入
+    _write_lock = threading.RLock()
     
     @staticmethod
     def get_from_cache(source: str, symbol: str, bar: str, mode: str = 'spot', limit: int = 100, 
@@ -79,26 +83,28 @@ class CandlestickCacheService:
         
         for attempt in range(max_retries):
             try:
-                with transaction.atomic():
-                    for candle in candles:
-                        obj, created = CandlestickCache.objects.update_or_create(
-                            source=source,
-                            symbol=symbol,
-                            mode=mode,
-                            bar=bar,
-                            time=candle['time'],
-                            defaults={
-                                'open': Decimal(str(candle['open'])),
-                                'high': Decimal(str(candle['high'])),
-                                'low': Decimal(str(candle['low'])),
-                                'close': Decimal(str(candle['close'])),
-                                'volume': Decimal(str(candle['volume'])),
-                            }
-                        )
-                        if created:
-                            created_count += 1
-                        else:
-                            updated_count += 1
+                close_old_connections()
+                with CandlestickCacheService._write_lock:
+                    with transaction.atomic():
+                        for candle in candles:
+                            obj, created = CandlestickCache.objects.update_or_create(
+                                source=source,
+                                symbol=symbol,
+                                mode=mode,
+                                bar=bar,
+                                time=candle['time'],
+                                defaults={
+                                    'open': Decimal(str(candle['open'])),
+                                    'high': Decimal(str(candle['high'])),
+                                    'low': Decimal(str(candle['low'])),
+                                    'close': Decimal(str(candle['close'])),
+                                    'volume': Decimal(str(candle['volume'])),
+                                }
+                            )
+                            if created:
+                                created_count += 1
+                            else:
+                                updated_count += 1
                 
                 logger.info(f"Saved {created_count} new, updated {updated_count} candles for {source}/{symbol}[{mode}]/{bar}")
                 return created_count
