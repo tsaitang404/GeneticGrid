@@ -243,8 +243,9 @@ def api_funding_rate_history(request):
     symbol = request.GET.get('symbol', 'BTCUSDT')
     source = request.GET.get('source', 'okx')
     limit = int(request.GET.get('limit', '100'))
+    granularity = request.GET.get('granularity', '8h')  # 资金费率默认8小时
     
-    logger.info(f"📈 资金费率历史请求: {symbol} ({source}) limit={limit}")
+    logger.info(f"📈 资金费率历史请求: {symbol} ({source}) limit={limit} granularity={granularity}")
     
     # 尝试从缓存获取
     cached_history = DerivativeDataCacheService.get_funding_history_from_cache(source, symbol)
@@ -312,22 +313,26 @@ def api_funding_rate_history(request):
 
 
 def api_contract_basis_history(request):
-    """合约基差历史数据 API - 最近1个月"""
+    """合约基差历史数据 API"""
     symbol = request.GET.get('symbol', 'BTCUSDT')
     source = request.GET.get('source', 'okx')
     contract_type = request.GET.get('contract_type', 'perpetual')
+    limit = int(request.GET.get('limit', '720'))
+    granularity = request.GET.get('granularity', '1h')  # 默认1小时
     
-    logger.info(f"📈 合约基差历史请求: {symbol} ({source}) type={contract_type}")
+    logger.info(f"📈 合约基差历史请求: {symbol} ({source}) type={contract_type} limit={limit} granularity={granularity}")
     
-    # 尝试从缓存获取
-    cached_history = DerivativeDataCacheService.get_basis_history_from_cache(source, symbol, contract_type)
-    if cached_history:
-        logger.info(f"✅ 合约基差历史缓存命中: {symbol}, {len(cached_history)}条")
+    # 尝试从缓存获取（包含granularity的缓存key）
+    cache_key = f"{source}:{symbol}:{contract_type}:{granularity}"
+    cached_history = DerivativeDataCacheService.get_basis_history_from_cache(source, symbol, contract_type, granularity)
+    if cached_history and len(cached_history) >= limit:
+        logger.info(f"✅ 合约基差历史缓存命中: {symbol} ({granularity}), {len(cached_history)}条")
         response = JsonResponse({
             'code': 0,
-            'data': cached_history,
+            'data': cached_history[-limit:],  # 返回最近的limit条
             'symbol': symbol,
             'source': source,
+            'granularity': granularity,
             'cached': True
         })
         response['Cache-Control'] = 'public, max-age=300'
@@ -353,12 +358,14 @@ def api_contract_basis_history(request):
         # 调用插件的历史数据方法
         history_data = plugin.get_contract_basis_history(
             symbol=symbol,
-            contract_type=contract_type
+            contract_type=contract_type,
+            limit=limit,
+            granularity=granularity
         )
         
-        # 保存到缓存
+        # 保存到缓存（包含granularity）
         if history_data:
-            DerivativeDataCacheService.save_basis_history_to_cache(source, symbol, contract_type, history_data)
+            DerivativeDataCacheService.save_basis_history_to_cache(source, symbol, contract_type, history_data, granularity)
         
         response = JsonResponse({
             'code': 0,

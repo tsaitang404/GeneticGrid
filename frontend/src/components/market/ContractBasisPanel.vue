@@ -29,11 +29,20 @@
       </div>
     </div>
 
-    <!-- 历史基差图表 (1个月) -->
+    <!-- 历史基差图表 -->
     <div class="chart-section">
       <div class="chart-header">
-        <h3>近1月基差走势</h3>
-        <span class="chart-info">1小时粒度</span>
+        <h3>历史基差走势</h3>
+        <div class="granularity-selector">
+          <button 
+            v-for="gran in granularities" 
+            :key="gran.value"
+            :class="['granularity-btn', { active: selectedGranularity === gran.value }]"
+            @click="selectedGranularity = gran.value"
+          >
+            {{ gran.label }}
+          </button>
+        </div>
       </div>
       
       <div class="chart-container">
@@ -81,11 +90,19 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const selectedGranularity = ref('1h')
 const chartLoading = ref(false)
 const chartError = ref('')
 const historyData = ref<any[]>([])
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
 let chartInstance: Chart | null = null
+
+const granularities = [
+  { value: '1m', label: '1分钟', interval: 60 },
+  { value: '5m', label: '5分钟', interval: 300 },
+  { value: '1h', label: '1小时', interval: 3600 },
+  { value: '1d', label: '1天', interval: 86400 }
+]
 
 const formattedBasis = computed(() => {
   if (!props.basisData) return '--'
@@ -153,8 +170,13 @@ async function loadHistory() {
   chartError.value = ''
   
   try {
+    // 根据粒度计算limit：1m=1440条(1天), 5m=8640条(30天), 1h=720条(30天), 1d=30条(30天)
+    const limit = selectedGranularity.value === '1m' ? 1440 : 
+                  selectedGranularity.value === '5m' ? 8640 :
+                  selectedGranularity.value === '1h' ? 720 : 30
+    
     const response = await fetch(
-      `/api/contract-basis/history/?symbol=${props.symbol}&source=${props.source}&contract_type=perpetual`
+      `/api/contract-basis/history/?symbol=${props.symbol}&source=${props.source}&contract_type=perpetual&limit=${limit}&granularity=${selectedGranularity.value}`
     )
     
     if (!response.ok) {
@@ -250,6 +272,7 @@ function updateChart() {
             label: (context) => {
               const label = context.dataset.label || ''
               const value = context.parsed.y
+              if (value == null) return 'N/A'
               if (label.includes('率')) {
                 return `${label}: ${value.toFixed(3)}%`
               } else {
@@ -334,6 +357,20 @@ onMounted(() => {
 onUnmounted(() => {
   if (chartInstance) {
     chartInstance.destroy()
+  }
+})
+
+// 监听粒度变化
+watch(selectedGranularity, () => {
+  if (props.symbol && props.source) {
+    loadHistory()
+  }
+})
+
+// 监听symbol和source变化
+watch([() => props.symbol, () => props.source], () => {
+  if (props.symbol && props.source) {
+    loadHistory()
   }
 })
 </script>
@@ -435,6 +472,33 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
+}
+
+.granularity-selector {
+  display: flex;
+  gap: 6px;
+}
+
+.granularity-btn {
+  padding: 4px 12px;
+  border: 1px solid #363a45;
+  background: #2a2e39;
+  color: #787b86;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.granularity-btn:hover {
+  background: #363a45;
+  color: #d1d4dc;
+}
+
+.granularity-btn.active {
+  background: #2962ff;
+  color: #ffffff;
+  border-color: #2962ff;
 }
 
 .chart-info {

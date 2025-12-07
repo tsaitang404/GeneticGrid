@@ -56,16 +56,33 @@ class DerivativeDataCacheService:
         manager.basis.set(data, source=source, symbol=symbol, contract_type=contract_type)
     
     @staticmethod
-    def get_basis_history_from_cache(source: str, symbol: str, contract_type: str) -> Optional[List[Dict[str, Any]]]:
-        """从缓存获取合约基差历史数据"""
+    def get_basis_history_from_cache(source: str, symbol: str, contract_type: str, granularity: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+        """从缓存获取合约基差历史数据
+        
+        Args:
+            source: 数据源
+            symbol: 交易对
+            contract_type: 合约类型
+            granularity: 时间粒度（可选，用于隔离不同粒度的缓存）
+        """
         manager = get_cache_manager()
-        return manager.basis_history.get_series(source=source, symbol=symbol, contract_type=contract_type)
+        extra_key = f":{granularity}" if granularity else ""
+        return manager.basis_history.get_series(source=source, symbol=symbol, contract_type=contract_type + extra_key)
     
     @staticmethod
-    def save_basis_history_to_cache(source: str, symbol: str, contract_type: str, history: List[Dict[str, Any]]) -> None:
-        """保存合约基差历史数据到缓存"""
+    def save_basis_history_to_cache(source: str, symbol: str, contract_type: str, history: List[Dict[str, Any]], granularity: Optional[str] = None) -> None:
+        """保存合约基差历史数据到缓存
+        
+        Args:
+            source: 数据源
+            symbol: 交易对
+            contract_type: 合约类型
+            history: 历史数据
+            granularity: 时间粒度（可选，用于隔离不同粒度的缓存）
+        """
         manager = get_cache_manager()
-        manager.basis_history.set_series(history, source=source, symbol=symbol, contract_type=contract_type)
+        extra_key = f":{granularity}" if granularity else ""
+        manager.basis_history.set_series(history, source=source, symbol=symbol, contract_type=contract_type + extra_key)
     
     # ===== 缓存管理 =====
     
