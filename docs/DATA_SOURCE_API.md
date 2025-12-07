@@ -29,6 +29,68 @@
 - API ↔ 插件：秒
 - 插件内部自动转换为数据源格式
 
+### 资金费率格式
+- **能力字段**: `supports_funding_rate`, `funding_rate_interval_hours`, `funding_rate_quote_currency`
+- **数据结构**: `FundingRateData`
+- **字段约定**:
+  - `inst_id`: 标准交易对（如 `BTCUSDT`）
+  - `funding_rate`: 当前费率，十进制小数（0.0005 = 0.05%）
+  - `timestamp`: 当前费率对应的 Unix 秒级时间戳
+  - `funding_interval_hours`: 结算周期（小时）
+  - `next_funding_time`: 下一次结算时间（Unix 秒）
+  - `predicted_funding_rate`: 交易所公布的下一期预测费率
+  - `index_price`: 指数价格/标记价格
+  - `premium_index`: 溢价指数（可选）
+  - `quote_currency`: 结算货币（USDT、USD 等）
+
+**示例**:
+
+```json
+{
+  "inst_id": "BTCUSDT",
+  "funding_rate": 0.0007,
+  "timestamp": 1733414400,
+  "funding_interval_hours": 8,
+  "next_funding_time": 1733443200,
+  "predicted_funding_rate": 0.0008,
+  "index_price": 91880.52,
+  "premium_index": 0.00012,
+  "quote_currency": "USDT"
+}
+```
+
+### 合约基差格式
+- **能力字段**: `supports_contract_basis`, `contract_basis_types`, `contract_basis_tenors`
+- **数据结构**: `ContractBasisData`
+- **字段约定**:
+  - `inst_id`: 衍生品合约的标准交易对
+  - `contract_type`: 合约类型，推荐值：`perpetual`, `futures`
+  - `tenor`: 到期或交割类型，推荐值：`current_quarter`, `next_quarter`, `bi_weekly`, `monthly`
+  - `basis`: 绝对基差（合约价 - 参考价）
+  - `basis_rate`: 相对基差（basis / 参考价）
+  - `contract_price`: 合约价格
+  - `reference_symbol`: 基准标的（通常是现货交易对）
+  - `reference_price`: 基准标的价格
+  - `timestamp`: 数据时间（秒）
+  - `quote_currency`: 计价货币
+
+**示例**:
+
+```json
+{
+  "inst_id": "BTCUSDT",
+  "contract_type": "perpetual",
+  "tenor": "perpetual",
+  "basis": 120.5,
+  "basis_rate": 0.0013,
+  "contract_price": 92100.5,
+  "reference_symbol": "BTCUSDT-SPOT",
+  "reference_price": 91980.0,
+  "timestamp": 1733414400,
+  "quote_currency": "USDT"
+}
+```
+
 ## API 端点
 
 ### 1. 获取所有数据源列表
@@ -67,7 +129,13 @@ GET /api/sources/
         ],
         "symbol_format": "BTCUSDT",
         "has_rate_limit": true,
-        "rate_limit_per_minute": 600
+        "rate_limit_per_minute": 600,
+        "supports_funding_rate": true,
+        "funding_rate_interval_hours": 8,
+        "funding_rate_quote_currency": "USDT",
+        "supports_contract_basis": true,
+        "contract_basis_types": ["perpetual", "futures"],
+        "contract_basis_tenors": ["perpetual", "current_quarter", "next_quarter"]
       }
     },
     "binance": {

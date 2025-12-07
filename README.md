@@ -37,7 +37,7 @@
 DJANGO_ADDR=0.0.0.0:8000 VITE_HOST=127.0.0.1 ./scripts/dev.sh
 ```
 
-> 提示：脚本会在启动前执行 `pyenv init -` 并读取 `.python-version` / `.nvmrc`，确保 Python 与 Node 均使用项目锁定的版本。
+> 提示：脚本会在启动前执行 `pyenv init -` 并读取 `.python-version` / `.nvmrc`，确保 Python 与 Node 均使用项目锁定的版本，并会等待 Django 端口就绪后再启动前端，避免初次请求命中未就绪的 API。
 
 按 `Ctrl+C` 将同时停止前后端进程。
 ### Python（pyenv）

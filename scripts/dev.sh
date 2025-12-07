@@ -113,10 +113,80 @@ start_frontend() {
   npm run dev -- --host "$VITE_HOST"
 }
 
+parse_backend_address() {
+  local addr="$DJANGO_ADDR"
+  local host="${addr%:*}"
+  local port="${addr##*:}"
+
+  if [[ "$host" == "$addr" ]]; then
+    # 未包含冒号，仅提供了端口或主机
+    if [[ "$addr" =~ ^[0-9]+$ ]]; then
+      host="127.0.0.1"
+      port="$addr"
+    else
+      host="$addr"
+      port="8000"
+    fi
+  fi
+
+  if [[ -z "$host" || "$host" == "*" ]]; then
+    host="127.0.0.1"
+  fi
+
+  if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
+    port="8000"
+  fi
+
+  BACKEND_LISTEN_HOST="$host"
+  BACKEND_CONNECT_HOST="$host"
+  if [[ "$host" == "0.0.0.0" ]]; then
+    BACKEND_CONNECT_HOST="127.0.0.1"
+  fi
+  BACKEND_CONNECT_PORT="$port"
+}
+
+wait_for_backend() {
+  local timeout="${BACKEND_READY_TIMEOUT:-60}"
+  local start_ts
+  start_ts=$(date +%s)
+  log "Waiting for Django to accept connections on ${BACKEND_CONNECT_HOST}:${BACKEND_CONNECT_PORT} (timeout ${timeout}s)"
+  while true; do
+    if WAIT_HOST="$BACKEND_CONNECT_HOST" WAIT_PORT="$BACKEND_CONNECT_PORT" python - <<'PY' >/dev/null 2>&1; then
+import os, socket
+host = os.environ['WAIT_HOST']
+port = int(os.environ['WAIT_PORT'])
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect((host, port))
+except OSError:
+    raise SystemExit(1)
+else:
+    s.close()
+    raise SystemExit(0)
+PY
+      log "Django server is ready."
+      break
+    fi
+
+    if (( $(date +%s) - start_ts >= timeout )); then
+      echo "[dev] Timed out waiting for Django to start on ${BACKEND_CONNECT_HOST}:${BACKEND_CONNECT_PORT}" >&2
+      EXIT_STATUS=1
+      cleanup
+    fi
+    sleep 1
+  done
+}
+
 PIDS=()
+
+parse_backend_address
 
 start_backend &
 PIDS+=("$!")
+
+wait_for_backend
+
 start_frontend &
 PIDS+=("$!")
 

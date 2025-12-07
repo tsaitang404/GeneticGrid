@@ -86,6 +86,26 @@ class DocumentationGenerator:
                 doc.append(f"**更新频率**: 每 {capability.ticker_update_frequency} 秒更新一次")
             doc.append("")
         
+        if capability.supports_funding_rate:
+            doc.append("## 资金费率")
+            doc.append("")
+            if capability.funding_rate_interval_hours:
+                doc.append(f"**结算周期**: 每 {capability.funding_rate_interval_hours} 小时")
+            if capability.funding_rate_quote_currency:
+                doc.append(f"**结算货币**: {capability.funding_rate_quote_currency}")
+            doc.append("**约定字段**: funding_rate, next_funding_time, predicted_funding_rate, index_price")
+            doc.append("")
+        
+        if capability.supports_contract_basis:
+            doc.append("## 合约基差")
+            doc.append("")
+            if capability.contract_basis_types:
+                doc.append(f"**支持的合约类型**: {', '.join(capability.contract_basis_types)}")
+            if capability.contract_basis_tenors:
+                doc.append(f"**支持的到期类型**: {', '.join(capability.contract_basis_tenors)}")
+            doc.append("**约定字段**: basis, basis_rate, contract_price, reference_price")
+            doc.append("")
+        
         # 交易对
         if capability.supported_symbols:
             doc.append("## 支持的交易对")
@@ -227,6 +247,16 @@ class DocumentationGenerator:
             features.append("- ✅ 行情数据 (Ticker)")
         else:
             features.append("- ❌ 行情数据")
+        
+        if capability.supports_funding_rate:
+            features.append("- ✅ 资金费率 (Funding Rate)")
+        else:
+            features.append("- ❌ 资金费率")
+        
+        if capability.supports_contract_basis:
+            features.append("- ✅ 合约基差 (Basis)")
+        else:
+            features.append("- ❌ 合约基差")
         
         if capability.supports_real_time:
             features.append("- ✅ 实时数据")

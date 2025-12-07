@@ -44,7 +44,7 @@
 
 1. **标准化接口**
    - 所有数据源都实现相同的方法：`get_candlesticks()`, `get_ticker()`
-   - 使用统一的数据类：`CandleData`, `TickerData`
+    - 使用统一的数据类：`CandleData`, `TickerData`, `FundingRateData`, `ContractBasisData`
 
 2. **能力声明**
    - 每个数据源明确声明支持的粒度、交易对、限制等
@@ -155,6 +155,20 @@ class MarketDataSourcePlugin(ABC):
     def get_ticker(self, symbol: str) -> TickerData:
         """获取行情数据"""
         pass
+
+    def get_funding_rate(self, symbol: str) -> FundingRateData:
+        """可选：获取永续/期货合约的资金费率"""
+        pass
+
+    def get_contract_basis(
+        self,
+        symbol: str,
+        contract_type: str = "perpetual",
+        reference_symbol: Optional[str] = None,
+        tenor: Optional[str] = None,
+    ) -> ContractBasisData:
+        """可选：获取指定合约的基差信息"""
+        pass
 ```
 
 ### 2. DataSourceMetadata (元数据)
@@ -205,6 +219,47 @@ class Capability:
     # 高级特性
     supports_real_time: bool
     supports_websocket: bool
+    
+    # 衍生品指标
+    supports_funding_rate: bool
+    funding_rate_interval_hours: Optional[int]
+    funding_rate_quote_currency: Optional[str]
+    supports_contract_basis: bool
+    contract_basis_types: List[str]
+    contract_basis_tenors: List[str]
+```
+
+#### FundingRateData（资金费率）
+
+```python
+@dataclass
+class FundingRateData:
+    inst_id: str
+    funding_rate: float
+    timestamp: Optional[int]
+    funding_interval_hours: Optional[int]
+    next_funding_time: Optional[int]
+    predicted_funding_rate: Optional[float]
+    index_price: Optional[float]
+    premium_index: Optional[float]
+    quote_currency: Optional[str]
+```
+
+#### ContractBasisData（合约基差）
+
+```python
+@dataclass
+class ContractBasisData:
+    inst_id: str
+    contract_type: str
+    basis: float
+    timestamp: Optional[int]
+    basis_rate: Optional[float]
+    contract_price: Optional[float]
+    reference_symbol: Optional[str]
+    reference_price: Optional[float]
+    tenor: Optional[str]
+    quote_currency: Optional[str]
 ```
 
 ### 4. PluginManager (管理器)
