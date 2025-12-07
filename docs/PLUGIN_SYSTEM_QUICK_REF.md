@@ -82,6 +82,10 @@ python demo_plugins.py
 - `get_candlesticks(symbol, bar, limit, before)` → List[CandleData]
 - `get_ticker(symbol)` → TickerData
 
+**可选的方法:**
+- `get_funding_rate(symbol)` → FundingRateData
+- `get_contract_basis(symbol, contract_type='perpetual', reference_symbol=None, tenor=None)` → ContractBasisData
+
 **可用的方法:**
 - `get_metadata()` → DataSourceMetadata
 - `get_capability()` → Capability
@@ -123,6 +127,12 @@ class Capability:
     rate_limit_per_minute: Optional[int]
     supports_real_time: bool
     supports_websocket: bool
+    supports_funding_rate: bool
+    funding_rate_interval_hours: Optional[int]
+    funding_rate_quote_currency: Optional[str]
+    supports_contract_basis: bool
+    contract_basis_types: List[str]
+    contract_basis_tenors: List[str]
 ```
 
 ### CandleData
@@ -151,6 +161,39 @@ class TickerData:
     low_24h: Optional[float]
     change_24h: Optional[float]
     change_24h_pct: Optional[float]
+```
+
+### FundingRateData
+
+```python
+@dataclass
+class FundingRateData:
+    inst_id: str
+    funding_rate: float
+    timestamp: Optional[int]
+    funding_interval_hours: Optional[int]
+    next_funding_time: Optional[int]
+    predicted_funding_rate: Optional[float]
+    index_price: Optional[float]
+    premium_index: Optional[float]
+    quote_currency: Optional[str]
+```
+
+### ContractBasisData
+
+```python
+@dataclass
+class ContractBasisData:
+    inst_id: str
+    contract_type: str
+    basis: float
+    timestamp: Optional[int]
+    basis_rate: Optional[float]
+    contract_price: Optional[float]
+    reference_symbol: Optional[str]
+    reference_price: Optional[float]
+    tenor: Optional[str]
+    quote_currency: Optional[str]
 ```
 
 ### PluginManager
@@ -192,6 +235,15 @@ print(f"BTC 最新价格: ${ticker.last}")
 capability = plugin.get_capability()
 print(f"支持粒度: {capability.candlestick_granularities}")
 print(f"速率限制: {capability.rate_limit_per_minute}/分钟")
+
+if capability.supports_funding_rate:
+    funding = plugin.get_funding_rate('BTC-USDT')
+    print(f"资金费率: {funding.funding_rate:.4%}, 下次结算: {funding.next_funding_time}")
+
+if capability.supports_contract_basis:
+    basis = plugin.get_contract_basis('BTC-USDT', contract_type='perpetual', reference_symbol='BTCUSDT-SPOT')
+    basis_rate_display = f"{basis.basis_rate:.4%}" if basis.basis_rate is not None else "N/A"
+    print(f"当前基差: {basis.basis} ({basis_rate_display})")
 ```
 
 ### API 调用

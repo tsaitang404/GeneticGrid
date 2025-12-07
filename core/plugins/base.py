@@ -140,6 +140,14 @@ class Capability:
     supports_real_time: bool = False
     supports_websocket: bool = False
     
+    # 衍生品指标
+    supports_funding_rate: bool = False
+    funding_rate_interval_hours: Optional[int] = None
+    funding_rate_quote_currency: Optional[str] = None
+    supports_contract_basis: bool = False
+    contract_basis_types: List[str] = field(default_factory=list)
+    contract_basis_tenors: List[str] = field(default_factory=list)
+    
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -158,6 +166,12 @@ class Capability:
             'rate_limit_per_minute': self.rate_limit_per_minute,
             'supports_real_time': self.supports_real_time,
             'supports_websocket': self.supports_websocket,
+            'supports_funding_rate': self.supports_funding_rate,
+            'funding_rate_interval_hours': self.funding_rate_interval_hours,
+            'funding_rate_quote_currency': self.funding_rate_quote_currency,
+            'supports_contract_basis': self.supports_contract_basis,
+            'contract_basis_types': self.contract_basis_types,
+            'contract_basis_tenors': self.contract_basis_tenors,
         }
 
 
@@ -247,6 +261,62 @@ class TickerData:
             'change_24h': self.change_24h,
             'change_24h_pct': self.change_24h_pct,
             'volume_24h': self.volume_24h,
+        }
+
+
+@dataclass
+class FundingRateData:
+    """资金费率指标"""
+    inst_id: str  # 交易对（标准格式）
+    funding_rate: float  # 当前资金费率，单位：百分比（如 0.0005 表示 0.05%）
+    timestamp: Optional[int] = None  # 当前费率对应的时间（秒）
+    funding_interval_hours: Optional[int] = None  # 资金费率结算周期
+    next_funding_time: Optional[int] = None  # 下次结算时间（秒）
+    predicted_funding_rate: Optional[float] = None  # 预测资金费率
+    index_price: Optional[float] = None  # 指数价格 / 基准价格
+    premium_index: Optional[float] = None  # 溢价指数
+    quote_currency: Optional[str] = None  # 结算货币
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'inst_id': self.inst_id,
+            'funding_rate': self.funding_rate,
+            'timestamp': self.timestamp,
+            'funding_interval_hours': self.funding_interval_hours,
+            'next_funding_time': self.next_funding_time,
+            'predicted_funding_rate': self.predicted_funding_rate,
+            'index_price': self.index_price,
+            'premium_index': self.premium_index,
+            'quote_currency': self.quote_currency,
+        }
+
+
+@dataclass
+class ContractBasisData:
+    """合约基差指标"""
+    inst_id: str  # 合约交易对（标准格式）
+    contract_type: str  # 合约类型，如 perpetual/current_quarter
+    basis: float  # 绝对基差（合约价 - 现货价）
+    timestamp: Optional[int] = None  # 数据时间
+    basis_rate: Optional[float] = None  # 相对基差（基差 / 现货价）
+    contract_price: Optional[float] = None  # 合约价格
+    reference_symbol: Optional[str] = None  # 基准标的（如现货）
+    reference_price: Optional[float] = None  # 基准标的价格
+    tenor: Optional[str] = None  # 到期类型，如 current_quarter
+    quote_currency: Optional[str] = None  # 计价货币
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'inst_id': self.inst_id,
+            'contract_type': self.contract_type,
+            'basis': self.basis,
+            'timestamp': self.timestamp,
+            'basis_rate': self.basis_rate,
+            'contract_price': self.contract_price,
+            'reference_symbol': self.reference_symbol,
+            'reference_price': self.reference_price,
+            'tenor': self.tenor,
+            'quote_currency': self.quote_currency,
         }
 
 
@@ -462,6 +532,24 @@ class MarketDataSourcePlugin(ABC):
         """获取行情数据的内部实现（由子类实现，使用数据源格式）"""
         pass
     
+    def _get_funding_rate_impl(self, symbol: str) -> FundingRateData:
+        """获取资金费率的内部实现（可选，使用数据源格式）"""
+        raise PluginError(
+            f"数据源 {self._metadata.name} 未实现资金费率获取接口"
+        )
+    
+    def _get_contract_basis_impl(
+        self,
+        symbol: str,
+        contract_type: str,
+        reference_symbol: Optional[str] = None,
+        tenor: Optional[str] = None,
+    ) -> ContractBasisData:
+        """获取合约基差的内部实现（可选，使用数据源格式）"""
+        raise PluginError(
+            f"数据源 {self._metadata.name} 未实现合约基差获取接口"
+        )
+    
     def get_candlesticks(
         self,
         symbol: str,
@@ -571,6 +659,56 @@ class MarketDataSourcePlugin(ABC):
         ticker.inst_id = symbol
         
         return ticker
+    
+    def get_funding_rate(self, symbol: str) -> FundingRateData:
+        """获取指定合约的资金费率"""
+        if not self._capability.supports_funding_rate:
+            raise PluginError(
+                f"数据源 {self._metadata.name} 未声明资金费率能力"
+            )
+        source_symbol = self._normalize_symbol(symbol)
+        funding = self._get_funding_rate_impl(source_symbol)
+        funding.inst_id = symbol
+        if (
+            funding.funding_interval_hours is None
+            and self._capability.funding_rate_interval_hours is not None
+        ):
+            funding.funding_interval_hours = self._capability.funding_rate_interval_hours
+        if (
+            funding.quote_currency is None
+            and self._capability.funding_rate_quote_currency is not None
+        ):
+            funding.quote_currency = self._capability.funding_rate_quote_currency
+        return funding
+    
+    def get_contract_basis(
+        self,
+        symbol: str,
+        contract_type: str = "perpetual",
+        reference_symbol: Optional[str] = None,
+        tenor: Optional[str] = None,
+    ) -> ContractBasisData:
+        """获取指定合约与基准标的之间的基差"""
+        if not self._capability.supports_contract_basis:
+            raise PluginError(
+                f"数据源 {self._metadata.name} 未声明合约基差能力"
+            )
+        source_symbol = self._normalize_symbol(symbol)
+        source_reference_symbol = (
+            self._normalize_symbol(reference_symbol)
+            if reference_symbol is not None
+            else None
+        )
+        basis = self._get_contract_basis_impl(
+            symbol=source_symbol,
+            contract_type=contract_type,
+            reference_symbol=source_reference_symbol,
+            tenor=tenor,
+        )
+        basis.inst_id = symbol
+        if reference_symbol and not basis.reference_symbol:
+            basis.reference_symbol = reference_symbol
+        return basis
     
     def get_supported_symbols(self) -> List[str]:
         """获取支持的交易对列表"""
