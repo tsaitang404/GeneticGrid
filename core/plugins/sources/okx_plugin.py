@@ -73,20 +73,27 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         symbol: str,
         mode: str = SymbolMode.SPOT.value,
     ) -> str:
-        """标准格式 "BTCUSDT" -> OKX 格式 "BTC-USDT" """
+        """标准格式 "BTCUSDT" -> OKX 格式 "BTC-USDT" (合约附加 -SWAP)"""
+        normalized_mode = (mode or SymbolMode.SPOT.value).lower()
+
         # 解析交易对
         symbol = symbol.upper().replace('-', '').replace('/', '')
-        
+        formatted = symbol
+
         # 常见计价币种
         for quote in ['USDT', 'USDC', 'USD', 'BTC', 'ETH']:
             if symbol.endswith(quote):
                 base = symbol[:-len(quote)]
-                return f"{base}-{quote}"
-        
-        # 默认：假设后4位是计价币种
-        if len(symbol) > 4:
-            return f"{symbol[:-4]}-{symbol[-4:]}"
-        return symbol
+                formatted = f"{base}-{quote}"
+                break
+        else:
+            # 默认：假设后4位是计价币种
+            if len(symbol) > 4:
+                formatted = f"{symbol[:-4]}-{symbol[-4:]}"
+
+        if normalized_mode == SymbolMode.CONTRACT.value:
+            return self._resolve_contract_inst_id(formatted)
+        return formatted
     
     def _normalize_granularity(self, bar: str) -> str:
         """标准格式 "1h" -> OKX 格式 "1H" """
