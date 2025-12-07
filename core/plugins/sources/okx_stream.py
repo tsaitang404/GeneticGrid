@@ -58,6 +58,15 @@ class _RealtimeStats:
     reconnects: int = 0
 
 
+def _detect_inst_type(inst_id: str) -> str:
+    inst = (inst_id or '').upper()
+    if inst.endswith('-SWAP') or inst.endswith('-SWAP-LIN') or inst.endswith('-SWAP-USD'):
+        return 'SWAP'
+    if inst.endswith('-FUTURES'):
+        return 'FUTURES'
+    return 'SPOT'
+
+
 class OKXStreamWorker:
     """管理单个 instId@interval 的 OKX 实时订阅"""
 
@@ -65,11 +74,13 @@ class OKXStreamWorker:
     BUSINESS_WS_URL = "wss://ws.okx.com:8443/ws/v5/business"
     BUFFER_SIZE = 7200  # 约 2 小时的 1s 数据
 
-    def __init__(self, inst_id: str, interval: str = "1S") -> None:
+    def __init__(self, inst_id: str, interval: str = "1S", inst_type: Optional[str] = None) -> None:
         self.inst_id = inst_id.upper()
         self.interval = interval.lower()
         self.channel = f"candle{self.interval}"
         self._ws_url = self.BUSINESS_WS_URL if self.interval == "1s" else self.PUBLIC_WS_URL
+        detected_type = inst_type.upper() if inst_type else _detect_inst_type(self.inst_id)
+        self.inst_type = detected_type
         self._buffer: Deque[CandleData] = deque(maxlen=self.BUFFER_SIZE)
         self._buffer_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -110,9 +121,17 @@ class OKXStreamWorker:
 
     def _on_open(self, ws) -> None:
         try:
+            args = {
+                "channel": self.channel,
+                "instId": self.inst_id,
+            }
+            # 只有业务线路 (1s) 需要 instType 参数，其他公共频道会拒绝该字段
+            if self._ws_url == self.BUSINESS_WS_URL:
+                args["instType"] = self.inst_type
+
             payload = {
                 "op": "subscribe",
-                "args": [{"channel": self.channel, "instId": self.inst_id}]
+                "args": [args]
             }
             ws.send(json.dumps(payload))
             logger.info("✅ OKX WS 订阅: %s %s", self.inst_id, self.channel)
