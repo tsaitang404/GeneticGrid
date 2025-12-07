@@ -15,7 +15,7 @@ class CandlestickCacheService:
     """K线数据缓存服务 - 负责数据库缓存的读写"""
     
     @staticmethod
-    def get_from_cache(source: str, symbol: str, bar: str, limit: int = 100, 
+    def get_from_cache(source: str, symbol: str, bar: str, mode: str = 'spot', limit: int = 100, 
                       before: int = None, after: int = None):
         """从缓存获取K线数据
         
@@ -33,6 +33,7 @@ class CandlestickCacheService:
         queryset = CandlestickCache.objects.filter(
             source=source,
             symbol=symbol,
+            mode=mode,
             bar=bar
         )
         
@@ -60,7 +61,7 @@ class CandlestickCacheService:
         return result
     
     @staticmethod
-    def save_to_cache(source: str, symbol: str, bar: str, candles: list, max_retries: int = 3):
+    def save_to_cache(source: str, symbol: str, bar: str, candles: list, mode: str = 'spot', max_retries: int = 3):
         """批量保存K线数据到缓存
         
         Args:
@@ -83,6 +84,7 @@ class CandlestickCacheService:
                         obj, created = CandlestickCache.objects.update_or_create(
                             source=source,
                             symbol=symbol,
+                            mode=mode,
                             bar=bar,
                             time=candle['time'],
                             defaults={
@@ -98,7 +100,7 @@ class CandlestickCacheService:
                         else:
                             updated_count += 1
                 
-                logger.info(f"Saved {created_count} new, updated {updated_count} candles for {source}/{symbol}/{bar}")
+                logger.info(f"Saved {created_count} new, updated {updated_count} candles for {source}/{symbol}[{mode}]/{bar}")
                 return created_count
                 
             except OperationalError as e:
@@ -113,7 +115,7 @@ class CandlestickCacheService:
         return created_count
     
     @staticmethod
-    def get_cache_range(source: str, symbol: str, bar: str):
+    def get_cache_range(source: str, symbol: str, bar: str, mode: str = 'spot'):
         """获取缓存的数据范围（使用聚合查询优化性能）
         
         Returns:
@@ -124,6 +126,7 @@ class CandlestickCacheService:
         result = CandlestickCache.objects.filter(
             source=source,
             symbol=symbol,
+            mode=mode,
             bar=bar
         ).aggregate(
             oldest=Min('time'),
@@ -138,7 +141,7 @@ class CandlestickCacheService:
         }
     
     @staticmethod
-    def fetch_and_cache(source: str, symbol: str, bar: str, limit: int = 1000, before: int = None):
+    def fetch_and_cache(source: str, symbol: str, bar: str, mode: str = 'spot', limit: int = 1000, before: int = None):
         """从API获取数据并异步缓存（不阻塞返回）
         
         Args:
@@ -154,18 +157,18 @@ class CandlestickCacheService:
         try:
             # 使用统一服务（优先插件系统）
             service = get_unified_service(source)
-            candles = service.get_candlesticks(inst_id=symbol, bar=bar, limit=limit, before=before)
+            candles = service.get_candlesticks(inst_id=symbol, bar=bar, limit=limit, before=before, mode=mode)
             
             # 日志标记数据来源
             if service.is_using_plugin:
-                logger.info(f"📦 使用插件获取 {source}/{symbol}/{bar}: {len(candles)} 条")
+                logger.info(f"📦 使用插件获取 {source}/{symbol}[{mode}]/{bar}: {len(candles)} 条")
             else:
-                logger.info(f"🔧 使用旧服务获取 {source}/{symbol}/{bar}: {len(candles)} 条")
+                logger.info(f"🔧 使用旧服务获取 {source}/{symbol}[{mode}]/{bar}: {len(candles)} 条")
             
             # 异步保存到缓存（不等待结果，避免阻塞）
             if candles:
                 try:
-                    CandlestickCacheService.save_to_cache(source, symbol, bar, candles, max_retries=1)
+                    CandlestickCacheService.save_to_cache(source, symbol, bar, mode=mode, candles=candles, max_retries=1)
                 except Exception as e:
                     # 缓存失败不影响数据返回
                     logger.warning(f"Failed to cache data (non-blocking): {e}")
@@ -176,7 +179,7 @@ class CandlestickCacheService:
             raise
     
     @staticmethod
-    def get_with_auto_fetch(source: str, symbol: str, bar: str, limit: int = 100,
+    def get_with_auto_fetch(source: str, symbol: str, bar: str, mode: str = 'spot', limit: int = 100,
                            before: int = None, after: int = None):
         """智能获取数据：优先从缓存获取，缓存不足时从API补充
         
@@ -198,7 +201,7 @@ class CandlestickCacheService:
         """
         # 首先尝试从缓存获取
         cached_data = CandlestickCacheService.get_from_cache(
-            source, symbol, bar, limit, before, after
+            source, symbol, bar, mode, limit, before, after
         )
         
         # 如果缓存数据充足，直接返回
@@ -207,7 +210,7 @@ class CandlestickCacheService:
             return cached_data
         
         # 缓存数据不足，从API获取并补充
-        logger.info(f"⚠️ Cache miss or insufficient: {len(cached_data)}/{limit}, fetching from API...")
+        logger.info(f"⚠️ Cache miss or insufficient: {len(cached_data)}/{limit} ({mode}), fetching from API...")
         
         try:
             # 转换before为毫秒（API需要）
@@ -215,7 +218,7 @@ class CandlestickCacheService:
             
             # 从API获取（会自动缓存）
             api_data = CandlestickCacheService.fetch_and_cache(
-                source, symbol, bar, limit, before_ms
+                source, symbol, bar, mode, limit, before_ms
             )
             
             # 如果有after参数，过滤数据

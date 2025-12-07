@@ -108,7 +108,8 @@ class UnifiedMarketService:
         inst_id: str = "BTC-USDT",
         bar: str = "1H",
         limit: int = 100,
-        before: int = None
+        before: int = None,
+        mode: str = "spot",
     ) -> List[Dict[str, Any]]:
         """
         获取 K线数据
@@ -135,7 +136,8 @@ class UnifiedMarketService:
                     symbol=inst_id,
                     bar=bar,
                     limit=limit,
-                    before=before_sec
+                    before=before_sec,
+                    mode=mode,
                 )
                 
                 # 转换为字典格式
@@ -156,7 +158,7 @@ class UnifiedMarketService:
             service = get_market_service(self.source)
             return service.get_candlesticks(inst_id, bar, limit, before)
     
-    def get_ticker(self, inst_id: str = "BTC-USDT") -> Dict[str, Any]:
+    def get_ticker(self, inst_id: str = "BTC-USDT", mode: str = "spot") -> Dict[str, Any]:
         """
         获取最新行情
         
@@ -172,7 +174,7 @@ class UnifiedMarketService:
         if self._use_plugin and self._plugin:
             try:
                 # 调用插件
-                ticker = self._plugin.get_ticker(symbol=inst_id)
+                ticker = self._plugin.get_ticker(symbol=inst_id, mode=mode)
                 
                 # 转换为字典格式
                 result = PluginAdapter.ticker_to_dict(ticker)

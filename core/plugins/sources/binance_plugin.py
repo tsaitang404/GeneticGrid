@@ -73,6 +73,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                 # Binance 支持 1000+ 交易对
             ],
             symbol_format="BTCUSDT",  # 币安格式
+            symbol_modes=["spot"],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=True,
@@ -175,6 +176,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         bar: str,
         limit: int = 100,
         before: Optional[int] = None,
+        mode: str = "spot",
     ) -> List[CandleData]:
         """获取 K线数据"""
         try:
@@ -212,7 +214,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             logger.error(f"Binance 获取 K线数据失败: {e}")
             raise PluginError(f"Binance 获取 K线数据失败: {e}")
     
-    def _get_ticker_impl(self, symbol: str) -> TickerData:
+    def _get_ticker_impl(self, symbol: str, mode: str = "spot") -> TickerData:
         """获取行情数据"""
         try:
             binance_symbol = self._convert_symbol(symbol)
