@@ -158,8 +158,8 @@ if _raw_realtime_streams:
             fallback.append(stream)
         REALTIME_INGESTION_STREAMS = fallback
 
-    # Redis 缓存配置（用于缓解 SQLite 锁表问题）
-    REDIS_CACHE_ENABLED = os.environ.get('REDIS_CACHE_ENABLED', 'true').lower() in ('true', '1', 'yes')
-    REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/0')
-    REDIS_CACHE_TTL_SECONDS = int(os.environ.get('REDIS_CACHE_TTL_SECONDS', 86400))  # 默认1天
-    REDIS_CACHE_MAX_ENTRIES = int(os.environ.get('REDIS_CACHE_MAX_ENTRIES', 5000))
+# Redis 缓存配置（用于缓解 SQLite 锁表问题）
+REDIS_CACHE_ENABLED = os.environ.get('REDIS_CACHE_ENABLED', 'true').lower() in ('true', '1', 'yes')
+REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/0')
+REDIS_CACHE_TTL_SECONDS = int(os.environ.get('REDIS_CACHE_TTL_SECONDS', 86400))  # 默认1天
+REDIS_CACHE_MAX_ENTRIES = int(os.environ.get('REDIS_CACHE_MAX_ENTRIES', 5000))
