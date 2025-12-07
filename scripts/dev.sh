@@ -2,7 +2,9 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_NODE_VERSION="20.17.0"
+PYENV_VERSION_FILE="$PROJECT_ROOT/.python-version"
+NVM_VERSION_FILE="$PROJECT_ROOT/.nvmrc"
+FALLBACK_NODE_VERSION="20.17.0"
 DJANGO_ADDR="${DJANGO_ADDR:-127.0.0.1:8000}"
 VITE_HOST="${VITE_HOST:-0.0.0.0}"
 
@@ -10,11 +12,39 @@ log() {
   printf '[dev] %s\n' "$*"
 }
 
+PYTHON_CMD="python"
 if command -v pyenv >/dev/null 2>&1; then
   log "Initializing pyenv"
   eval "$(pyenv init -)"
+  if [[ -f "$PYENV_VERSION_FILE" ]]; then
+    PYTHON_VERSION="$(tr -d ' \n' < "$PYENV_VERSION_FILE")"
+    if [[ -n "$PYTHON_VERSION" ]]; then
+      log "Using Python ${PYTHON_VERSION} (pyenv)"
+      pyenv install -s "$PYTHON_VERSION"
+      if ! pyenv shell "$PYTHON_VERSION" >/dev/null 2>&1; then
+        echo "[dev] Failed to activate pyenv Python ${PYTHON_VERSION}" >&2
+        exit 1
+      fi
+      PYTHON_CMD="$(pyenv which python)"
+    fi
+  fi
 else
   log "pyenv not detected, falling back to system Python"
+fi
+
+if [[ -z "$PYTHON_CMD" || ! -x "$PYTHON_CMD" ]]; then
+  if ! command -v python >/dev/null 2>&1; then
+    echo "[dev] python command not found. Ensure pyenv/system python is available." >&2
+    exit 1
+  fi
+  PYTHON_CMD="$(command -v python)"
+fi
+
+if [[ ! -d "$PROJECT_ROOT/.venv" ]]; then
+  log "Creating Python virtualenv at $PROJECT_ROOT/.venv"
+  "$PYTHON_CMD" -m venv "$PROJECT_ROOT/.venv"
+  log "Installing backend requirements"
+  "$PROJECT_ROOT/.venv/bin/pip" install -r "$PROJECT_ROOT/requirements.txt"
 fi
 
 cleanup() {
@@ -55,8 +85,19 @@ else
   exit 1
 fi
 
-log "Switching to Node ${DEFAULT_NODE_VERSION} via nvm"
-nvm use "$DEFAULT_NODE_VERSION"
+if [[ -f "$NVM_VERSION_FILE" ]]; then
+  NODE_VERSION="$(tr -d ' \n' < "$NVM_VERSION_FILE")"
+else
+  NODE_VERSION="$FALLBACK_NODE_VERSION"
+fi
+
+if [[ -z "$NODE_VERSION" ]]; then
+  NODE_VERSION="$FALLBACK_NODE_VERSION"
+fi
+
+log "Switching to Node ${NODE_VERSION} via nvm"
+nvm install "$NODE_VERSION"
+nvm use "$NODE_VERSION"
 
 trap cleanup INT TERM
 
