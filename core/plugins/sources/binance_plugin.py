@@ -14,6 +14,8 @@ from ..base import (
     Capability,
     CandleData,
     TickerData,
+    FundingRateData,
+    ContractBasisData,
     SourceType,
     PluginError,
     SymbolMode,
@@ -28,6 +30,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
     """币安交易所数据源插件"""
     
     BASE_URL = "https://api.binance.com"
+    FAPI_BASE_URL = "https://fapi.binance.com"  # 合约API
     
     def __init__(self):
         self._session = None
@@ -74,7 +77,7 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                 # Binance 支持 1000+ 交易对
             ],
             symbol_format="BTCUSDT",  # 币安格式
-            symbol_modes=[SymbolMode.SPOT.value],
+            symbol_modes=[SymbolMode.SPOT.value, SymbolMode.CONTRACT.value],
             requires_api_key=False,
             requires_authentication=False,
             requires_proxy=True,
@@ -82,6 +85,13 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             rate_limit_per_minute=1200,
             supports_real_time=False,
             supports_websocket=True,
+            # 衍生品指标
+            supports_funding_rate=True,
+            funding_rate_interval_hours=8,
+            funding_rate_quote_currency="USDT",
+            supports_contract_basis=True,
+            contract_basis_types=["perpetual"],
+            contract_basis_tenors=["perpetual"],
         )
     
     @property
@@ -105,9 +115,11 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         logger.warning("Binance 未配置代理，可能无法访问")
         return {}
     
-    def _convert_symbol(self, inst_id: str) -> str:
+    def _convert_symbol(self, inst_id: str, mode: str = SymbolMode.SPOT.value) -> str:
         """将标准格式转换为 Binance 格式: BTC-USDT -> BTCUSDT"""
-        return inst_id.replace("-", "")
+        symbol = inst_id.replace("-", "")
+        # 币安合约也使用相同格式
+        return symbol
     
     def _convert_bar(self, bar: str) -> str:
         """将时间周期转换为 Binance 格式"""
@@ -182,8 +194,8 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         """获取 K线数据"""
         try:
             if mode != SymbolMode.SPOT.value:
-                raise PluginError("Binance 插件暂不支持合约模式")
-            binance_symbol = self._convert_symbol(symbol)
+                raise PluginError("Binance 插件暂不支持合约K线")
+            binance_symbol = self._convert_symbol(symbol, mode)
             interval = self._convert_bar(bar)
             use_realtime = (interval == "1s" and before is None and self._realtime.enabled)
 
@@ -225,8 +237,8 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         """获取行情数据"""
         try:
             if mode != SymbolMode.SPOT.value:
-                raise PluginError("Binance 插件暂不支持合约模式")
-            binance_symbol = self._convert_symbol(symbol)
+                raise PluginError("Binance 插件暂不支持合约Ticker")
+            binance_symbol = self._convert_symbol(symbol, mode)
             
             url = f"{self.BASE_URL}/api/v3/ticker/24hr"
             params = {"symbol": binance_symbol}
@@ -265,3 +277,222 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
         except Exception as e:
             logger.error(f"Binance 获取行情数据失败: {e}")
             raise PluginError(f"Binance 获取行情数据失败: {e}")
+    
+    def _get_funding_rate_impl(self, symbol: str) -> FundingRateData:
+        """获取资金费率 - 仅合约"""
+        try:
+            binance_symbol = self._convert_symbol(symbol, SymbolMode.CONTRACT.value)
+            
+            # 币安合约API获取资金费率
+            url = f"{self.FAPI_BASE_URL}/fapi/v1/premiumIndex"
+            params = {"symbol": binance_symbol}
+            
+            response = self._get_session.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            
+            # 解析资金费率数据
+            funding_rate = float(data.get('lastFundingRate', 0))
+            next_funding_time = int(data.get('nextFundingTime', 0)) // 1000 if data.get('nextFundingTime') else None
+            timestamp = int(data.get('time', 0)) // 1000 if data.get('time') else None
+            
+            # 获取标记价格和指数价格
+            mark_price = float(data.get('markPrice', 0)) if data.get('markPrice') else None
+            index_price = float(data.get('indexPrice', 0)) if data.get('indexPrice') else None
+            
+            return FundingRateData(
+                inst_id=symbol,
+                funding_rate=funding_rate,
+                timestamp=timestamp,
+                funding_interval_hours=8,  # 币安每8小时结算一次
+                next_funding_time=next_funding_time,
+                predicted_funding_rate=None,  # 币安不提供预测费率
+                index_price=index_price,
+                premium_index=mark_price - index_price if mark_price and index_price else None,
+                quote_currency="USDT"
+            )
+            
+        except requests.exceptions.Timeout:
+            logger.error("Binance 资金费率API 连接超时")
+            raise PluginError("Binance 资金费率API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Binance 获取资金费率失败: {e}")
+            raise PluginError(f"Binance 资金费率API 网络错误: {e}")
+        except Exception as e:
+            logger.error(f"Binance 获取资金费率失败: {e}")
+            raise PluginError(f"Binance 获取资金费率失败: {e}")
+    
+    def get_funding_rate_history(self, symbol: str, limit: int = 100) -> List[dict]:
+        """获取资金费率历史数据"""
+        try:
+            binance_symbol = self._convert_symbol(symbol, SymbolMode.CONTRACT.value)
+            
+            url = f"{self.FAPI_BASE_URL}/fapi/v1/fundingRate"
+            params = {
+                "symbol": binance_symbol,
+                "limit": min(limit, 1000)  # 币安限制最多1000条
+            }
+            
+            response = self._get_session.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            
+            history = []
+            for item in data:
+                funding_time = int(item.get('fundingTime', 0)) // 1000 if item.get('fundingTime') else None
+                funding_rate = float(item.get('fundingRate', 0))
+                
+                history.append({
+                    "timestamp": funding_time,
+                    "funding_rate": funding_rate,
+                    "inst_id": binance_symbol
+                })
+            
+            # 按时间排序（从旧到新）
+            history.sort(key=lambda x: x["timestamp"] if x["timestamp"] else 0)
+            return history
+            
+        except requests.exceptions.Timeout:
+            logger.error("Binance 资金费率历史API 连接超时")
+            raise PluginError("Binance 资金费率历史API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Binance 获取资金费率历史失败: {e}")
+            raise PluginError(f"Binance 资金费率历史API 网络错误: {e}")
+        except Exception as e:
+            logger.error(f"Binance 获取资金费率历史失败: {e}")
+            raise PluginError(f"Binance 获取资金费率历史失败: {e}")
+    
+    def _get_contract_basis_impl(
+        self,
+        symbol: str,
+        contract_type: str,
+        reference_symbol: Optional[str] = None,
+        tenor: Optional[str] = None,
+    ) -> ContractBasisData:
+        """获取合约基差"""
+        try:
+            binance_symbol = self._convert_symbol(symbol, SymbolMode.CONTRACT.value)
+            
+            # 获取合约价格（标记价格）
+            fapi_url = f"{self.FAPI_BASE_URL}/fapi/v1/ticker/price"
+            fapi_params = {"symbol": binance_symbol}
+            
+            fapi_response = self._get_session.get(fapi_url, params=fapi_params, timeout=15)
+            fapi_response.raise_for_status()
+            fapi_data = fapi_response.json()
+            contract_price = float(fapi_data.get('price', 0))
+            
+            # 获取现货价格作为参考
+            spot_url = f"{self.BASE_URL}/api/v3/ticker/price"
+            spot_params = {"symbol": binance_symbol}
+            
+            spot_response = self._get_session.get(spot_url, params=spot_params, timeout=15)
+            spot_response.raise_for_status()
+            spot_data = spot_response.json()
+            reference_price = float(spot_data.get('price', 0))
+            
+            # 计算基差
+            basis = contract_price - reference_price
+            basis_rate = (basis / reference_price * 100) if reference_price != 0 else 0.0
+            
+            import time
+            timestamp = int(time.time())
+            
+            # 从交易对中提取基础货币
+            # BTCUSDT -> BTC
+            base_currency = binance_symbol.replace('USDT', '').replace('BUSD', '')
+            
+            return ContractBasisData(
+                inst_id=symbol,
+                contract_type=contract_type or "perpetual",
+                basis=basis,
+                timestamp=timestamp,
+                basis_rate=basis_rate,
+                contract_price=contract_price,
+                reference_symbol=base_currency,
+                reference_price=reference_price,
+                tenor="perpetual",
+                quote_currency="USDT"
+            )
+            
+        except requests.exceptions.Timeout:
+            logger.error("Binance 合约基差API 连接超时")
+            raise PluginError("Binance 合约基差API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Binance 获取合约基差失败: {e}")
+            raise PluginError(f"Binance 合约基差API 网络错误: {e}")
+        except Exception as e:
+            logger.error(f"Binance 获取合约基差失败: {e}")
+            raise PluginError(f"Binance 获取合约基差失败: {e}")
+    
+    def get_contract_basis_history(
+        self,
+        symbol: str,
+        contract_type: str = "perpetual",
+        limit: int = 100,
+        granularity: str = "1h"
+    ) -> List[dict]:
+        """获取合约基差历史数据
+        
+        币安不直接提供基差历史，需要通过K线数据计算
+        """
+        try:
+            binance_symbol = self._convert_symbol(symbol, SymbolMode.CONTRACT.value)
+            
+            # 转换granularity到币安格式
+            interval = self._convert_bar(granularity)
+            
+            # 获取合约K线
+            contract_url = f"{self.FAPI_BASE_URL}/fapi/v1/klines"
+            contract_params = {
+                "symbol": binance_symbol,
+                "interval": interval,
+                "limit": min(limit, 1000)
+            }
+            
+            contract_response = self._get_session.get(contract_url, params=contract_params, timeout=15)
+            contract_response.raise_for_status()
+            contract_klines = contract_response.json()
+            
+            # 获取现货K线
+            spot_url = f"{self.BASE_URL}/api/v3/klines"
+            spot_params = {
+                "symbol": binance_symbol,
+                "interval": interval,
+                "limit": min(limit, 1000)
+            }
+            
+            spot_response = self._get_session.get(spot_url, params=spot_params, timeout=15)
+            spot_response.raise_for_status()
+            spot_klines = spot_response.json()
+            
+            # 计算基差历史
+            history = []
+            for contract_k, spot_k in zip(contract_klines, spot_klines):
+                timestamp = int(contract_k[0]) // 1000
+                contract_close = float(contract_k[4])
+                spot_close = float(spot_k[4])
+                
+                basis = contract_close - spot_close
+                basis_rate = (basis / spot_close * 100) if spot_close != 0 else 0.0
+                
+                history.append({
+                    "timestamp": timestamp,
+                    "basis": basis,
+                    "basis_rate": basis_rate,
+                    "contract_price": contract_close,
+                    "spot_price": spot_close,
+                    "inst_id": binance_symbol
+                })
+            
+            return history
+            
+        except requests.exceptions.Timeout:
+            logger.error("Binance 合约基差历史API 连接超时")
+            raise PluginError("Binance 合约基差历史API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Binance 获取合约基差历史失败: {e}")
+            raise PluginError(f"Binance 合约基差历史API 网络错误: {e}")
+        except Exception as e:
+            logger.error(f"Binance 获取合约基差历史失败: {e}")
+            raise PluginError(f"Binance 获取合约基差历史失败: {e}")
