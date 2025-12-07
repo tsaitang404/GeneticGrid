@@ -22,6 +22,24 @@
 
 使用 [pyenv](https://github.com/pyenv/pyenv) 与 [nvm](https://github.com/nvm-sh/nvm) 可以为 Python 和 Node.js 创建可重复的开发环境。
 
+
+### ⚙️ 一键启动前后端
+
+如果想在同一个终端里同时启动 Django 与 Vite，可使用项目自带脚本：
+
+```bash
+./scripts/dev.sh
+```
+
+脚本会尝试激活根目录下的 `.venv`、通过 `nvm use 20.17.0` 切换到指定 Node 版本，并分别运行 `python manage.py runserver` 与 `npm run dev -- --host 0.0.0.0`。可通过环境变量来自定义监听地址：
+
+```bash
+DJANGO_ADDR=0.0.0.0:8000 VITE_HOST=127.0.0.1 ./scripts/dev.sh
+```
+
+> 提示：脚本会在启动前执行 `pyenv init -`，因此可直接依赖 `.python-version` 中声明的解释器版本。
+
+按 `Ctrl+C` 将同时停止前后端进程。
 ### Python（pyenv）
 
 ```bash
