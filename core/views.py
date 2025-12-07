@@ -167,6 +167,221 @@ def api_ticker(request):
         }, status=500)
 
 
+def api_funding_rate(request):
+    """资金费率 API - 仅合约模式"""
+    symbol = request.GET.get('symbol', 'BTCUSDT')
+    source = request.GET.get('source', 'okx')
+    
+    logger.info(f"💰 资金费率请求: {symbol} ({source})")
+    
+    try:
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(source)
+        
+        if not plugin:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不可用'
+            }, status=404)
+        
+        capability = plugin.get_capability()
+        if not capability.supports_funding_rate:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不支持资金费率查询'
+            }, status=400)
+        
+        funding_data = plugin.get_funding_rate(symbol=symbol)
+        
+        response = JsonResponse({
+            'code': 0,
+            'data': funding_data.to_dict(),
+            'symbol': symbol,
+            'source': source,
+        })
+        response['Cache-Control'] = 'public, max-age=30'  # 缓存30秒
+        return response
+        
+    except PluginError as e:
+        logger.error(f"Plugin error: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+            'source': source,
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return JsonResponse({
+            'code': -1,
+            'error': '服务器内部错误',
+            'source': source,
+        }, status=500)
+
+
+def api_funding_rate_history(request):
+    """资金费率历史数据 API"""
+    symbol = request.GET.get('symbol', 'BTCUSDT')
+    source = request.GET.get('source', 'okx')
+    limit = int(request.GET.get('limit', '100'))
+    
+    logger.info(f"📈 资金费率历史请求: {symbol} ({source}) limit={limit}")
+    
+    try:
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(source)
+        
+        if not plugin:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不可用'
+            }, status=404)
+        
+        capability = plugin.get_capability()
+        if not capability.supports_funding_rate:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不支持资金费率查询'
+            }, status=400)
+        
+        # 调用插件的历史数据方法
+        history_data = plugin.get_funding_rate_history(symbol=symbol, limit=limit)
+        
+        response = JsonResponse({
+            'code': 0,
+            'data': history_data,
+            'symbol': symbol,
+            'source': source,
+        })
+        response['Cache-Control'] = 'public, max-age=300'  # 缓存5分钟
+        return response
+        
+    except PluginError as e:
+        logger.error(f"Plugin error: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+            'source': source,
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return JsonResponse({
+            'code': -1,
+            'error': '服务器内部错误',
+            'source': source,
+        }, status=500)
+
+
+def api_contract_basis_history(request):
+    """合约基差历史数据 API - 最近1个月"""
+    symbol = request.GET.get('symbol', 'BTCUSDT')
+    source = request.GET.get('source', 'okx')
+    contract_type = request.GET.get('contract_type', 'perpetual')
+    
+    logger.info(f"📈 合约基差历史请求: {symbol} ({source}) type={contract_type}")
+    
+    try:
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(source)
+        
+        if not plugin:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不可用'
+            }, status=404)
+        
+        capability = plugin.get_capability()
+        if not capability.supports_contract_basis:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不支持合约基差查询'
+            }, status=400)
+        
+        # 调用插件的历史数据方法
+        history_data = plugin.get_contract_basis_history(
+            symbol=symbol,
+            contract_type=contract_type
+        )
+        
+        response = JsonResponse({
+            'code': 0,
+            'data': history_data,
+            'symbol': symbol,
+            'source': source,
+        })
+        response['Cache-Control'] = 'public, max-age=300'  # 缓存5分钟
+        return response
+        
+    except PluginError as e:
+        logger.error(f"Plugin error: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+            'source': source,
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return JsonResponse({
+            'code': -1,
+            'error': '服务器内部错误',
+            'source': source,
+        }, status=500)
+
+
+def api_contract_basis(request):
+    """合约基差 API - 仅合约模式"""
+    symbol = request.GET.get('symbol', 'BTCUSDT')
+    source = request.GET.get('source', 'okx')
+    contract_type = request.GET.get('contract_type', 'perpetual')
+    
+    logger.info(f"📊 合约基差请求: {symbol} ({source}) type={contract_type}")
+    
+    try:
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(source)
+        
+        if not plugin:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不可用'
+            }, status=404)
+        
+        capability = plugin.get_capability()
+        if not capability.supports_contract_basis:
+            return JsonResponse({
+                'code': -1,
+                'error': f'数据源 {source} 不支持合约基差查询'
+            }, status=400)
+        
+        basis_data = plugin.get_contract_basis(
+            symbol=symbol,
+            contract_type=contract_type
+        )
+        
+        response = JsonResponse({
+            'code': 0,
+            'data': basis_data.to_dict(),
+            'symbol': symbol,
+            'source': source,
+        })
+        response['Cache-Control'] = 'public, max-age=30'  # 缓存30秒
+        return response
+        
+    except PluginError as e:
+        logger.error(f"Plugin error: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+            'source': source,
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return JsonResponse({
+            'code': -1,
+            'error': '服务器内部错误',
+            'source': source,
+        }, status=500)
+
+
 def api_proxy_status(request):
     """代理状态 API"""
     try:

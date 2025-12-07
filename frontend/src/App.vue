@@ -25,11 +25,54 @@
           />
         </section>
         <aside class="market-column">
+          <!-- 合约模式下的标签切换 -->
+          <div v-if="currentMode === 'contract'" class="panel-tabs">
+            <button 
+              :class="['tab-btn', { active: activeTab === 'market' }]"
+              @click="activeTab = 'market'"
+            >
+              市场信息
+            </button>
+            <button 
+              :class="['tab-btn', { active: activeTab === 'funding' }]"
+              @click="activeTab = 'funding'"
+            >
+              资金费率
+            </button>
+            <button 
+              :class="['tab-btn', { active: activeTab === 'basis' }]"
+              @click="activeTab = 'basis'"
+            >
+              合约基差
+            </button>
+          </div>
+
           <MarketInfoPanel
+            v-show="currentMode === 'spot' || activeTab === 'market'"
             :symbol="currentSymbol"
             :source="currentSource"
             :ticker="ticker"
             :currency="currency"
+          />
+          
+          <FundingRatePanel
+            v-if="currentMode === 'contract' && activeTab === 'funding'"
+            :symbol="currentSymbol"
+            :source="currentSource"
+            :funding-data="fundingRate"
+            :loading="fundingLoading"
+            :error="fundingError"
+            @retry="loadFundingRate"
+          />
+          
+          <ContractBasisPanel
+            v-if="currentMode === 'contract' && activeTab === 'basis'"
+            :symbol="currentSymbol"
+            :source="currentSource"
+            :basis-data="contractBasis"
+            :loading="basisLoading"
+            :error="basisError"
+            @retry="loadContractBasis"
           />
         </aside>
       </div>
@@ -43,11 +86,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import KlineChart from './components/chart/KlineChart.vue'
 import SettingsModal from './components/settings/SettingsModal.vue'
 import MarketInfoPanel from './components/market/MarketInfoPanel.vue'
+import FundingRatePanel from './components/market/FundingRatePanel.vue'
+import ContractBasisPanel from './components/market/ContractBasisPanel.vue'
 import { useTicker } from './composables/useTicker'
 import { usePreferencesStore } from './stores/preferences'
 import type { SymbolMode } from '@/types'
@@ -57,6 +102,7 @@ const initialBar = ref<string>('1h')
 const initialSource = ref<string>('okx')
 const initialMode = ref<SymbolMode>('spot')
 const showSettings = ref<boolean>(false)
+const activeTab = ref<'market' | 'funding' | 'basis'>('market')
 
 const preferences = usePreferencesStore()
 const { currency } = storeToRefs(preferences)
@@ -67,6 +113,16 @@ const currentSource = ref<string>(initialSource.value)
 const currentMode = ref<SymbolMode>(initialMode.value)
 
 const { ticker, loadTicker } = useTicker(currentSymbol, currentSource, currency, currentMode)
+
+// Funding rate data
+const fundingRate = ref<any>({})
+const fundingLoading = ref<boolean>(false)
+const fundingError = ref<string>('')
+
+// Contract basis data
+const contractBasis = ref<any>({})
+const basisLoading = ref<boolean>(false)
+const basisError = ref<string>('')
 
 const toggleSettings = (): void => {
   showSettings.value = !showSettings.value
@@ -82,14 +138,102 @@ const handleSourceChange = (source: string): void => {
 
 const handleModeChange = (mode: SymbolMode): void => {
   currentMode.value = mode
+  // 模式切换时重置标签为市场信息
+  activeTab.value = 'market'
 }
+
+const loadFundingRate = async (): Promise<void> => {
+  if (currentMode.value !== 'contract') return
+  
+  fundingLoading.value = true
+  fundingError.value = ''
+  
+  try {
+    const response = await fetch(
+      `/api/funding-rate/?symbol=${currentSymbol.value}&source=${currentSource.value}`
+    )
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    
+    const result = await response.json()
+    
+    if (result.code === 0 && result.data) {
+      fundingRate.value = result.data
+    } else {
+      fundingError.value = result.error || '获取资金费率失败'
+    }
+  } catch (error: any) {
+    console.error('Failed to load funding rate:', error)
+    fundingError.value = error.message || '网络错误'
+  } finally {
+    fundingLoading.value = false
+  }
+}
+
+const loadContractBasis = async (): Promise<void> => {
+  if (currentMode.value !== 'contract') return
+  
+  basisLoading.value = true
+  basisError.value = ''
+  
+  try {
+    const response = await fetch(
+      `/api/contract-basis/?symbol=${currentSymbol.value}&source=${currentSource.value}&contract_type=perpetual`
+    )
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    
+    const result = await response.json()
+    
+    if (result.code === 0 && result.data) {
+      contractBasis.value = result.data
+    } else {
+      basisError.value = result.error || '获取合约基差失败'
+    }
+  } catch (error: any) {
+    console.error('Failed to load contract basis:', error)
+    basisError.value = error.message || '网络错误'
+  } finally {
+    basisLoading.value = false
+  }
+}
+
+// 监听模式、交易对或数据源变化
+watch([currentMode, currentSymbol, currentSource], () => {
+  if (currentMode.value === 'contract') {
+    loadFundingRate()
+    loadContractBasis()
+  }
+})
 
 onMounted(() => {
   loadTicker()
+  
+  // 如果初始模式是合约，加载资金费率和基差
+  if (currentMode.value === 'contract') {
+    loadFundingRate()
+    loadContractBasis()
+  }
+  
   // Refresh ticker every 5 seconds
   setInterval(() => {
     loadTicker()
   }, 5000)
+  
+  // Refresh funding rate and basis every 30 seconds in contract mode
+  setInterval(() => {
+    if (currentMode.value === 'contract') {
+      if (activeTab.value === 'funding') {
+        loadFundingRate()
+      } else if (activeTab.value === 'basis') {
+        loadContractBasis()
+      }
+    }
+  }, 30000)
 })
 
 </script>
@@ -198,6 +342,36 @@ onMounted(() => {
   position: sticky;
   top: 24px;
   align-self: flex-start;
+}
+
+.panel-tabs {
+  display: flex;
+  background-color: #1e222d;
+  border-bottom: 1px solid #2a2e39;
+  padding: 0 12px;
+  gap: 4px;
+}
+
+.tab-btn {
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #787b86;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: #d1d4dc;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.active {
+  color: #2962ff;
+  border-bottom-color: #2962ff;
 }
 
 @media (max-width: 1200px) {

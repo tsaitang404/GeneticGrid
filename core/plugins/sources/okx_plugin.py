@@ -425,26 +425,49 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     ) -> ContractBasisData:
         inst_id = self._resolve_contract_inst_id(symbol, contract_type, tenor)
         try:
-            result = self._request("/market/premium-index", {"instId": inst_id})
-            if result.get("code") != "0":
-                raise PluginError(f"OKX 基差接口错误: {result.get('msg', '未知错误')}")
-            data = result.get("data", [])
-            if not data:
-                raise PluginError("OKX 基差接口返回空数据")
-            item = data[0]
-            basis_raw = item.get("basis")
-            basis = float(basis_raw) if basis_raw not in (None, "") else 0.0
-            basis_rate_raw = item.get("basisRate")
-            basis_rate = float(basis_rate_raw) if basis_rate_raw not in (None, "") else None
-            contract_price_raw = item.get("markPx")
+            # 获取合约ticker（包含标记价格）
+            contract_result = self._request("/market/ticker", {"instId": inst_id})
+            if contract_result.get("code") != "0":
+                raise PluginError(f"OKX 合约ticker错误: {contract_result.get('msg', '未知错误')}")
+            contract_data = contract_result.get("data", [])
+            if not contract_data:
+                raise PluginError("OKX 合约ticker返回空数据")
+            
+            contract_item = contract_data[0]
+            # 使用last价格作为合约价格
+            contract_price_raw = contract_item.get("last")
             contract_price = float(contract_price_raw) if contract_price_raw not in (None, "") else None
-            reference_price_raw = item.get("indexPx")
+            
+            # 获取现货ticker作为参考价格
+            # 从inst_id提取基础货币对，如 BTC-USDT-SWAP -> BTC-USDT
+            spot_symbol = "-".join(inst_id.split("-")[:2])
+            spot_result = self._request("/market/ticker", {"instId": spot_symbol})
+            if spot_result.get("code") != "0":
+                raise PluginError(f"OKX 现货ticker错误: {spot_result.get('msg', '未知错误')}")
+            spot_data = spot_result.get("data", [])
+            if not spot_data:
+                raise PluginError("OKX 现货ticker返回空数据")
+            
+            spot_item = spot_data[0]
+            reference_price_raw = spot_item.get("last")
             reference_price = float(reference_price_raw) if reference_price_raw not in (None, "") else None
-            timestamp_raw = item.get("ts")
+            
+            # 计算基差
+            if contract_price is not None and reference_price is not None and reference_price != 0:
+                basis = contract_price - reference_price
+                basis_rate = (basis / reference_price) * 100  # 转为百分比
+            else:
+                basis = 0.0
+                basis_rate = 0.0
+            
+            timestamp_raw = contract_item.get("ts")
             timestamp = int(timestamp_raw) // 1000 if timestamp_raw else None
-            underlying = item.get("uly") or reference_symbol
+            
+            # 解析基础货币
+            underlying = spot_symbol.split("-")[0]
             quote_ccy = self._parse_quote_currency(inst_id)
             tenor_value = "perpetual" if contract_type.lower() in {"perpetual", "swap"} else tenor
+            
             return ContractBasisData(
                 inst_id=inst_id,
                 contract_type=contract_type,
@@ -462,3 +485,140 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         except Exception as exc:
             logger.error("OKX 获取合约基差失败: %s", exc)
             raise PluginError(f"OKX 获取合约基差失败: {exc}")
+
+    def get_funding_rate_history(self, symbol: str, limit: int = 100) -> List[dict]:
+        """获取资金费率历史数据
+        
+        Args:
+            symbol: 交易对 (BTCUSDT格式)
+            limit: 返回数据条数，默认100
+            
+        Returns:
+            资金费率历史数据列表
+        """
+        # 先格式化symbol为OKX格式 (BTC-USDT)
+        formatted_symbol = self._normalize_symbol(symbol, SymbolMode.SPOT.value)
+        # 然后解析为合约ID (BTC-USDT-SWAP)
+        inst_id = self._resolve_contract_inst_id(formatted_symbol, "perpetual")
+        
+        try:
+            result = self._request("/public/funding-rate", {
+                "instId": inst_id,
+                "limit": str(min(limit, 100))  # OKX限制最多100条
+            })
+            
+            if result.get("code") != "0":
+                raise PluginError(f"OKX 资金费率历史接口错误: {result.get('msg', '未知错误')}")
+            
+            data = result.get("data", [])
+            history = []
+            
+            for item in data:
+                funding_rate_raw = item.get("fundingRate")
+                funding_rate = float(funding_rate_raw) if funding_rate_raw not in (None, "") else 0.0
+                timestamp_raw = item.get("fundingTime")
+                timestamp = int(timestamp_raw) // 1000 if timestamp_raw else None
+                
+                history.append({
+                    "timestamp": timestamp,
+                    "funding_rate": funding_rate,
+                    "inst_id": inst_id
+                })
+            
+            # 按时间排序（从旧到新）
+            history.sort(key=lambda x: x["timestamp"] if x["timestamp"] else 0)
+            return history
+            
+        except PluginError:
+            raise
+        except Exception as exc:
+            logger.error("OKX 获取资金费率历史失败: %s", exc)
+            raise PluginError(f"OKX 获取资金费率历史失败: {exc}")
+
+    def get_contract_basis_history(
+        self, 
+        symbol: str, 
+        contract_type: str = "perpetual"
+    ) -> List[dict]:
+        """获取合约基差历史数据（最近1个月）
+        
+        通过获取1小时K线数据来计算基差历史
+        
+        Args:
+            symbol: 交易对 (BTCUSDT格式)
+            contract_type: 合约类型
+            
+        Returns:
+            基差历史数据列表
+        """
+        # 先格式化symbol为OKX格式 (BTC-USDT)
+        formatted_symbol = self._normalize_symbol(symbol, SymbolMode.SPOT.value)
+        # 然后解析为合约ID (BTC-USDT-SWAP)
+        inst_id = self._resolve_contract_inst_id(formatted_symbol, contract_type)
+        spot_symbol = formatted_symbol  # BTC-USDT
+        
+        try:
+            # 获取最近30天的1小时K线（约720条数据）
+            limit = 720
+            
+            # 获取合约K线
+            contract_candles_result = self._request("/market/candles", {
+                "instId": inst_id,
+                "bar": "1H",
+                "limit": str(limit)
+            })
+            
+            if contract_candles_result.get("code") != "0":
+                raise PluginError(f"OKX 合约K线接口错误: {contract_candles_result.get('msg', '未知错误')}")
+            
+            # 获取现货K线
+            spot_candles_result = self._request("/market/candles", {
+                "instId": spot_symbol,
+                "bar": "1H",
+                "limit": str(limit)
+            })
+            
+            if spot_candles_result.get("code") != "0":
+                raise PluginError(f"OKX 现货K线接口错误: {spot_candles_result.get('msg', '未知错误')}")
+            
+            contract_candles = contract_candles_result.get("data", [])
+            spot_candles = spot_candles_result.get("data", [])
+            
+            # 构建现货价格字典用于快速查找
+            spot_prices = {}
+            for candle in spot_candles:
+                ts = int(candle[0]) // 1000  # 转为秒
+                close_price = float(candle[4])
+                spot_prices[ts] = close_price
+            
+            history = []
+            for candle in contract_candles:
+                ts = int(candle[0]) // 1000  # 转为秒
+                contract_price = float(candle[4])  # 收盘价
+                
+                # 查找对应的现货价格
+                spot_price = spot_prices.get(ts)
+                
+                if spot_price and spot_price != 0:
+                    basis = contract_price - spot_price
+                    basis_rate = (basis / spot_price) * 100
+                    
+                    history.append({
+                        "timestamp": ts,
+                        "basis": basis,
+                        "basis_rate": basis_rate,
+                        "contract_price": contract_price,
+                        "spot_price": spot_price,
+                        "inst_id": inst_id
+                    })
+            
+            # 按时间排序（从旧到新）
+            history.sort(key=lambda x: x["timestamp"])
+            return history
+            
+        except PluginError:
+            raise
+        except Exception as exc:
+            logger.error("OKX 获取合约基差历史失败: %s", exc)
+            raise PluginError(f"OKX 获取合约基差历史失败: {exc}")
+
