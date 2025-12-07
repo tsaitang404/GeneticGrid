@@ -286,6 +286,9 @@ const lockedCandle = ref<Candle | null>(null)
 const noDataWidth = ref<string>('0px')
 const autoRefreshEnabled = ref<boolean>(true)
 const autoRefreshTimer = ref<number | null>(null)
+const realtimePriceTimer = ref<number | null>(null)
+let dataRefreshInFlight = false
+let realtimeRefreshInFlight = false
 
 // Available options
 const availableSymbols = ref<string[]>(['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT'])
@@ -374,7 +377,8 @@ const {
   loadCandlesticks,
   updateLatestData,
   updateNoDataOverlay,
-  retryLoad: chartRetryLoad
+  retryLoad: chartRetryLoad,
+  updateRealtimePriceLine
 } = useChart(mainChartRef, {
   symbol,
   bar,
@@ -509,6 +513,11 @@ const getRefreshInterval = computed(() => {
     case 'M': return 10 * 60 * 1000 // 月，每10分钟
     default: return 5000
   }
+})
+
+const requiresRealtimePrice = computed(() => {
+  const barValue = bar.value.toLowerCase()
+  return !['tick', 'timeline', '分时', '1s'].includes(barValue)
 })
 
 const normalizeTime = (time: Time | undefined): number | null => {
@@ -713,18 +722,62 @@ const toggleAutoRefresh = (): void => {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
 }
 
+const stopRealtimePriceUpdates = (): void => {
+  if (realtimePriceTimer.value) {
+    clearInterval(realtimePriceTimer.value)
+    realtimePriceTimer.value = null
+  }
+  realtimeRefreshInFlight = false
+}
+
+const startRealtimePriceUpdates = (): void => {
+  stopRealtimePriceUpdates()
+  if (!autoRefreshEnabled.value || !requiresRealtimePrice.value) {
+    return
+  }
+
+  const runRealtimeTick = async (): Promise<void> => {
+    if (realtimeRefreshInFlight || isLoading.value) return
+    realtimeRefreshInFlight = true
+    try {
+      await updateRealtimePriceLine()
+    } finally {
+      realtimeRefreshInFlight = false
+    }
+  }
+
+  void runRealtimeTick()
+  realtimePriceTimer.value = window.setInterval(() => {
+    void runRealtimeTick()
+  }, 1000)
+}
+
 const startAutoRefresh = (): void => {
   if (autoRefreshTimer.value) {
     clearInterval(autoRefreshTimer.value)
   }
-  
-  if (autoRefreshEnabled.value) {
-    autoRefreshTimer.value = window.setInterval(async () => {
-      if (autoRefreshEnabled.value && !isLoading.value) {
-        await updateLatestData()
-      }
-    }, getRefreshInterval.value)
+
+  if (!autoRefreshEnabled.value) {
+    stopRealtimePriceUpdates()
+    return
   }
+
+  const runDataRefresh = async (): Promise<void> => {
+    if (dataRefreshInFlight || isLoading.value) return
+    dataRefreshInFlight = true
+    try {
+      await updateLatestData()
+    } finally {
+      dataRefreshInFlight = false
+    }
+  }
+
+  void runDataRefresh()
+  autoRefreshTimer.value = window.setInterval(() => {
+    void runDataRefresh()
+  }, getRefreshInterval.value)
+
+  startRealtimePriceUpdates()
 }
 
 const stopAutoRefresh = (): void => {
@@ -732,6 +785,8 @@ const stopAutoRefresh = (): void => {
     clearInterval(autoRefreshTimer.value)
     autoRefreshTimer.value = null
   }
+  dataRefreshInFlight = false
+  stopRealtimePriceUpdates()
 }
 
 const jumpToLatest = (): void => {
