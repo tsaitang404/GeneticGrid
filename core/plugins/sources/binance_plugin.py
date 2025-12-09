@@ -193,6 +193,12 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
             binance_symbol = self._convert_symbol(symbol, mode)
             interval = self._convert_bar(bar)
             
+            # 合约API不支持1s粒度，自动降级到1m
+            if mode == SymbolMode.CONTRACT.value and interval == "1s":
+                logger.warning(f"Binance 合约API不支持1s粒度，自动降级到1m: {symbol}")
+                interval = "1m"
+                bar = "1m"  # 同时更新bar以便后续使用
+            
             # 合约模式暂不支持实时WebSocket
             use_realtime = (
                 mode == SymbolMode.SPOT.value and 

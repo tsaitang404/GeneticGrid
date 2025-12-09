@@ -242,6 +242,13 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
                 if mode == SymbolMode.CONTRACT.value
                 else symbol
             )
+            
+            # OKX 合约API不支持1s粒度，自动降级到1m
+            if normalized_bar in {"tick", "1s"} and mode == SymbolMode.CONTRACT.value:
+                logger.warning(f"OKX 合约API不支持1s粒度，自动降级到1m: {symbol}")
+                normalized_bar = "1m"
+                bar = "1m"
+            
             if normalized_bar in {"tick", "1s"}:
                 use_realtime = (
                     before is None
