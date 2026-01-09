@@ -581,3 +581,93 @@ def api_source_documentation(request):
             'code': -1,
             'error': str(e),
         }, status=500)
+
+
+def api_positions(request):
+    """获取用户持有的仓位 API (OKX)"""
+    try:
+        # 目前仅支持 OKX
+        source = request.GET.get('source', 'okx').lower()
+        
+        if source != 'okx':
+            return JsonResponse({
+                'code': -1,
+                'error': f'暂不支持 {source} 的仓位查询',
+            }, status=400)
+        
+        # 调用 OKX API 获取仓位信息
+        import requests
+        
+        # OKX 仓位 API 端点
+        url = 'https://www.okx.com/api/v5/account/positions'
+        
+        # 注意：这里使用公开 API，无需认证
+        # 生产环境应该使用私有 API 和用户的 API Key
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            logger.warning(f"OKX API 返回错误: {response.status_code}")
+            return JsonResponse({
+                'code': -1,
+                'error': f'OKX API 返回 {response.status_code}',
+            }, status=response.status_code)
+        
+        data = response.json()
+        
+        # OKX 返回格式：code=0 表示成功
+        if data.get('code') != '0':
+            return JsonResponse({
+                'code': -1,
+                'error': data.get('msg', '未知错误'),
+            }, status=400)
+        
+        # 提取仓位数据，过滤出有持仓的币种
+        positions = []
+        for pos in data.get('data', []):
+            pos_qty = float(pos.get('pos', 0))
+            
+            # 仅显示有持仓的币种
+            if pos_qty != 0:
+                inst_id = pos.get('instId', '')
+                positions.append({
+                    'symbol': inst_id,
+                    'positionQty': pos_qty,
+                    'notionalValue': float(pos.get('notionalUsd', 0)),
+                    'markPrice': float(pos.get('markPx', 0)),
+                    'leverage': float(pos.get('lever', 0)),
+                    'mgnMode': pos.get('mgnMode', ''),  # isolated 或 cross
+                    'side': pos.get('posSide', ''),  # long, short, net
+                    'available': float(pos.get('availPos', pos_qty)),
+                    'frozenQty': float(pos.get('frozenQty', 0)),
+                    'unrealizedPnl': float(pos.get('upl', 0)),
+                    'unrealizedPnlRatio': float(pos.get('uplRatio', 0)),
+                    'timestamp': pos.get('uTime', ''),
+                })
+        
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'source': 'okx',
+                'positions': positions,
+                'total': len(positions),
+            }
+        })
+    
+    except requests.exceptions.Timeout:
+        logger.error("OKX API 请求超时")
+        return JsonResponse({
+            'code': -1,
+            'error': 'OKX API 请求超时',
+        }, status=408)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"OKX API 请求失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': f'网络错误: {str(e)}',
+        }, status=500)
+    except Exception as e:
+        logger.error(f"获取仓位信息失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)

@@ -17,10 +17,63 @@
 
     <!-- 仓位管理标签页 -->
     <div v-show="activeTab === 'position'" class="tab-content">
+      <div class="position-section">
+        <h4>持有仓位</h4>
+        <button class="refresh-btn" @click="loadPositions" :disabled="posLoading">
+          {{ posLoading ? '加载中...' : '刷新' }}
+        </button>
+      </div>
+
+      <!-- 仓位列表 -->
+      <div v-if="posLoading" class="loading">加载仓位中...</div>
+      <div v-else-if="posError" class="error">{{ posError }}</div>
+      <div v-else-if="positions.length === 0" class="empty">暂无持仓</div>
+      <div v-else class="position-list">
+        <div v-for="pos in positions" :key="pos.symbol" class="position-card">
+          <div class="pos-header">
+            <h5>{{ pos.symbol }}</h5>
+            <span :class="['pos-side', pos.side.toLowerCase()]">{{ pos.side }}</span>
+          </div>
+          <div class="pos-grid">
+            <div class="pos-item">
+              <span class="label">数量</span>
+              <span class="value">{{ formatNumber(pos.positionQty) }}</span>
+            </div>
+            <div class="pos-item">
+              <span class="label">标记价格</span>
+              <span class="value">{{ formatNumber(pos.markPrice) }}</span>
+            </div>
+            <div class="pos-item">
+              <span class="label">名义价值(USD)</span>
+              <span class="value">{{ formatNumber(pos.notionalValue) }}</span>
+            </div>
+            <div class="pos-item">
+              <span class="label">杠杆</span>
+              <span class="value">{{ pos.leverage }}x</span>
+            </div>
+            <div class="pos-item">
+              <span class="label">未实现盈亏</span>
+              <span :class="['value', pos.unrealizedPnl >= 0 ? 'profit' : 'loss']">
+                {{ formatNumber(pos.unrealizedPnl) }}
+              </span>
+            </div>
+            <div class="pos-item">
+              <span class="label">盈亏率</span>
+              <span :class="['value', pos.unrealizedPnlRatio >= 0 ? 'profit' : 'loss']">
+                {{ (pos.unrealizedPnlRatio * 100).toFixed(2) }}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <div class="form-title">开平仓</div>
       <div class="form-grid">
         <div class="form-group">
           <label>交易对</label>
-          <input v-model="positionForm.symbol" placeholder="如 BTCUSDT" />
+          <input v-model="positionForm.symbol" placeholder="如 BTC-USDT" />
         </div>
         <div class="form-group">
           <label>方向</label>
@@ -97,17 +150,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 
 const activeTab = ref<'position' | 'grid'>('position')
 
+// 仓位管理相关
+const positions = ref<any[]>([])
+const posLoading = ref(false)
+const posError = ref('')
+
 const positionForm = reactive({
-  symbol: 'BTCUSDT',
+  symbol: 'BTC-USDT',
   side: 'long',
   leverage: 5,
   size: 0.01,
 })
 
+// 网格交易相关
 const gridForm = reactive({
   symbol: 'BTCUSDT',
   grids: 20,
@@ -134,6 +193,46 @@ const stepPreview = computed(() => {
   }
 })
 
+// 加载仓位信息
+const loadPositions = async (): Promise<void> => {
+  posLoading.value = true
+  posError.value = ''
+  positions.value = []
+
+  try {
+    const response = await fetch('/api/positions/?source=okx')
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.code === 0 && result.data) {
+      positions.value = result.data.positions || []
+    } else {
+      posError.value = result.error || '获取仓位失败'
+    }
+  } catch (error: any) {
+    console.error('Failed to load positions:', error)
+    posError.value = error.message || '网络错误'
+  } finally {
+    posLoading.value = false
+  }
+}
+
+// 格式化数字
+const formatNumber = (num: number): string => {
+  if (typeof num !== 'number') return '-'
+  if (Math.abs(num) >= 1000000) {
+    return (num / 1000000).toFixed(2) + 'M'
+  }
+  if (Math.abs(num) >= 1000) {
+    return (num / 1000).toFixed(2) + 'K'
+  }
+  return num.toFixed(num > 0 && num < 1 ? 8 : 2)
+}
+
 const openPosition = (): void => {
   console.log('[PositionManager] open', { ...positionForm })
 }
@@ -145,6 +244,11 @@ const closePosition = (): void => {
 const createGrid = (): void => {
   console.log('[GridTrading] create', { ...gridForm })
 }
+
+// 组件挂载时加载仓位
+onMounted(() => {
+  loadPositions()
+})
 </script>
 
 <style scoped>
@@ -187,6 +291,145 @@ const createGrid = (): void => {
 
 .tab-content {
   padding: 16px;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+}
+
+.position-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.position-section h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #d1d4dc;
+}
+
+.refresh-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #2a2e39;
+  background: #202534;
+  color: #d1d4dc;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #23283a;
+  border-color: #2f3b52;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading,
+.error,
+.empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #8b90a0;
+}
+
+.error {
+  color: #ff6b6b;
+}
+
+.position-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.position-card {
+  background: #161a23;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.pos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2a2e39;
+}
+
+.pos-header h5 {
+  margin: 0;
+  font-size: 13px;
+  color: #d1d4dc;
+}
+
+.pos-side {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.pos-side.long {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.pos-side.short {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pos-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pos-item .label {
+  color: #8b90a0;
+}
+
+.pos-item .value {
+  color: #d1d4dc;
+  font-weight: 500;
+}
+
+.value.profit {
+  color: #4caf50;
+}
+
+.value.loss {
+  color: #f44336;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #2a2e39;
+  margin: 16px 0;
+}
+
+.form-title {
+  font-size: 13px;
+  color: #d1d4dc;
+  margin-bottom: 12px;
+  font-weight: 500;
 }
 
 .form-grid {
@@ -282,6 +525,15 @@ const createGrid = (): void => {
 .btn.primary:hover {
   background: #1e53e5;
   border-color: #1e53e5;
+}
+
+.btn.secondary {
+  background: transparent;
+  border-color: #2a2e39;
+}
+
+.btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tip {
