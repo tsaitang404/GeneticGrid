@@ -11,20 +11,21 @@
 
     <main class="app-main">
       <div class="main-content">
-        <section class="chart-column">
-          <KlineChart
-            :initial-symbol="initialSymbol"
-            :initial-bar="initialBar"
-            :initial-source="initialSource"
-            :initial-mode="initialMode"
-            :ticker="ticker"
-            :currency="currency"
-            @symbol-change="handleSymbolChange"
-            @source-change="handleSourceChange"
-            @mode-change="handleModeChange"
-          />
-        </section>
-        <aside class="market-column">
+        <div class="top-row">
+          <section class="chart-column">
+            <KlineChart
+              :initial-symbol="initialSymbol"
+              :initial-bar="initialBar"
+              :initial-source="initialSource"
+              :initial-mode="initialMode"
+              :ticker="ticker"
+              :currency="currency"
+              @symbol-change="handleSymbolChange"
+              @source-change="handleSourceChange"
+              @mode-change="handleModeChange"
+            />
+          </section>
+          <aside class="market-column">
           <!-- 合约模式下的标签切换 -->
           <div v-if="currentMode === 'contract'" class="panel-tabs">
             <button 
@@ -75,6 +76,12 @@
             @retry="loadContractBasis"
           />
         </aside>
+        </div>
+
+        <!-- 交易工具面板：占据下方主要面积 -->
+        <section class="bottom-row">
+          <TradingToolsPanel />
+        </section>
       </div>
     </main>
 
@@ -93,6 +100,7 @@ import SettingsModal from './components/settings/SettingsModal.vue'
 import MarketInfoPanel from './components/market/MarketInfoPanel.vue'
 import FundingRatePanel from './components/market/FundingRatePanel.vue'
 import ContractBasisPanel from './components/market/ContractBasisPanel.vue'
+import TradingToolsPanel from './components/tools/TradingToolsPanel.vue'
 import { useTicker } from './composables/useTicker'
 import { usePreferencesStore } from './stores/preferences'
 import type { SymbolMode } from '@/types'
@@ -324,11 +332,17 @@ onMounted(() => {
 
 .main-content {
   display: flex;
+  flex-direction: column;
   gap: 24px;
   padding: 24px;
   max-width: 1440px;
   margin: 0 auto;
   box-sizing: border-box;
+}
+
+.top-row {
+  display: flex;
+  gap: 24px;
 }
 
 .chart-column {
@@ -342,6 +356,16 @@ onMounted(() => {
   position: sticky;
   top: 24px;
   align-self: flex-start;
+}
+
+.bottom-row {
+  display: flex;
+  width: 100%;
+  min-height: 300px;
+}
+
+.bottom-row > :first-child {
+  width: 100%;
 }
 
 .panel-tabs {
