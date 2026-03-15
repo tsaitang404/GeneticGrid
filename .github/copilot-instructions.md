@@ -1,105 +1,87 @@
 # GitHub Copilot 工作指导
 
-## 项目上下文
+## 0. 启动确认
+当本文件被成功载入时，首句回复使用：
+`已经载入 GitHub Copilot 工作指导，将严格按照指导进行工作。`
 
-参考以下文件了解项目详情：
-- `.github/PROJECT.md` - 项目具体指导文件
-- `docs/api/*.md` - API 规范文档 除特殊说明，一般遵循Restful设计原则
-- `docs/database/*.md` - 数据库结构规范
+## 1. 指令优先级
+当规则冲突时，按以下顺序执行：
+1. 系统指令
+2. 平台/工具指令
+3. 本文件
+4. 用户当前需求
 
-## 开发环境
+若出现冲突，先说明冲突点，再给出可执行替代方案。
 
-- **Python**: 使用 `pyenv` 管理版本，使用 `venv` 或 `uv` 管理虚拟环境
-- **Node.js**: 使用 `nvm` 管理版本
-- **Vue.js**: 前端使用Vue.js
+## 2. 必读上下文
+编码前优先阅读：
+- `.github/PROJECT.md`：功能目标、范围、里程碑
+- `docs/api/*.md`：API 规范（默认遵循 RESTful，除非文档另有说明）
+- `docs/database/*.md`：数据模型与字段约束
 
-## 代码规范
+## 3. 工作流程（必须执行）
+1. 明确需求与边界
+2. 评估影响文件与依赖
+3. 给出最小可行改动方案
+4. 实现代码并补充必要测试
+5. 运行检查并反馈结果
+6. 更新文档与示例（如有 API 或行为变化）
 
-### Python 代码
-- 遵循 PEP 8 编码规范
-- 使用类型注解 (Type Hints)
-- 函数和类必须有 docstring (Google 风格)
-- 最大行长度: 100 字符
-- 使用 `black` 进行代码格式化
-- 使用 `ruff` 进行代码检查
+### 3.1 功能迭代流程（严格执行）
+1. 阅读代码并观察当前实现，明确本次迭代点。
+2. 输出 Todo 清单（按优先级列出）。
+3. 生成代码并完成本次迭代。
+4. 运行单元测试。
+5. 单元测试通过后，提示用户进行本地测试。
+6. 等待用户回应。
+7. 若用户反馈本地测试不成功：撤销本次迭代修改并重新生成方案与代码。
 
-示例:
+约束：
+- 一次只处理一个主要迭代目标，避免并行推进多个复杂需求。
+- 撤销范围仅限本次迭代产生的修改，不影响用户已有改动。
+
+## 4. 代码规范
+
+### Python
+- 遵循 PEP 8，最大行长 100
+- 必须使用类型注解
+- 函数/类使用 Google 风格 docstring
+- 使用 `black` 格式化，`ruff` 检查
+
+示例：
 ```python
-def process_data(items: list[str], limit: int = 10) -> dict[str, any]:
+from typing import Any
+
+
+def process_data(items: list[str], limit: int = 10) -> dict[str, Any]:
     """处理数据项并返回结果。
-    
+
     Args:
-        items: 要处理的字符串列表
-        limit: 处理的最大数量
-        
+        items: 要处理的字符串列表。
+        limit: 最大处理数量。
+
     Returns:
-        包含处理结果的字典
-        
+        处理结果字典。
+
     Raises:
-        ValueError: 当 items 为空时
+        ValueError: 当 items 为空时抛出。
     """
-    pass
+    if not items:
+        raise ValueError("items 不能为空")
+    return {"count": min(len(items), limit)}
 ```
 
-### JavaScript/TypeScript 代码
+### JavaScript / TypeScript
 - 使用 ESLint 推荐规则
-- 优先使用 `const`，必要时使用 `let`
-- 使用 async/await 而非 Promise.then()
-- 文件名使用 kebab-case
+- 优先 `const`，其次 `let`，避免 `var`
+- 优先 `async/await`，避免链式 `then/catch` 滥用
+- 文件命名使用 `kebab-case`
 
-### 通用规范
-- 变量命名: 使用有意义的描述性名称
-- 注释: 使用中文，解释"为什么"而非"是什么"
-- 错误处理: 必须有适当的错误处理和日志记录
-- 安全性: 避免硬编码密钥、验证所有输入
-
-## 能力边界
-
-专注一次只处理一个主要任务，避免同时处理多个复杂需求。
-如果用户请求超出当前任务范围，礼貌地指出并建议分开处理。
-
-## 工作步骤
-
-### 1. 理解需求
-- 阅读用户请求和相关文档
-- 确认需要修改的文件范围
-- 识别潜在的依赖关系
-
-### 2. 设计方案
-- 思考最简洁的实现方式
-- 考虑错误处理和边界情况
-- 评估对现有代码的影响
-
-### 3. 实现代码
-- 按照代码规范编写
-- 添加必要的类型注解和文档
-- 包含适当的错误处理
-- 使用注释说明复杂逻辑
-
-### 4. 测试验证
-- 建议相应的测试用例
-- 考虑单元测试和集成测试
-- 提供测试运行命令
-
-### 5. 文档更新
-- 更新相关 README 或文档
-- 添加使用示例
-- 记录 API 变更
-
-## 引用工具
-
-### 开发工具
-- **pyenv**: Python 版本管理 (`pyenv local 3.11`)
-- **nvm**: Node.js 版本管理 (`nvm use`)
-- **black**: Python 代码格式化 (`black src/`)
-- **ruff**: Python 代码检查 (`ruff check src/`)
-- **pytest**: Python 测试框架 (`pytest tests/`)
-
-
-### 版本控制
-- **git**: 版本控制
-  - 提交前运行测试: `pytest`
-  - 提交前格式化: `black src/ && ruff check src/`
+### 通用
+- 命名需语义清晰，避免缩写堆叠
+- 注释优先解释“为什么”，非必要不写“是什么”
+- 必须有错误处理，日志信息应可定位问题
+- 禁止硬编码密钥、Token、密码
 
 ## 测试要求
 
@@ -108,23 +90,6 @@ def process_data(items: list[str], limit: int = 10) -> dict[str, any]:
 - 测试文件命名: `tests/test_*.py`
 - 使用 pytest fixtures 管理测试数据
 - Mock 外部依赖
-
-示例:
-```python
-# tests/test_d1_manager.py
-import pytest
-from unittest.mock import Mock
-from src.d1_manager import D1Manager
-
-@pytest.fixture
-def mock_d1():
-    return Mock()
-
-def test_query_success(mock_d1):
-    """测试成功查询数据库"""
-    manager = D1Manager(mock_d1)
-    # ... 测试实现
-```
 
 ### 集成测试
 - 使用测试数据库和存储桶
@@ -167,8 +132,6 @@ pytest --cov=src --cov-report=html
 - `chore`: 构建过程或辅助工具的变动
 - `perf`: 性能优化
 
-
-
 ### 示例
 
 ```bash
@@ -194,8 +157,6 @@ refactor: 简化路由匹配逻辑
 
 使用正则表达式替代字符串匹配，提高可维护性。
 ```
-
-
 
 ## 进度追踪
 
