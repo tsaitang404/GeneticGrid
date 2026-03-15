@@ -23,6 +23,26 @@
 使用 [pyenv](https://github.com/pyenv/pyenv) 与 [nvm](https://github.com/nvm-sh/nvm) 可以为 Python 和 Node.js 创建可重复的开发环境。
 
 
+### 🧰 一键初始化本地环境
+
+项目提供初始化脚本，可自动完成以下操作：
+- 根据 `.python-version` 安装并启用 Python（优先 pyenv）
+- 创建 `.venv` 并安装后端依赖
+- 根据 `.nvmrc` 安装并启用 Node（通过 nvm）
+- 在 `frontend/` 执行 `npm ci`
+- 从 `.env.example` 生成 `.env`（若不存在）
+- 执行 `python manage.py migrate` 与 `python manage.py check`
+
+```bash
+./scripts/init.sh
+```
+
+初始化完成后可直接启动开发环境：
+
+```bash
+./scripts/dev.sh
+```
+
 ### ⚙️ 一键启动前后端
 
 如果想在同一个终端里同时启动 Django 与 Vite，可使用项目自带脚本：
@@ -92,6 +112,26 @@ python manage.py runserver
 # 访问: http://127.0.0.1:8000
 ```
 
+## ✅ 单元测试
+
+安装依赖后可直接运行：
+
+```bash
+pytest
+```
+
+如果使用项目虚拟环境，推荐：
+
+```bash
+./.venv/bin/python -m pytest
+```
+
+覆盖率报告示例：
+
+```bash
+./.venv/bin/python -m pytest --cov=core --cov=geneticgrid --cov-report=term-missing
+```
+
 ## 📁 项目结构
 
 ```
@@ -101,6 +141,28 @@ frontend/src/
   └── types/       # TypeScript 类型
 core/              # Django 应用
 static/dist/       # Vue 构建输出
+```
+
+## 🐳 Docker 打包与运行
+
+项目已提供多阶段构建镜像：先在 Node 环境构建前端资源，再在 Python 运行时镜像启动 Django。
+
+```bash
+# 构建镜像
+docker build -t geneticgrid:latest .
+
+# 运行容器
+docker run --name geneticgrid -p 8000:8000 geneticgrid:latest
+```
+
+访问地址：`http://127.0.0.1:8000`
+
+如需持久化 SQLite 数据库，可挂载卷：
+
+```bash
+docker run --name geneticgrid -p 8000:8000 \
+  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  geneticgrid:latest
 ```
 
 ## 🎯 功能
