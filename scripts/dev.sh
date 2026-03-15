@@ -12,6 +12,20 @@ log() {
   printf '[dev] %s\n' "$*"
 }
 
+load_env_file() {
+  local env_file="$PROJECT_ROOT/.env"
+  if [[ ! -f "$env_file" ]]; then
+    log "No .env found, skipping env injection"
+    return
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+  log "Loaded environment variables from .env for backend/frontend"
+}
+
 PYTHON_CMD="python"
 if command -v pyenv >/dev/null 2>&1; then
   log "Initializing pyenv"
@@ -98,6 +112,8 @@ fi
 log "Switching to Node ${NODE_VERSION} via nvm"
 nvm install "$NODE_VERSION"
 nvm use "$NODE_VERSION"
+
+load_env_file
 
 trap cleanup INT TERM
 

@@ -151,19 +151,56 @@ static/dist/       # Vue 构建输出
 # 构建镜像
 docker build -t geneticgrid:latest .
 
-# 运行容器
-docker run --name geneticgrid -p 8000:8000 geneticgrid:latest
+# 1) 复制环境变量模板
+cp .env.example .env
+
+# 2) 按需编辑 .env
+
+# 3) 使用 .env 启动容器（推荐）
+./scripts/docker-run.sh
 ```
 
 访问地址：`http://127.0.0.1:8000`
 
-如需持久化 SQLite 数据库，可挂载卷：
+如需手动运行并持久化配置/数据库（挂载 `.env` + `db.sqlite3`）：
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
+  --env-file .env \
+  -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
   geneticgrid:latest
 ```
+
+如需在容器中使用宿主机代理（默认 SOCKS5 端口 `1080`、HTTP 端口 `8080`），推荐写入 `.env` 后直接使用 `./scripts/docker-run.sh`。
+
+`.env` 示例：
+
+```bash
+PROXY_ENABLED=true
+PROXY_CONTAINER_AUTO_HOST=true
+PROXY_CONTAINER_HOST=host.docker.internal
+HTTP_PROXY_HOST=127.0.0.1
+HTTP_PROXY_PORT=8080
+SOCKS5_PROXY_HOST=127.0.0.1
+SOCKS5_PROXY_PORT=1080
+```
+
+等价的手动命令：
+
+```bash
+docker run --name geneticgrid -p 8000:8000 \
+  --env-file .env \
+  -v $(pwd)/.env:/app/.env:ro \
+  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  --add-host=host.docker.internal:host-gateway \
+  geneticgrid:latest
+```
+
+说明：
+- 当 `PROXY_CONTAINER_AUTO_HOST=true` 且应用运行在容器内时，若代理主机配置为 `127.0.0.1` 或 `localhost`，后端会自动改用 `PROXY_CONTAINER_HOST`（默认 `host.docker.internal`）。
+- 这样可以避免容器把 `127.0.0.1` 解析为容器自身，导致代理不可达。
+- `host-gateway` 会自动解析宿主机网关地址，宿主机 IP 变化时无需改容器参数。
 
 ### 自动打包镜像
 
