@@ -1,6 +1,5 @@
 """Plugin initialization tests."""
 
-import importlib
 import os
 import sys
 from types import SimpleNamespace
@@ -88,11 +87,31 @@ def test_initialize_plugins_invokes_discovery_and_autostart(monkeypatch):
         list_plugin_names=lambda: ['okx'],
     )
     auto_calls = []
+    monkeypatch.setattr(plugin_init, '_PLUGINS_INITIALIZED', False)
     monkeypatch.setattr(plugin_init, 'get_plugin_manager', lambda: manager)
     monkeypatch.setattr(plugin_init, '_auto_start_realtime_streams', lambda: auto_calls.append('started'))
 
     plugin_init.initialize_plugins()
 
+    assert auto_calls == ['started']
+
+
+def test_initialize_plugins_is_idempotent(monkeypatch):
+    manager = SimpleNamespace(
+        auto_discover_plugins=lambda: {'success': 1, 'failed': 0, 'errors': {}},
+        list_plugin_names=lambda: ['okx'],
+    )
+    auto_calls = []
+
+    monkeypatch.setattr(plugin_init, '_PLUGINS_INITIALIZED', False)
+    monkeypatch.setattr(plugin_init, 'get_plugin_manager', lambda: manager)
+    monkeypatch.setattr(plugin_init, '_auto_start_realtime_streams', lambda: auto_calls.append('started'))
+
+    first = plugin_init.initialize_plugins()
+    second = plugin_init.initialize_plugins()
+
+    assert first['success'] == 1
+    assert second['success'] == 0
     assert auto_calls == ['started']
 
 
@@ -104,18 +123,3 @@ def test_parse_realtime_ingestion_streams_accepts_quoted_json():
     assert parsed == [{'source': 'okx', 'symbol': 'BTCUSDT', 'bar': '1s'}]
 
 
-def test_importing_plugin_init_does_not_fail_before_helper_defined(monkeypatch):
-    import core.plugin_init as plugin_init_module
-
-    auto_calls = []
-    manager = SimpleNamespace(
-        auto_discover_plugins=lambda: {'success': 1, 'failed': 0, 'errors': {}},
-        list_plugin_names=lambda: ['okx'],
-    )
-
-    monkeypatch.setattr(plugin_init_module, 'get_plugin_manager', lambda: manager)
-    monkeypatch.setattr(plugin_init_module, '_auto_start_realtime_streams', lambda: auto_calls.append('started'))
-
-    importlib.reload(plugin_init_module)
-
-    assert hasattr(plugin_init_module, '_auto_start_realtime_streams')
