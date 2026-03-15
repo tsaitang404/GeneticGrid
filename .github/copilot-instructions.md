@@ -83,93 +83,184 @@ def process_data(items: list[str], limit: int = 10) -> dict[str, Any]:
 - 必须有错误处理，日志信息应可定位问题
 - 禁止硬编码密钥、Token、密码
 
-## 测试要求
+## 5. 配置与环境变量
+- 本地配置统一使用 `.env`
+- 必须维护 `.env.example` 作为变量模板
+- CI/CD（GitHub Actions）变量与 Secrets 以 `.env.example` 为基准对齐
+- `.env.example` 中用于 CI/CD 的变量，必须由用户写入 GitHub Actions 的 Variables 或 Secrets
+
+## 5.1 自动化（GitHub Actions）
+- Action 触发条件：仅在打 tag 时触发（`push tags`）
+- 非 tag 的普通分支推送，不作为发布触发条件
+- 涉及密钥或敏感配置时：
+    - 敏感值写入 GitHub Actions Secrets
+    - 非敏感配置写入 GitHub Actions Variables
+- 每次新增或修改 `.env.example` 变量后，需提醒用户同步更新对应的 Actions Variables/Secrets
+
+## 6. 测试与质量门槛
 
 ### 单元测试
-- 覆盖率目标: 80%+
-- 测试文件命名: `tests/test_*.py`
-- 使用 pytest fixtures 管理测试数据
-- Mock 外部依赖
+- 目标覆盖率：`>= 80%`
+- Python 测试命名：`tests/test_*.py`
+- 使用 fixtures 管理测试数据
+- 对外部依赖进行 Mock
 
 ### 集成测试
-- 使用测试数据库和存储桶
-- 测试完整的 API 流程
-- 验证错误处理和边界情况
+- 使用独立测试环境（测试库/测试桶）
+- 覆盖关键业务流程与错误分支
 
-### 运行测试
+### 常用命令
 ```bash
-# 运行所有测试
+# Python
+black src/
+ruff check src/
+pytest
+pytest --cov=src --cov-report=html
+
+# Node.js
+npm run lint
+npm test
+```
+
+## 7. 提交与发布规范
+
+### Commit Message
+遵循 Conventional Commits：
+```text
+<type>: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+常用 `type`：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`、`perf`
+
+### 发布流程
+- 仅使用 tag 触发发布，版本格式：`vX.Y.Z`（如 `v1.2.0`）
+- Release Notes 包含：主要变更、兼容性影响、升级说明
+
+### 版本号升级规则
+- `X`（主版本号）：不兼容变更
+    - 设计架构重大调整且影响旧版本使用方式
+    - API 不兼容修改、删除旧接口或改变旧行为
+- `Y`（次版本号）：向后兼容的新功能
+    - 新增 API、新增功能，但不影响旧版本能力
+    - 对现有功能进行重构，但对外行为保持兼容
+- `Z`（修订号）：向后兼容的问题修复
+    - 修复 bug、UI 调整、性能优化
+    - 内部实现优化且不改变对外行为
+
+示例（当前版本 `v2.3.4`）：
+- 不兼容改动 -> `v3.0.0`
+- 兼容性新增 -> `v2.4.0`
+- 兼容性修复 -> `v2.3.5`
+
+### 发布执行流程（严格执行）
+1. 确认本次发布 Todo 已全部完成。
+2. 运行单元测试并确保通过。
+3. 提示用户进行本地测试，并等待用户回复。
+4. 用户确认成功后，创建并推送 tag（Action 由打 tag 触发）。
+5. 检查 GitHub Actions 执行结果并反馈状态。
+
+### 发布前检查清单（建议逐项确认）
+1. 版本号检查：
+    - 新 tag 符合 `vX.Y.Z` 语义化版本规范。
+    - 新版本号大于当前最新已发布版本。
+2. 变更范围检查：
+    - 本次发布内容与 Todo 一致，无未确认的临时改动。
+    - 已确认无敏感信息（密钥、Token、密码）进入仓库。
+3. 质量门槛检查：
+    - 单元测试全部通过。
+    - 关键路径完成本地验证并由用户确认。
+4. 发布说明检查：
+    - Release Notes 包含主要变更、兼容性影响、升级说明。
+5. 回滚预案检查：
+    - 明确回滚策略（回滚 tag、回退版本、紧急修复分支）。
+    - 出现故障时有可执行的应急负责人或处理路径。
+
+推荐命令示例：
+```bash
+# 确认测试
 pytest
 
-# 运行特定测试文件
-pytest tests/test_d1_manager.py
-
-# 生成覆盖率报告
-pytest --cov=src --cov-report=html
+# 打 tag 并推送
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-## 提交规范
+## 8. 输出要求（Copilot 回复风格）
+- 先给结论，再给关键改动与验证结果
+- 涉及多文件修改时，明确文件清单
+- 若无法执行某项操作，需说明原因与替代方案
+- 一次只推进一个主任务，超范围需求建议拆分
 
-### Commit Message 格式
+## 9. 开发环境约定
+- Python 版本管理：`pyenv`
+- Python 虚拟环境：`venv` 或 `uv`
+- Node.js 版本管理：`nvm`
+- 前端框架：`Vue.js`
 
-遵循 Conventional Commits 规范:
+## 10. 项目初始化与数据库迁移
 
-```
-<类型>: <描述>
+### 10.1 初始化原则
+- 新项目初始化时，先确认 Python 与 Node.js 版本，再安装依赖。
+- 初始化完成后，必须先配置环境变量，再执行数据库迁移与服务启动。
 
-[可选的正文]
-
-[可选的脚注]
-```
-
-### 类型 (Type)
-- `feat`: 新功能
-- `fix`: 修复 bug
-- `docs`: 文档更新
-- `style`: 代码格式调整（不影响功能）
-- `refactor`: 重构（不是新功能也不是修复）
-- `test`: 添加或修改测试
-- `chore`: 构建过程或辅助工具的变动
-- `perf`: 性能优化
-
-### 示例
-
+### 10.2 Python 初始化（pyenv + venv/uv）
 ```bash
-# 新功能
-feat: 添加批量查询支持
+# 选择并固定 Python 版本
+pyenv install 3.11.9
+pyenv local 3.11.9
 
-实现批量查询功能以提高性能，支持一次查询多个表。
+# 方式一：venv
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-Closes #123
-
-# Bug 修复
-fix: 修复文件上传时的编码问题
-
-修正了非 ASCII 文件名上传失败的问题。
-
-# 文档更新
-docs: 更新 API 使用示例
-
-添加了 R2 上传的完整代码示例。
-
-# 重构
-refactor: 简化路由匹配逻辑
-
-使用正则表达式替代字符串匹配，提高可维护性。
+# 方式二：uv（如项目使用 uv）
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
-## 进度追踪
+### 10.3 Node.js 初始化（nvm）
+```bash
+# 使用项目约定版本（或 .nvmrc）
+nvm install
+nvm use
 
-当前阶段: **环境配置和项目初始化**
+# 安装依赖
+npm ci
+```
 
-- [x] 验证项目需求
-- [x] 创建项目文档结构
-- [ ] 安装必要的依赖
-- [ ] 配置开发工具
-- [ ] 实现核心功能模块
-- [ ] 编写单元测试
-- [ ] 集成测试验证
-- [ ] 部署配置
-- [ ] 文档完善
+### 10.4 env 变量引入
+- 复制 `.env.example` 生成本地 `.env`，禁止提交 `.env`。
+- 应用启动前必须加载 `.env` 中变量；缺失关键变量时应直接报错并给出缺失项。
+- 新增变量时同步更新：
+    - `.env.example`
+    - 项目文档（变量说明、默认值/示例值）
+    - GitHub Actions Variables/Secrets（由用户写入）
 
-参考 `.github/PROJECT.md` 查看详细的功能需求和实现计划。
+推荐命令示例：
+```bash
+cp .env.example .env
+```
+
+### 10.5 数据库迁移流程
+- 初始化阶段必须执行数据库迁移，确保本地结构与目标版本一致。
+- 迁移脚本需可重复执行，避免不可逆破坏性变更。
+- 迁移顺序：
+    1. 拉取最新代码
+    2. 配置 `.env`
+    3. 执行迁移
+    4. 执行迁移后验证（表结构/关键数据）
+
+### 10.6 初始化完成验收
+- 依赖安装成功（Python/Node）
+- `.env` 配置完整且应用可读取
+- 数据库迁移成功
+- 单元测试可执行且通过
+
+---
+详细需求与实现计划以 `.github/PROJECT.md` 为准。
