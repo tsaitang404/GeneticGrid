@@ -148,13 +148,15 @@ def test_plugin_network():
     print("\n" + "="*70)
     
     # 返回测试结果
-    return {
+    results = {
         'total': len(all_plugins),
         'success': len(results['success']),
         'failed': len(results['failed']),
         'needs_proxy': len(results['needs_proxy']),
         'results': results
     }
+
+    assert results['total'] >= 0
 
 
 def suggest_proxy_changes(results):

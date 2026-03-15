@@ -3,7 +3,7 @@
 
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List, Optional
 
 import django  # type: ignore
@@ -48,7 +48,7 @@ class DummyPlugin(MarketDataSourcePlugin):
             description="Dummy",
             source_type=SourceType.EXCHANGE,
             plugin_version="test",
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(UTC),
         )
 
     def _get_capability(self) -> Capability:
