@@ -103,3 +103,43 @@ def test_print_proxy_status_outputs(monkeypatch, capsys):
     assert '代理配置状态' in output
     assert 'HTTP' in output
     assert '通用代理' in output
+
+
+def test_get_proxy_returns_none_when_disabled(monkeypatch):
+    monkeypatch.setitem(proxy_config.PROXY_OPTIONS, 'enabled', False)
+    monkeypatch.setattr(proxy_config, 'get_proxy_url', lambda proxy_type='http': 'http://proxy')
+
+    assert proxy_config.get_proxy() is None
+
+
+def test_update_proxy_settings_updates_runtime_values(monkeypatch):
+    monkeypatch.setitem(proxy_config.PROXY_OPTIONS, 'enabled', True)
+    monkeypatch.setitem(proxy_config.PROXY_OPTIONS, 'container_auto_host', True)
+    monkeypatch.setitem(proxy_config.PROXY_OPTIONS, 'container_host', 'host.docker.internal')
+    proxy_config.PROXY_CONFIG['http'] = {'host': '127.0.0.1', 'port': 8080}
+    proxy_config.PROXY_CONFIG['socks5'] = {'host': '127.0.0.1', 'port': 1080}
+    monkeypatch.setattr(proxy_config, 'is_proxy_available', lambda proxy_type='http': False)
+    monkeypatch.setattr(proxy_config, 'get_proxy_url', lambda proxy_type='http': None)
+    monkeypatch.setattr(proxy_config, 'get_proxy', lambda: None)
+    monkeypatch.setattr(proxy_config, '_is_container_environment', lambda: True)
+
+    result = proxy_config.update_proxy_settings({
+        'enabled': True,
+        'container_auto_host': True,
+        'container_host': 'docker.internal',
+        'http': {'host': '127.0.0.1', 'port': 8080},
+        'socks5': {'host': 'localhost', 'port': 1080},
+    })
+
+    assert proxy_config.PROXY_OPTIONS['container_host'] == 'docker.internal'
+    assert proxy_config.PROXY_CONFIG['http']['port'] == 8080
+    assert result['http']['effective_host'] == 'docker.internal'
+
+
+def test_update_proxy_settings_rejects_invalid_port():
+    try:
+        proxy_config.update_proxy_settings({'http': {'port': 70000}})
+    except ValueError as exc:
+        assert '端口必须在 1-65535 之间' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')

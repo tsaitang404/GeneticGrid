@@ -2,11 +2,31 @@ import { defineStore } from 'pinia'
 
 export type ColorScheme = 'green-up' | 'red-up'
 
+export interface ProxySettings {
+  enabled: boolean
+  containerAutoHost: boolean
+  containerHost: string
+  httpHost: string
+  httpPort: number
+  socks5Host: string
+  socks5Port: number
+}
+
 const COLOR_SCHEME_KEY = 'geneticgrid_color_scheme'
 const CURRENCY_KEY = 'geneticgrid_currency'
+const PROXY_SETTINGS_KEY = 'geneticgrid_proxy_settings'
 
 const DEFAULT_COLOR_SCHEME: ColorScheme = 'green-up'
 const DEFAULT_CURRENCY = 'USDT'
+const DEFAULT_PROXY_SETTINGS: ProxySettings = {
+  enabled: true,
+  containerAutoHost: true,
+  containerHost: 'host.docker.internal',
+  httpHost: '127.0.0.1',
+  httpPort: 8080,
+  socks5Host: '127.0.0.1',
+  socks5Port: 1080
+}
 
 interface ColorPalette {
   up: string
@@ -44,7 +64,27 @@ const resolveStoredValue = (key: string, fallback: string): string => {
 export const usePreferencesStore = defineStore('preferences', {
   state: () => ({
     colorScheme: resolveStoredValue(COLOR_SCHEME_KEY, DEFAULT_COLOR_SCHEME) as ColorScheme,
-    currency: resolveStoredValue(CURRENCY_KEY, DEFAULT_CURRENCY)
+    currency: resolveStoredValue(CURRENCY_KEY, DEFAULT_CURRENCY),
+    proxySettings: (() => {
+      if (typeof window === 'undefined') {
+        return { ...DEFAULT_PROXY_SETTINGS }
+      }
+
+      const raw = window.localStorage.getItem(PROXY_SETTINGS_KEY)
+      if (!raw) {
+        return { ...DEFAULT_PROXY_SETTINGS }
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as Partial<ProxySettings>
+        return {
+          ...DEFAULT_PROXY_SETTINGS,
+          ...parsed
+        }
+      } catch {
+        return { ...DEFAULT_PROXY_SETTINGS }
+      }
+    })()
   }),
   getters: {
     upColor(state): string {
@@ -78,6 +118,75 @@ export const usePreferencesStore = defineStore('preferences', {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(CURRENCY_KEY, currency)
       }
+    },
+    setProxySettings(settings: ProxySettings): void {
+      this.proxySettings = { ...settings }
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PROXY_SETTINGS_KEY, JSON.stringify(this.proxySettings))
+      }
+    },
+    async loadProxySettings(): Promise<void> {
+      try {
+        const response = await fetch('/api/proxy-config/')
+        if (!response.ok) {
+          return
+        }
+
+        const payload = await response.json()
+        if (payload.code !== 0 || !payload.data) {
+          return
+        }
+
+        this.setProxySettings({
+          enabled: Boolean(payload.data.enabled),
+          containerAutoHost: Boolean(payload.data.container_auto_host),
+          containerHost: payload.data.container_host || 'host.docker.internal',
+          httpHost: payload.data.http?.host || '127.0.0.1',
+          httpPort: Number(payload.data.http?.port || 8080),
+          socks5Host: payload.data.socks5?.host || '127.0.0.1',
+          socks5Port: Number(payload.data.socks5?.port || 1080)
+        })
+      } catch {
+        // 网络失败时保留本地设置
+      }
+    },
+    async saveProxySettings(settings: ProxySettings): Promise<string | null> {
+      const response = await fetch('/api/proxy-config/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          enabled: settings.enabled,
+          container_auto_host: settings.containerAutoHost,
+          container_host: settings.containerHost,
+          http: {
+            host: settings.httpHost,
+            port: settings.httpPort
+          },
+          socks5: {
+            host: settings.socks5Host,
+            port: settings.socks5Port
+          }
+        })
+      })
+
+      const payload = await response.json()
+      if (!response.ok || payload.code !== 0) {
+        return payload.error || `保存失败 (HTTP ${response.status})`
+      }
+
+      this.setProxySettings({
+        enabled: Boolean(payload.data.enabled),
+        containerAutoHost: Boolean(payload.data.container_auto_host),
+        containerHost: payload.data.container_host || 'host.docker.internal',
+        httpHost: payload.data.http?.host || settings.httpHost,
+        httpPort: Number(payload.data.http?.port || settings.httpPort),
+        socks5Host: payload.data.socks5?.host || settings.socks5Host,
+        socks5Port: Number(payload.data.socks5?.port || settings.socks5Port)
+      })
+
+      return null
     },
     applyColorsToDocument(): void {
       if (typeof document === 'undefined') return

@@ -1,12 +1,17 @@
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import cache_page
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
 from .derivative_cache import DerivativeDataCacheService
-from .proxy_config import is_proxy_available, get_proxy_url, get_proxy, PROXY_CONFIG
+from .proxy_config import (
+    get_proxy_settings_snapshot,
+    update_proxy_settings,
+)
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
 from .plugins.base import PluginError
@@ -470,32 +475,48 @@ def api_contract_basis(request):
 def api_proxy_status(request):
     """代理状态 API"""
     try:
-        socks5_config = PROXY_CONFIG['socks5']
-        http_config = PROXY_CONFIG['http']
-        
-        status = {
-            'proxy_enabled': True,
-            'socks5': {
-                'host': socks5_config['host'],
-                'port': socks5_config['port'],
-                'available': is_proxy_available('socks5'),
-                'url': get_proxy_url('socks5'),
-            },
-            'http': {
-                'host': http_config['host'],
-                'port': http_config['port'],
-                'available': is_proxy_available('http'),
-                'url': get_proxy_url('http'),
-            },
-            'proxy': get_proxy(),
-        }
-        
         return JsonResponse({
             'code': 0,
-            'data': status,
+            'data': get_proxy_settings_snapshot(),
         })
     except Exception as e:
         logger.error(f"获取代理状态失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_proxy_config(request):
+    """代理配置 API（GET 查询，POST 更新）。"""
+    try:
+        if request.method == 'GET':
+            return JsonResponse({
+                'code': 0,
+                'data': get_proxy_settings_snapshot(),
+            })
+
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+        updated = update_proxy_settings(payload)
+        return JsonResponse({
+            'code': 0,
+            'data': updated,
+            'message': '代理配置已更新（仅当前进程生效）',
+        })
+    except ValueError as e:
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=400)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'code': -1,
+            'error': '请求体必须为合法 JSON',
+        }, status=400)
+    except Exception as e:
+        logger.error(f"代理配置更新失败: {e}")
         return JsonResponse({
             'code': -1,
             'error': str(e),

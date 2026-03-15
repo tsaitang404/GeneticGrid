@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/contract-basis/', views.api_contract_basis, name='api_contract_basis'),
     path('api/contract-basis/history/', views.api_contract_basis_history, name='api_contract_basis_history'),
     path('api/proxy-status/', views.api_proxy_status, name='api_proxy_status'),
+    path('api/proxy-config/', views.api_proxy_config, name='api_proxy_config'),
     
     # 插件系统 API 端点
     path('api/sources/', views.api_sources, name='api_sources'),

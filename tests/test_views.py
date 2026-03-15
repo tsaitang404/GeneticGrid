@@ -186,13 +186,11 @@ def test_api_ticker_handles_market_api_error(monkeypatch):
 
 def test_api_proxy_status_returns_proxy_snapshot(monkeypatch):
     request = RequestFactory().get('/api/proxy-status/')
-    monkeypatch.setattr(views, 'PROXY_CONFIG', {
-        'socks5': {'host': '127.0.0.1', 'port': 1080},
-        'http': {'host': '127.0.0.1', 'port': 8080},
+    monkeypatch.setattr(views, 'get_proxy_settings_snapshot', lambda: {
+        'enabled': True,
+        'http': {'available': True},
+        'socks5': {'available': False},
     })
-    monkeypatch.setattr(views, 'is_proxy_available', lambda proxy_type: proxy_type == 'http')
-    monkeypatch.setattr(views, 'get_proxy_url', lambda proxy_type: f'{proxy_type}://proxy')
-    monkeypatch.setattr(views, 'get_proxy', lambda: {'http': 'http://proxy'})
 
     response = views.api_proxy_status(request)
 
@@ -443,11 +441,48 @@ def test_api_contract_basis_returns_400_when_not_supported(monkeypatch):
 
 def test_api_proxy_status_handles_exception(monkeypatch):
     request = RequestFactory().get('/api/proxy-status/')
-    monkeypatch.setattr(views, 'PROXY_CONFIG', {})
+    monkeypatch.setattr(views, 'get_proxy_settings_snapshot', lambda: (_ for _ in ()).throw(RuntimeError('boom')))
 
     response = views.api_proxy_status(request)
 
     assert response.status_code == 500
+
+
+def test_api_proxy_config_get_returns_snapshot(monkeypatch):
+    request = RequestFactory().get('/api/proxy-config/')
+    monkeypatch.setattr(views, 'get_proxy_settings_snapshot', lambda: {'enabled': True})
+
+    response = views.api_proxy_config(request)
+
+    assert response.status_code == 200
+    assert _json(response)['data']['enabled'] is True
+
+
+def test_api_proxy_config_post_updates_proxy(monkeypatch):
+    payload = {'enabled': False}
+    request = RequestFactory().post(
+        '/api/proxy-config/',
+        data=json.dumps(payload),
+        content_type='application/json',
+    )
+    monkeypatch.setattr(views, 'update_proxy_settings', lambda data: {'enabled': data['enabled']})
+
+    response = views.api_proxy_config(request)
+
+    assert response.status_code == 200
+    assert _json(response)['data']['enabled'] is False
+
+
+def test_api_proxy_config_post_rejects_bad_json():
+    request = RequestFactory().post(
+        '/api/proxy-config/',
+        data='not-json',
+        content_type='application/json',
+    )
+
+    response = views.api_proxy_config(request)
+
+    assert response.status_code == 400
 
 
 def test_api_sources_handles_exception(monkeypatch):

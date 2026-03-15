@@ -218,7 +218,8 @@ watch([currentMode, currentSymbol, currentSource], () => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
+  await preferences.loadProxySettings()
   loadTicker()
   
   // 如果初始模式是合约，加载资金费率和基差
