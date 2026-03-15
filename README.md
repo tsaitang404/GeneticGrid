@@ -165,6 +165,25 @@ docker run --name geneticgrid -p 8000:8000 \
   geneticgrid:latest
 ```
 
+### 自动打包镜像
+
+仓库已配置 GitHub Actions，在推送符合 `vX.Y.Z` 格式的 tag 时自动构建并发布镜像到 GitHub Container Registry：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+发布后的镜像地址为：
+
+```text
+ghcr.io/<github-owner>/geneticgrid:v1.0.0
+```
+
+实际镜像名会自动使用 GitHub 仓库名的小写形式，即 `ghcr.io/<owner>/<repo>:<tag>`。
+
+首次使用前请确认仓库启用了 Packages 权限；该 workflow 使用 GitHub 自带的 `GITHUB_TOKEN` 推送镜像，无需额外的仓库 Secrets。
+
 ## 🎯 功能
 
 - **22个技术指标**: MA, EMA, BOLL, SAR, MACD, RSI, KDJ, CCI, WR, OBV 等
