@@ -69,7 +69,7 @@ class DummyPlugin(MarketDataSourcePlugin):
     def get_realtime_manager(self) -> DummyRealtimeManager:  # type: ignore[override]
         return self._realtime
 
-    def _normalize_symbol(self, symbol: str) -> str:
+    def _normalize_symbol(self, symbol: str, mode: str = 'spot') -> str:
         symbol = symbol.upper().replace('-', '').replace('/', '')
         return f"{symbol[:-4]}-{symbol[-4:]}"
 
@@ -96,7 +96,15 @@ class DummyCacheService:
             'count': 0,
         })
 
-    def save_to_cache(self, source: str, symbol: str, bar: str, candles: List[dict], max_retries: int = 3):
+    def save_to_cache(
+        self,
+        source: str,
+        symbol: str,
+        bar: str,
+        candles: List[dict],
+        mode: str = 'spot',
+        max_retries: int = 3,
+    ):
         self.saved_batches.append(candles)
         if not candles:
             return 0
