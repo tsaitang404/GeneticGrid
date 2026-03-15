@@ -47,16 +47,6 @@ def initialize_plugins():
         logger.warning("⚠️  未发现任何插件文件")
 
     _auto_start_realtime_streams()
-
-
-# 在模块导入时执行初始化
-try:
-    initialize_plugins()
-except Exception as e:
-    logger.error(f"插件系统初始化失败: {e}")
-    # 不抛出异常，允许系统继续运行
-
-
 def _auto_start_realtime_streams() -> None:
     """根据 Django 配置自动启动实时采集服务"""
 
@@ -128,3 +118,11 @@ def _normalize_stream_entry(entry) -> Optional[dict]:
         return data
 
     return None
+
+
+# 在模块导入时执行初始化
+try:
+    initialize_plugins()
+except Exception as e:
+    logger.error(f"插件系统初始化失败: {e}")
+    # 不抛出异常，允许系统继续运行

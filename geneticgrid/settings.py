@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -134,29 +135,47 @@ REALTIME_INGESTION_STREAMS = [
     {'source': 'okx', 'symbol': 'ETHUSDT', 'bar': '1s'},
     {'source': 'okx', 'symbol': 'ETHUSDT', 'bar': '1m'},
 ]
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def parse_realtime_ingestion_streams(raw_value: str) -> list[dict[str, Any]]:
+    """解析实时采集配置，兼容 JSON 和冒号分隔格式。"""
+    normalized = _strip_wrapping_quotes(raw_value)
+
+    try:
+        parsed = json.loads(normalized)
+        if isinstance(parsed, list):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    fallback = []
+    for item in normalized.split(','):
+        parts = [p.strip() for p in item.split(':') if p.strip()]
+        if not parts:
+            continue
+        stream = {
+            'source': parts[0],
+            'symbol': parts[1] if len(parts) > 1 else 'BTCUSDT',
+            'bar': parts[2] if len(parts) > 2 else '1s'
+        }
+        if len(parts) > 3:
+            stream['poll_interval'] = float(parts[3])
+        if len(parts) > 4:
+            stream['batch_size'] = int(parts[4])
+        fallback.append(stream)
+    return fallback
+
+
 _raw_realtime_streams = os.environ.get('REALTIME_INGESTION_STREAMS')
 if _raw_realtime_streams:
-    try:
-        parsed = json.loads(_raw_realtime_streams)
-        if isinstance(parsed, list):
-            REALTIME_INGESTION_STREAMS = parsed
-    except json.JSONDecodeError:
-        fallback = []
-        for item in _raw_realtime_streams.split(','):
-            parts = [p.strip() for p in item.split(':') if p.strip()]
-            if not parts:
-                continue
-            stream = {
-                'source': parts[0],
-                'symbol': parts[1] if len(parts) > 1 else 'BTCUSDT',
-                'bar': parts[2] if len(parts) > 2 else '1s'
-            }
-            if len(parts) > 3:
-                stream['poll_interval'] = float(parts[3])
-            if len(parts) > 4:
-                stream['batch_size'] = int(parts[4])
-            fallback.append(stream)
-        REALTIME_INGESTION_STREAMS = fallback
+    REALTIME_INGESTION_STREAMS = parse_realtime_ingestion_streams(_raw_realtime_streams)
 
 # Redis 缓存配置（用于缓解 SQLite 锁表问题）
 REDIS_CACHE_ENABLED = os.environ.get('REDIS_CACHE_ENABLED', 'false').lower() in ('true', '1', 'yes')

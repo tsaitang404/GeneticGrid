@@ -1,5 +1,6 @@
 """Plugin initialization tests."""
 
+import importlib
 import os
 import sys
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ django.setup()
 
 from core import plugin_init
 from core.services import MarketAPIError
+from geneticgrid import settings as project_settings
 
 
 def test_normalize_stream_entry_for_string_and_dict():
@@ -92,3 +94,28 @@ def test_initialize_plugins_invokes_discovery_and_autostart(monkeypatch):
     plugin_init.initialize_plugins()
 
     assert auto_calls == ['started']
+
+
+def test_parse_realtime_ingestion_streams_accepts_quoted_json():
+    parsed = project_settings.parse_realtime_ingestion_streams(
+        '\'[{"source":"okx","symbol":"BTCUSDT","bar":"1s"}]\''
+    )
+
+    assert parsed == [{'source': 'okx', 'symbol': 'BTCUSDT', 'bar': '1s'}]
+
+
+def test_importing_plugin_init_does_not_fail_before_helper_defined(monkeypatch):
+    import core.plugin_init as plugin_init_module
+
+    auto_calls = []
+    manager = SimpleNamespace(
+        auto_discover_plugins=lambda: {'success': 1, 'failed': 0, 'errors': {}},
+        list_plugin_names=lambda: ['okx'],
+    )
+
+    monkeypatch.setattr(plugin_init_module, 'get_plugin_manager', lambda: manager)
+    monkeypatch.setattr(plugin_init_module, '_auto_start_realtime_streams', lambda: auto_calls.append('started'))
+
+    importlib.reload(plugin_init_module)
+
+    assert hasattr(plugin_init_module, '_auto_start_realtime_streams')
