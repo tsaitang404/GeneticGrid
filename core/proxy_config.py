@@ -13,12 +13,6 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {'true', '1', 'yes', 'on'}
-
 
 def _is_container_environment() -> bool:
     if os.path.exists('/.dockerenv'):
@@ -37,22 +31,22 @@ def _is_container_environment() -> bool:
 
 # 全局代理选项（可通过 API 运行时更新）
 PROXY_OPTIONS = {
-    'enabled': _env_bool('PROXY_ENABLED', True),
+    'enabled': True,
     # 容器中若配置为 localhost，自动改为宿主机地址
-    'container_auto_host': _env_bool('PROXY_CONTAINER_AUTO_HOST', True),
-    'container_host': os.environ.get('PROXY_CONTAINER_HOST', 'host.docker.internal'),
-    'preferred_type': os.environ.get('PROXY_PREFERRED_TYPE', 'http').strip().lower(),
+    'container_auto_host': True,
+    'container_host': 'host.docker.internal',
+    'preferred_type': 'http',
 }
 
 # 代理配置
 PROXY_CONFIG = {
     'socks5': {
-        'host': os.environ.get('SOCKS5_PROXY_HOST', '127.0.0.1'),
-        'port': int(os.environ.get('SOCKS5_PROXY_PORT', 1080)),
+        'host': '127.0.0.1',
+        'port': 1080,
     },
     'http': {
-        'host': os.environ.get('HTTP_PROXY_HOST', '127.0.0.1'),
-        'port': int(os.environ.get('HTTP_PROXY_PORT', 8080)),
+        'host': '127.0.0.1',
+        'port': 8080,
     },
 }
 

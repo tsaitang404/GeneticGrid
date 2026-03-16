@@ -165,12 +165,9 @@ cp .env.example .env
 CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
-使用当前 shell 或 CI 注入的环境变量时：
+使用当前 shell 或 CI 注入的环境变量时（代理请在前端设置页配置）：
 
 ```bash
-PROXY_ENABLED=true \
-HTTP_PROXY_HOST=127.0.0.1 \
-HTTP_PROXY_PORT=8080 \
 CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
@@ -199,9 +196,6 @@ docker run --name geneticgrid -p 8000:8000 \
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
   --add-host=host.docker.internal:host-gateway \
-  -e PROXY_ENABLED=true \
-  -e HTTP_PROXY_HOST=127.0.0.1 \
-  -e HTTP_PROXY_PORT=8080 \
   -v $(pwd)/data:/app/data \
   ghcr.io/tsaitang404/geneticgrid:v0.2.3
 ```
@@ -218,19 +212,14 @@ docker run --name geneticgrid -p 8000:8000 \
 
 说明：容器内默认数据库路径为 `/app/data/db.sqlite3`，如需自定义再额外传入 `DB_PATH`。通过逗号分隔多个域名/IP，如 `ALLOWED_HOSTS=example.com,127.0.0.1`。
 
-如需在容器中使用宿主机代理（默认 SOCKS5 端口 `1080`、HTTP 端口 `8080`），推荐写入 `.env` 后直接使用 `./scripts/docker-run.sh`。
+如需在容器中使用宿主机代理，请在前端“偏好设置 -> 代理配置”中填写代理地址。
 
-`.env` 示例：
+示例：
 
 ```bash
-PROXY_ENABLED=true
-PROXY_CONTAINER_AUTO_HOST=true
-PROXY_CONTAINER_HOST=host.docker.internal
-PROXY_CONTAINER_NETWORK_MODE=auto
-HTTP_PROXY_HOST=127.0.0.1
-HTTP_PROXY_PORT=8080
-SOCKS5_PROXY_HOST=127.0.0.1
-SOCKS5_PROXY_PORT=1080
+http://host.docker.internal:8080
+# 或
+socks5://host.docker.internal:1080
 ```
 
 等价的手动命令：
@@ -245,11 +234,8 @@ docker run --name geneticgrid -p 8000:8000 \
 ```
 
 说明：
-- 当 `PROXY_CONTAINER_NETWORK_MODE=auto` 时，若在 Linux 上检测到代理主机配置为 `127.0.0.1` 或 `localhost`，启动脚本会自动切换为 `--network host`，避免 bridge 网络下无法访问宿主机回环代理。
 - 若使用 bridge 网络模式，必须显式添加 `--add-host=host.docker.internal:host-gateway`，避免容器内宿主机名解析失败。
-- 如果你明确要共享宿主机网络，也可将 `PROXY_CONTAINER_NETWORK_MODE=host` 固定为 host 模式。
-- 当 `PROXY_CONTAINER_AUTO_HOST=true` 且应用运行在容器内时，若代理主机配置为 `127.0.0.1` 或 `localhost`，后端会自动改用 `PROXY_CONTAINER_HOST`（默认 `host.docker.internal`）。
-- 这样可以避免容器把 `127.0.0.1` 解析为容器自身，导致代理不可达。
+- 代理开关与代理地址统一由前端设置页保存并下发到后端运行时。
 - `host-gateway` 会自动解析宿主机网关地址，宿主机 IP 变化时无需改容器参数。
 
 ### 自动打包镜像
