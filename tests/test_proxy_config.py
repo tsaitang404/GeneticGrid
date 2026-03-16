@@ -122,6 +122,7 @@ def test_update_proxy_settings_updates_runtime_values(monkeypatch):
     monkeypatch.setattr(proxy_config, 'get_proxy_url', lambda proxy_type='http': None)
     monkeypatch.setattr(proxy_config, 'get_proxy', lambda: None)
     monkeypatch.setattr(proxy_config, '_is_container_environment', lambda: True)
+    monkeypatch.setattr(proxy_config, '_resolve_container_host_alias', lambda: 'docker.internal')
 
     result = proxy_config.update_proxy_settings({
         'enabled': True,
