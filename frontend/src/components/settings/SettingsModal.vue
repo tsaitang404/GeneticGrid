@@ -64,48 +64,31 @@
 
         <div class="setting-group">
           <label class="setting-label">代理配置</label>
-          <div class="proxy-grid">
-            <label class="checkbox-label full-row">
-              <input type="checkbox" v-model="proxyEnabledModel" />
-              <span>启用代理</span>
+
+          <label class="checkbox-label" style="margin-bottom: 14px">
+            <input type="checkbox" v-model="localEnabled" />
+            <span>启用代理</span>
+          </label>
+
+          <template v-if="localEnabled">
+            <div class="field" style="margin-bottom: 12px">
+              <span>代理地址</span>
+              <div class="proxy-input-row">
+                <input v-model="localProxyUrl" class="text-input" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" />
+                <button class="btn ghost" :disabled="proxyTesting || proxySaving" @click="testProxy">测试代理</button>
+              </div>
+            </div>
+
+            <label class="checkbox-label" style="margin-bottom: 4px">
+              <input type="checkbox" v-model="localContainerAutoHost" />
+              <span>容器中自动将 <code>127.0.0.1</code> 映射为宿主机（host.docker.internal）</span>
             </label>
-
-            <label class="checkbox-label full-row">
-              <input type="checkbox" v-model="containerAutoHostModel" />
-              <span>容器环境自动将 localhost 映射为宿主机</span>
-            </label>
-
-            <div class="field">
-              <span>容器宿主机别名</span>
-              <input v-model="containerHostModel" class="text-input" placeholder="host.docker.internal" />
-            </div>
-
-            <div class="field">
-              <span>HTTP 主机</span>
-              <input v-model="httpHostModel" class="text-input" placeholder="127.0.0.1" />
-            </div>
-
-            <div class="field">
-              <span>HTTP 端口</span>
-              <input v-model.number="httpPortModel" type="number" class="text-input" min="1" max="65535" />
-            </div>
-
-            <div class="field">
-              <span>SOCKS5 主机</span>
-              <input v-model="socks5HostModel" class="text-input" placeholder="127.0.0.1" />
-            </div>
-
-            <div class="field">
-              <span>SOCKS5 端口</span>
-              <input v-model.number="socks5PortModel" type="number" class="text-input" min="1" max="65535" />
-            </div>
-          </div>
+          </template>
 
           <p v-if="proxyMessage" :class="['proxy-message', proxyMessageType]">{{ proxyMessage }}</p>
 
           <div class="proxy-actions">
-            <button class="btn ghost" :disabled="proxySaving" @click="reloadProxy">刷新代理状态</button>
-            <button class="btn primary" :disabled="proxySaving" @click="saveProxy">保存代理设置</button>
+            <button class="btn primary" :disabled="proxySaving || proxyTesting" @click="saveProxy">保存</button>
           </div>
         </div>
       </div>
@@ -114,12 +97,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   usePreferencesStore,
   type ColorScheme,
-  type ProxySettings
 } from '@/stores/preferences'
 
 const emit = defineEmits<{
@@ -133,6 +115,18 @@ const { colorScheme, currency, proxySettings } = storeToRefs(preferences)
 const proxyMessage = ref<string>('')
 const proxyMessageType = ref<'ok' | 'error'>('ok')
 const proxySaving = ref<boolean>(false)
+const proxyTesting = ref<boolean>(false)
+
+// 本地表单状态，不绑定 store（关闭设置不自动保存）
+const localEnabled = ref<boolean>(true)
+const localProxyUrl = ref<string>('socks5://127.0.0.1:1080')
+const localContainerAutoHost = ref<boolean>(true)
+
+function initLocalProxy(): void {
+  localEnabled.value = proxySettings.value.enabled
+  localProxyUrl.value = proxySettings.value.proxyUrl
+  localContainerAutoHost.value = proxySettings.value.containerAutoHost
+}
 
 const colorSchemeModel = computed({
   get: () => colorScheme.value,
@@ -150,112 +144,60 @@ const currencyModel = computed({
   }
 })
 
-const proxyEnabledModel = computed({
-  get: () => proxySettings.value.enabled,
-  set: (value: boolean) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      enabled: value
-    })
-  }
-})
-
-const containerAutoHostModel = computed({
-  get: () => proxySettings.value.containerAutoHost,
-  set: (value: boolean) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      containerAutoHost: value
-    })
-  }
-})
-
-const containerHostModel = computed({
-  get: () => proxySettings.value.containerHost,
-  set: (value: string) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      containerHost: value
-    })
-  }
-})
-
-const httpHostModel = computed({
-  get: () => proxySettings.value.httpHost,
-  set: (value: string) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      httpHost: value
-    })
-  }
-})
-
-const httpPortModel = computed({
-  get: () => proxySettings.value.httpPort,
-  set: (value: number) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      httpPort: Number.isFinite(value) ? value : 8080
-    })
-  }
-})
-
-const socks5HostModel = computed({
-  get: () => proxySettings.value.socks5Host,
-  set: (value: string) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      socks5Host: value
-    })
-  }
-})
-
-const socks5PortModel = computed({
-  get: () => proxySettings.value.socks5Port,
-  set: (value: number) => {
-    preferences.setProxySettings({
-      ...proxySettings.value,
-      socks5Port: Number.isFinite(value) ? value : 1080
-    })
-  }
-})
-
-const normalizeProxySettings = (settings: ProxySettings): ProxySettings => {
-  const clampPort = (value: number, fallback: number): number => {
-    const parsed = Number(value)
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-      return fallback
-    }
-    return parsed
+const testProxy = async (): Promise<void> => {
+  const url = localProxyUrl.value.trim()
+  if (!url.startsWith('http://') && !url.startsWith('socks5://')) {
+    proxyMessageType.value = 'error'
+    proxyMessage.value = '代理地址需以 http:// 或 socks5:// 开头'
+    return
   }
 
-  return {
-    enabled: settings.enabled,
-    containerAutoHost: settings.containerAutoHost,
-    containerHost: settings.containerHost.trim() || 'host.docker.internal',
-    httpHost: settings.httpHost.trim() || '127.0.0.1',
-    httpPort: clampPort(settings.httpPort, 8080),
-    socks5Host: settings.socks5Host.trim() || '127.0.0.1',
-    socks5Port: clampPort(settings.socks5Port, 1080)
-  }
-}
-
-const reloadProxy = async (): Promise<void> => {
+  proxyTesting.value = true
   proxyMessage.value = ''
-  await preferences.loadProxySettings()
-  proxyMessageType.value = 'ok'
-  proxyMessage.value = '已从后端刷新代理配置'
+  try {
+    const response = await fetch('/api/proxy-test/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ proxy_url: url })
+    })
+    const payload = await response.json()
+    if (payload.code === 0) {
+      const d = payload.data
+      const typeLabel = String(d.type || '').toLowerCase() === 'socks5' ? 'SOCKS5' : 'HTTP'
+      const available = Boolean(d.available)
+      const latencyMs = Number.isFinite(Number(d.latency_ms)) ? Number(d.latency_ms) : null
+      proxyMessageType.value = available ? 'ok' : 'error'
+      proxyMessage.value = `${typeLabel} ${available ? '✓' : '✗'} (${d.effective_host}:${d.port}${latencyMs !== null ? `, ${latencyMs}ms` : ''})`
+    } else {
+      proxyMessageType.value = 'error'
+      proxyMessage.value = payload.error || '测试失败'
+    }
+  } catch {
+    proxyMessageType.value = 'error'
+    proxyMessage.value = '请求失败'
+  } finally {
+    proxyTesting.value = false
+  }
 }
 
 const saveProxy = async (): Promise<void> => {
+  const url = localProxyUrl.value.trim()
+  if (localEnabled.value && !url.startsWith('http://') && !url.startsWith('socks5://')) {
+    proxyMessageType.value = 'error'
+    proxyMessage.value = '代理地址需以 http:// 或 socks5:// 开头'
+    return
+  }
   proxySaving.value = true
   proxyMessage.value = ''
-
-  const normalized = normalizeProxySettings(proxySettings.value)
-  preferences.setProxySettings(normalized)
-
+  const settings = {
+    enabled: localEnabled.value,
+    proxyUrl: url,
+    containerAutoHost: localContainerAutoHost.value
+  }
   try {
-    const error = await preferences.saveProxySettings(normalized)
+    const error = await preferences.saveProxySettings(settings)
     if (error) {
       proxyMessageType.value = 'error'
       proxyMessage.value = error
@@ -273,6 +215,7 @@ const saveProxy = async (): Promise<void> => {
 
 onMounted(async () => {
   await preferences.loadProxySettings()
+  initLocalProxy()
 })
 
 </script>
@@ -457,6 +400,15 @@ onMounted(async () => {
 .text-input:focus {
   outline: none;
   border-color: #2962ff;
+}
+
+.proxy-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.proxy-input-row .text-input {
+  flex: 1;
 }
 
 .proxy-actions {

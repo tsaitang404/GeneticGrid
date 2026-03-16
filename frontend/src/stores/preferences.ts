@@ -5,11 +5,7 @@ export type ColorScheme = 'green-up' | 'red-up'
 export interface ProxySettings {
   enabled: boolean
   containerAutoHost: boolean
-  containerHost: string
-  httpHost: string
-  httpPort: number
-  socks5Host: string
-  socks5Port: number
+  proxyUrl: string
 }
 
 const COLOR_SCHEME_KEY = 'geneticgrid_color_scheme'
@@ -21,11 +17,7 @@ const DEFAULT_CURRENCY = 'USDT'
 const DEFAULT_PROXY_SETTINGS: ProxySettings = {
   enabled: true,
   containerAutoHost: true,
-  containerHost: 'host.docker.internal',
-  httpHost: '127.0.0.1',
-  httpPort: 8080,
-  socks5Host: '127.0.0.1',
-  socks5Port: 1080
+  proxyUrl: 'socks5://127.0.0.1:1080'
 }
 
 interface ColorPalette {
@@ -137,14 +129,15 @@ export const usePreferencesStore = defineStore('preferences', {
           return
         }
 
+        const httpUrl = payload.data.http?.configured_url || 'http://127.0.0.1:8080'
+        const socks5Url = payload.data.socks5?.configured_url || 'socks5://127.0.0.1:1080'
+        const socks5Avail = Boolean(payload.data.socks5?.available)
+        const httpAvail = Boolean(payload.data.http?.available)
+        const proxyUrl = socks5Avail ? socks5Url : httpAvail ? httpUrl : socks5Url
         this.setProxySettings({
           enabled: Boolean(payload.data.enabled),
           containerAutoHost: Boolean(payload.data.container_auto_host),
-          containerHost: payload.data.container_host || 'host.docker.internal',
-          httpHost: payload.data.http?.host || '127.0.0.1',
-          httpPort: Number(payload.data.http?.port || 8080),
-          socks5Host: payload.data.socks5?.host || '127.0.0.1',
-          socks5Port: Number(payload.data.socks5?.port || 1080)
+          proxyUrl
         })
       } catch {
         // 网络失败时保留本地设置
@@ -159,15 +152,8 @@ export const usePreferencesStore = defineStore('preferences', {
         body: JSON.stringify({
           enabled: settings.enabled,
           container_auto_host: settings.containerAutoHost,
-          container_host: settings.containerHost,
-          http: {
-            host: settings.httpHost,
-            port: settings.httpPort
-          },
-          socks5: {
-            host: settings.socks5Host,
-            port: settings.socks5Port
-          }
+          ...(settings.proxyUrl.startsWith('http://') ? { http_url: settings.proxyUrl } : {}),
+          ...(settings.proxyUrl.startsWith('socks5://') ? { socks5_url: settings.proxyUrl } : {})
         })
       })
 
@@ -179,11 +165,7 @@ export const usePreferencesStore = defineStore('preferences', {
       this.setProxySettings({
         enabled: Boolean(payload.data.enabled),
         containerAutoHost: Boolean(payload.data.container_auto_host),
-        containerHost: payload.data.container_host || 'host.docker.internal',
-        httpHost: payload.data.http?.host || settings.httpHost,
-        httpPort: Number(payload.data.http?.port || settings.httpPort),
-        socks5Host: payload.data.socks5?.host || settings.socks5Host,
-        socks5Port: Number(payload.data.socks5?.port || settings.socks5Port)
+        proxyUrl: settings.proxyUrl
       })
 
       return null

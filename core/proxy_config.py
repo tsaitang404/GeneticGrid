@@ -9,6 +9,7 @@ import socket
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,67 @@ def _normalize_port(value: Any) -> int:
     return port
 
 
+def parse_proxy_url(url: str) -> tuple:
+    """解析代理 URL，返回 (scheme, host, port)。
+
+    Args:
+        url: 代理地址，如 http://127.0.0.1:8080 或 socks5://127.0.0.1:1080。
+
+    Returns:
+        (scheme, host, port) 元组。
+
+    Raises:
+        ValueError: URL 格式不合法时抛出。
+    """
+    url = url.strip()
+    if not url:
+        raise ValueError('代理地址不能为空')
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in ('http', 'socks5'):
+        raise ValueError(f'不支持的代理类型: {scheme!r}，仅支持 http 或 socks5')
+    host = parsed.hostname
+    if not host:
+        raise ValueError('代理地址缺少主机名')
+    port = parsed.port
+    if not port:
+        raise ValueError('代理地址缺少端口号')
+    _normalize_port(port)
+    return scheme, host, port
+
+
+def test_proxy_url(url: str) -> Dict[str, Any]:
+    """测试指定代理 URL 的连通性。
+
+    Args:
+        url: 代理地址，如 http://127.0.0.1:8080 或 socks5://127.0.0.1:1080。
+
+    Returns:
+        包含 type、host、effective_host、port、available 的结果字典。
+    """
+    proxy_type, host, port = parse_proxy_url(url)
+    effective_host = _resolve_proxy_host(host)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(2)
+    start = time.monotonic()
+    try:
+        result = sock.connect_ex((effective_host, port))
+        available = (result == 0)
+    finally:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        sock.close()
+
+    return {
+        'type': proxy_type,
+        'host': host,
+        'effective_host': effective_host,
+        'port': port,
+        'available': available,
+        'latency_ms': latency_ms,
+    }
+
+
 def get_proxy_settings_snapshot() -> Dict[str, Any]:
     """返回当前代理配置快照（用于设置页展示）。"""
     is_container = _is_container_environment()
@@ -100,6 +162,7 @@ def get_proxy_settings_snapshot() -> Dict[str, Any]:
             'port': config['port'],
             'available': is_proxy_available(proxy_type),
             'url': get_proxy_url(proxy_type),
+            'configured_url': f"{proxy_type}://{config['host']}:{config['port']}",
         }
 
     return {
@@ -126,6 +189,23 @@ def update_proxy_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if 'container_host' in payload and payload['container_host']:
         PROXY_OPTIONS['container_host'] = str(payload['container_host']).strip()
+
+    # 支持 URL 格式（新接口）：http_url / socks5_url
+    for url_key, expected_scheme, proxy_type in (
+        ('http_url', 'http', 'http'),
+        ('socks5_url', 'socks5', 'socks5'),
+    ):
+        url_value = payload.get(url_key, '')
+        if not isinstance(url_value, str):
+            continue
+        url_value = url_value.strip()
+        if not url_value:
+            continue
+        scheme, host, port = parse_proxy_url(url_value)
+        if scheme != expected_scheme:
+            raise ValueError(f'{url_key} 必须使用 {expected_scheme}:// 格式')
+        PROXY_CONFIG[proxy_type]['host'] = host
+        PROXY_CONFIG[proxy_type]['port'] = port
 
     for proxy_type in ('http', 'socks5'):
         if proxy_type not in payload:

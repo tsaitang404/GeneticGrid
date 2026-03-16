@@ -11,6 +11,9 @@ from .derivative_cache import DerivativeDataCacheService
 from .proxy_config import (
     get_proxy_settings_snapshot,
     update_proxy_settings,
+    clear_proxy_cache,
+    is_proxy_available,
+    test_proxy_url,
 )
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
@@ -517,6 +520,44 @@ def api_proxy_config(request):
         }, status=400)
     except Exception as e:
         logger.error(f"代理配置更新失败: {e}")
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_proxy_test(request):
+    """测试代理连通性。
+
+    支持请求体传入 proxy_url，仅测试该地址；
+    未传入时兼容旧行为（同时返回 http/socks5 状态）。
+    """
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+        proxy_url = payload.get('proxy_url') if isinstance(payload, dict) else None
+
+        if isinstance(proxy_url, str) and proxy_url.strip():
+            result = test_proxy_url(proxy_url.strip())
+            return JsonResponse({
+                'code': 0,
+                'data': result,
+            })
+
+        clear_proxy_cache()
+        http_ok = is_proxy_available('http')
+        socks5_ok = is_proxy_available('socks5')
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'available': http_ok or socks5_ok,
+                'http': http_ok,
+                'socks5': socks5_ok,
+            }
+        })
+    except Exception as e:
+        logger.error(f"代理测试失败: {e}")
         return JsonResponse({
             'code': -1,
             'error': str(e),
