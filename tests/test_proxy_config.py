@@ -62,17 +62,20 @@ def test_get_proxy_url_and_dict(monkeypatch):
     monkeypatch.setattr(proxy_config, 'is_proxy_available', lambda proxy_type='http': True)
     proxy_config.PROXY_CONFIG['http'] = {'host': '127.0.0.1', 'port': 8080}
     proxy_config.PROXY_CONFIG['socks5'] = {'host': '127.0.0.1', 'port': 1080}
+    proxy_config.PROXY_OPTIONS['preferred_type'] = 'socks5'
 
     assert proxy_config.get_proxy_url('http') == 'http://127.0.0.1:8080'
     assert proxy_config.get_proxy_url('socks5') == 'socks5://127.0.0.1:1080'
 
-    monkeypatch.setattr(proxy_config, 'get_proxy_url', lambda proxy_type='http': 'socks5://127.0.0.1:1080')
+    monkeypatch.setattr(proxy_config, 'get_proxy', lambda: 'socks5://127.0.0.1:1080')
     proxy_dict = proxy_config.get_proxy_dict()
-    assert proxy_dict['http://'] == 'socks5://127.0.0.1:1080'
-    assert proxy_dict['https://'] == 'socks5://127.0.0.1:1080'
+    assert proxy_dict['http'] == 'socks5://127.0.0.1:1080'
+    assert proxy_dict['https'] == 'socks5://127.0.0.1:1080'
 
 
 def test_get_proxy_prefers_http_then_socks5(monkeypatch):
+    proxy_config.PROXY_OPTIONS['preferred_type'] = 'http'
+
     def _url(proxy_type='http'):
         if proxy_type == 'http':
             return None
@@ -83,19 +86,19 @@ def test_get_proxy_prefers_http_then_socks5(monkeypatch):
 
 
 def test_configure_requests_proxies_updates_session(monkeypatch):
-    monkeypatch.setattr(proxy_config, 'get_proxy_dict', lambda: {'http://': 'http://proxy', 'https://': 'http://proxy'})
+    monkeypatch.setattr(proxy_config, 'get_proxy_dict', lambda: {'http': 'http://proxy', 'https': 'http://proxy'})
     session = SimpleNamespace(proxies={})
 
     result = proxy_config.configure_requests_proxies(session)
 
-    assert result['http://'] == 'http://proxy'
-    assert session.proxies['https://'] == 'http://proxy'
+    assert result['http'] == 'http://proxy'
+    assert session.proxies['https'] == 'http://proxy'
 
 
 def test_print_proxy_status_outputs(monkeypatch, capsys):
     monkeypatch.setattr(proxy_config, 'is_proxy_available', lambda proxy_type='socks5': proxy_type == 'http')
     monkeypatch.setattr(proxy_config, 'get_proxy', lambda: 'http://proxy')
-    monkeypatch.setattr(proxy_config, 'get_proxy_dict', lambda: {'http://': 'http://proxy'})
+    monkeypatch.setattr(proxy_config, 'get_proxy_dict', lambda: {'http': 'http://proxy'})
 
     proxy_config.print_proxy_status()
     output = capsys.readouterr().out
@@ -103,6 +106,15 @@ def test_print_proxy_status_outputs(monkeypatch, capsys):
     assert '代理配置状态' in output
     assert 'HTTP' in output
     assert '通用代理' in output
+
+
+def test_update_proxy_settings_sets_preferred_type_from_url(monkeypatch):
+    monkeypatch.setattr(proxy_config, 'is_proxy_available', lambda proxy_type='http': False)
+    monkeypatch.setattr(proxy_config, 'get_proxy_url', lambda proxy_type='http': None)
+    monkeypatch.setattr(proxy_config, 'get_proxy', lambda: None)
+
+    proxy_config.update_proxy_settings({'socks5_url': 'socks5://127.0.0.1:1080'})
+    assert proxy_config.PROXY_OPTIONS['preferred_type'] == 'socks5'
 
 
 def test_get_proxy_returns_none_when_disabled(monkeypatch):

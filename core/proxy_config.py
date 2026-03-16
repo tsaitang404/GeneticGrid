@@ -41,6 +41,7 @@ PROXY_OPTIONS = {
     # 容器中若配置为 localhost，自动改为宿主机地址
     'container_auto_host': _env_bool('PROXY_CONTAINER_AUTO_HOST', True),
     'container_host': os.environ.get('PROXY_CONTAINER_HOST', 'host.docker.internal'),
+    'preferred_type': os.environ.get('PROXY_PREFERRED_TYPE', 'http').strip().lower(),
 }
 
 # 代理配置
@@ -183,6 +184,7 @@ def get_proxy_settings_snapshot() -> Dict[str, Any]:
         'enabled': PROXY_OPTIONS['enabled'],
         'container_auto_host': PROXY_OPTIONS['container_auto_host'],
         'container_host': PROXY_OPTIONS['container_host'],
+        'preferred_type': PROXY_OPTIONS.get('preferred_type', 'http'),
         'resolved_container_host': _resolve_container_host_alias() if is_container else PROXY_OPTIONS['container_host'],
         'in_container': is_container,
         'http': _entry('http'),
@@ -205,6 +207,9 @@ def update_proxy_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
     if 'container_host' in payload and payload['container_host']:
         PROXY_OPTIONS['container_host'] = str(payload['container_host']).strip()
 
+    if payload.get('preferred_type') in {'http', 'socks5'}:
+        PROXY_OPTIONS['preferred_type'] = payload['preferred_type']
+
     # 支持 URL 格式（新接口）：http_url / socks5_url
     for url_key, expected_scheme, proxy_type in (
         ('http_url', 'http', 'http'),
@@ -221,6 +226,7 @@ def update_proxy_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(f'{url_key} 必须使用 {expected_scheme}:// 格式')
         PROXY_CONFIG[proxy_type]['host'] = host
         PROXY_CONFIG[proxy_type]['port'] = port
+        PROXY_OPTIONS['preferred_type'] = proxy_type
 
     for proxy_type in ('http', 'socks5'):
         if proxy_type not in payload:
@@ -312,14 +318,11 @@ def get_proxy_dict() -> Dict[str, str]:
         'https://': 'http://proxy_url',
     }
     """
-    proxy_url = get_proxy_url('http')
+    proxy_url = get_proxy()
     if proxy_url:
-        # 移除 socks5:// 前缀，requests 使用特殊格式
-        if proxy_url.startswith('socks5://'):
-            proxy_url = 'socks5://' + proxy_url[9:]
         return {
-            'http://': proxy_url,
-            'https://': proxy_url,
+            'http': proxy_url,
+            'https': proxy_url,
         }
     return {}
 
@@ -334,15 +337,13 @@ def get_proxy() -> Optional[str]:
     if not PROXY_OPTIONS['enabled']:
         return None
 
-    # 优先使用 HTTP 代理
-    http_proxy = get_proxy_url('http')
-    if http_proxy:
-        return http_proxy
-    
-    # 降级到 SOCKS5
-    socks5_proxy = get_proxy_url('socks5')
-    if socks5_proxy:
-        return socks5_proxy
+    preferred = PROXY_OPTIONS.get('preferred_type', 'http')
+    order = [preferred, 'socks5' if preferred == 'http' else 'http']
+
+    for proxy_type in order:
+        proxy = get_proxy_url(proxy_type)
+        if proxy:
+            return proxy
     
     return None
 
