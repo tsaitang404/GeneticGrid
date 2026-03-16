@@ -145,19 +145,26 @@ static/dist/       # Vue 构建输出
 
 ## 🐳 Docker 打包与运行
 
-项目已提供多阶段构建镜像：先在 Node 环境构建前端资源，再在 Python 运行时镜像启动 Django。
+项目已提供 GitHub Container Registry 镜像，推荐直接从 GitHub 镜像仓库拉取并运行；如需本地定制，再自行构建镜像。
 
 ```bash
-# 构建镜像
-docker build -t geneticgrid:latest .
+# 1) 拉取 GitHub 镜像
+docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.1
 
-# 1) 复制环境变量模板
+# 2) 复制环境变量模板
 cp .env.example .env
 
-# 2) 按需编辑 .env
+# 3) 按需编辑 .env
 
-# 3) 使用 .env 启动容器（推荐）
+# 4) 使用 .env 启动容器（推荐）
 ./scripts/docker-run.sh
+```
+
+如需本地自行构建镜像：
+
+```bash
+docker build -t geneticgrid:local .
+IMAGE=geneticgrid:local ./scripts/docker-run.sh
 ```
 
 访问地址：`http://127.0.0.1:8000`
@@ -169,7 +176,7 @@ docker run --name geneticgrid -p 8000:8000 \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
-  geneticgrid:latest
+  ghcr.io/tsaitang404/geneticgrid:v0.2.1
 ```
 
 如需在容器中使用宿主机代理（默认 SOCKS5 端口 `1080`、HTTP 端口 `8080`），推荐写入 `.env` 后直接使用 `./scripts/docker-run.sh`。
@@ -195,7 +202,7 @@ docker run --name geneticgrid -p 8000:8000 \
   -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
   --add-host=host.docker.internal:host-gateway \
-  geneticgrid:latest
+  ghcr.io/tsaitang404/geneticgrid:v0.2.1
 ```
 
 说明：

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${IMAGE:-ghcr.io/tsaitang404/geneticgrid:v0.1.0}"
+IMAGE="${IMAGE:-ghcr.io/tsaitang404/geneticgrid:v0.2.1}"
 CONTAINER_NAME="${CONTAINER_NAME:-geneticgrid}"
 ENV_FILE="${ENV_FILE:-$PROJECT_ROOT/.env}"
 DB_FILE="${DB_FILE:-$PROJECT_ROOT/db.sqlite3}"
