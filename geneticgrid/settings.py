@@ -12,7 +12,9 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'change-me-to-a-secure-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# 支持环境变量：ALLOWED_HOSTS=example.com,127.0.0.1
+_allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] or ['127.0.0.1', 'localhost']
 
 # 代理配置
 # 支持环境变量：

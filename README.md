@@ -149,10 +149,10 @@ static/dist/       # Vue 构建输出
 
 ```bash
 # 1) 拉取 GitHub 镜像
-docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.2
+docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.3
 
 # 2) 直接按默认值启动（无需 .env、无需额外环境变量）
-./scripts/docker-run.sh
+CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
 如果你需要自定义配置，再额外提供 `.env` 或 shell 环境变量。
@@ -162,7 +162,7 @@ docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.2
 ```bash
 cp .env.example .env
 # 按需编辑 .env
-./scripts/docker-run.sh
+CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
 使用当前 shell 或 CI 注入的环境变量时：
@@ -171,14 +171,14 @@ cp .env.example .env
 PROXY_ENABLED=true \
 HTTP_PROXY_HOST=127.0.0.1 \
 HTTP_PROXY_PORT=8080 \
-./scripts/docker-run.sh
+CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
 如需本地自行构建镜像：
 
 ```bash
 docker build -t geneticgrid:local .
-IMAGE=geneticgrid:local ./scripts/docker-run.sh
+IMAGE=geneticgrid:local CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 ```
 
 访问地址：`http://127.0.0.1:8000`
@@ -190,7 +190,7 @@ docker run --name geneticgrid -p 8000:8000 \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/data:/app/data \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.2
+  ghcr.io/tsaitang404/geneticgrid:v0.2.3
 ```
 
 不使用 `.env` 文件时：
@@ -201,18 +201,19 @@ docker run --name geneticgrid -p 8000:8000 \
   -e HTTP_PROXY_HOST=127.0.0.1 \
   -e HTTP_PROXY_PORT=8080 \
   -v $(pwd)/data:/app/data \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.2
+  ghcr.io/tsaitang404/geneticgrid:v0.2.3
 ```
 
 完全使用默认配置时：
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
+  -e ALLOWED_HOSTS=example.com,127.0.0.1 \
   -v $(pwd)/data:/app/data \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.2
+  ghcr.io/tsaitang404/geneticgrid:v0.2.3
 ```
 
-说明：容器内默认数据库路径为 `/app/data/db.sqlite3`，如需自定义再额外传入 `DB_PATH`。
+说明：容器内默认数据库路径为 `/app/data/db.sqlite3`，如需自定义再额外传入 `DB_PATH`。通过逗号分隔多个域名/IP，如 `ALLOWED_HOSTS=example.com,127.0.0.1`。
 
 如需在容器中使用宿主机代理（默认 SOCKS5 端口 `1080`、HTTP 端口 `8080`），推荐写入 `.env` 后直接使用 `./scripts/docker-run.sh`。
 
@@ -237,7 +238,7 @@ docker run --name geneticgrid -p 8000:8000 \
   -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/data:/app/data \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.2
+  ghcr.io/tsaitang404/geneticgrid:v0.2.3
 ```
 
 说明：
