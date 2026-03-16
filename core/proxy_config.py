@@ -66,13 +66,27 @@ def clear_proxy_cache() -> None:
     _PROXY_CACHE.clear()
 
 
+def _resolve_container_host_alias() -> str:
+    """解析容器访问宿主机别名，失败时给出明确配置要求。"""
+    candidate = str(PROXY_OPTIONS.get('container_host') or '').strip() or 'host.docker.internal'
+    try:
+        socket.gethostbyname(candidate)
+        return candidate
+    except OSError as exc:
+        raise RuntimeError(
+            f'容器内无法解析宿主机别名 {candidate}。'
+            'Docker 模式下请在运行参数中显式添加 '
+            '--add-host=host.docker.internal:host-gateway'
+        ) from exc
+
+
 def _resolve_proxy_host(host: str) -> str:
     is_local = host in {'127.0.0.1', 'localhost'}
     if not is_local:
         return host
 
     if PROXY_OPTIONS['container_auto_host'] and _is_container_environment():
-        return PROXY_OPTIONS['container_host']
+        return _resolve_container_host_alias()
 
     return host
 
@@ -169,6 +183,7 @@ def get_proxy_settings_snapshot() -> Dict[str, Any]:
         'enabled': PROXY_OPTIONS['enabled'],
         'container_auto_host': PROXY_OPTIONS['container_auto_host'],
         'container_host': PROXY_OPTIONS['container_host'],
+        'resolved_container_host': _resolve_container_host_alias() if is_container else PROXY_OPTIONS['container_host'],
         'in_container': is_container,
         'http': _entry('http'),
         'socks5': _entry('socks5'),

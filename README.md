@@ -187,6 +187,7 @@ IMAGE=geneticgrid:local CONTAINER_NAME=geneticgrid ./scripts/docker-run.sh
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
   -v $(pwd)/data:/app/data \
@@ -197,6 +198,7 @@ docker run --name geneticgrid -p 8000:8000 \
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
   -e PROXY_ENABLED=true \
   -e HTTP_PROXY_HOST=127.0.0.1 \
   -e HTTP_PROXY_PORT=8080 \
@@ -208,6 +210,7 @@ docker run --name geneticgrid -p 8000:8000 \
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
   -e ALLOWED_HOSTS=example.com,127.0.0.1 \
   -v $(pwd)/data:/app/data \
   ghcr.io/tsaitang404/geneticgrid:v0.2.3
@@ -243,7 +246,7 @@ docker run --name geneticgrid -p 8000:8000 \
 
 说明：
 - 当 `PROXY_CONTAINER_NETWORK_MODE=auto` 时，若在 Linux 上检测到代理主机配置为 `127.0.0.1` 或 `localhost`，启动脚本会自动切换为 `--network host`，避免 bridge 网络下无法访问宿主机回环代理。
-- 如果你明确知道代理可通过 `host.docker.internal` 访问，可将 `PROXY_CONTAINER_NETWORK_MODE=bridge` 固定为 bridge 模式。
+- 若使用 bridge 网络模式，必须显式添加 `--add-host=host.docker.internal:host-gateway`，避免容器内宿主机名解析失败。
 - 如果你明确要共享宿主机网络，也可将 `PROXY_CONTAINER_NETWORK_MODE=host` 固定为 host 模式。
 - 当 `PROXY_CONTAINER_AUTO_HOST=true` 且应用运行在容器内时，若代理主机配置为 `127.0.0.1` 或 `localhost`，后端会自动改用 `PROXY_CONTAINER_HOST`（默认 `host.docker.internal`）。
 - 这样可以避免容器把 `127.0.0.1` 解析为容器自身，导致代理不可达。

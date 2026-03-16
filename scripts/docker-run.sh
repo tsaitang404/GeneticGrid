@@ -91,9 +91,7 @@ if [[ "$PROXY_CONTAINER_NETWORK_MODE" == "host" || "$AUTO_USE_HOST_NETWORK" == "
   EXTRA_ENV_ARGS=(-e PROXY_CONTAINER_AUTO_HOST=false)
 else
   NETWORK_ARGS=(-p "${PORT}:8000")
-  if is_truthy "$PROXY_CONTAINER_AUTO_HOST"; then
-    EXTRA_HOST_ARG=(--add-host="${PROXY_CONTAINER_HOST}:host-gateway")
-  fi
+  EXTRA_HOST_ARG=(--add-host=host.docker.internal:host-gateway)
 fi
 
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -123,6 +121,6 @@ if [[ ${#NETWORK_ARGS[@]} -gt 0 && "${NETWORK_ARGS[0]}" == "--network" ]]; then
   echo "[docker-run] localhost proxy will be used directly from container"
 else
   echo "[docker-run] network mode: bridge"
-  echo "[docker-run] proxy auto host: ${PROXY_CONTAINER_AUTO_HOST}, host alias: ${PROXY_CONTAINER_HOST}"
+  echo "[docker-run] host alias injected: host.docker.internal -> host-gateway"
 fi
 echo "[docker-run] visit: http://127.0.0.1:${PORT}"
