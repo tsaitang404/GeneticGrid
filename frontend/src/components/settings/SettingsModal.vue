@@ -1,9 +1,9 @@
 <template>
-  <div class="settings-modal-overlay" @click.self="$emit('close')">
-    <div class="settings-modal">
+  <div class="settings-modal-overlay" @click.self="handleOverlayClick" @keydown.esc="handleEscKey">
+    <div class="settings-modal" :class="{ 'closing': isClosing }">
       <div class="modal-header">
         <h2>偏好设置</h2>
-        <button @click="$emit('close')" class="close-btn">✕</button>
+        <button @click="handleCloseClick" class="close-btn">✕</button>
       </div>
       
       <div class="modal-body">
@@ -15,7 +15,7 @@
                 type="radio" 
                 name="color-scheme" 
                 value="green-up" 
-                v-model="colorSchemeModel"
+                v-model="localColorScheme"
               >
               <span class="radio-text">
                 <span class="color-preview" style="background:#26a69a"></span>
@@ -29,7 +29,7 @@
                 type="radio" 
                 name="color-scheme" 
                 value="red-up" 
-                v-model="colorSchemeModel"
+                v-model="localColorScheme"
               >
               <span class="radio-text">
                 <span class="color-preview" style="background:#ef5350"></span>
@@ -43,7 +43,7 @@
         
         <div class="setting-group">
           <label class="setting-label">计价货币</label>
-          <select v-model="currencyModel" class="currency-select">
+          <select v-model="localCurrency" class="currency-select">
             <option value="USDT">USDT</option>
             <option value="USDC">USDC</option>
             <option value="USD">USD (美元)</option>
@@ -86,11 +86,12 @@
           </template>
 
           <p v-if="proxyMessage" :class="['proxy-message', proxyMessageType]">{{ proxyMessage }}</p>
-
-          <div class="proxy-actions">
-            <button class="btn primary" :disabled="proxySaving || proxyTesting" @click="saveProxy">保存</button>
-          </div>
         </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn ghost" :disabled="isSaving" @click="handleCloseClick">取消</button>
+        <button class="btn primary" :disabled="isSaving" @click="handleSaveAll">保存</button>
       </div>
     </div>
   </div>
@@ -116,33 +117,95 @@ const proxyMessage = ref<string>('')
 const proxyMessageType = ref<'ok' | 'error'>('ok')
 const proxySaving = ref<boolean>(false)
 const proxyTesting = ref<boolean>(false)
+const isClosing = ref<boolean>(false)
+const isSaving = ref<boolean>(false)
 
-// 本地表单状态，不绑定 store（关闭设置不自动保存）
+// 本地表单状态（颜色、货币、代理都需要保存时才生效）
+const localColorScheme = ref<ColorScheme>('green-up')
+const localCurrency = ref<string>('USDT')
 const localEnabled = ref<boolean>(true)
 const localProxyUrl = ref<string>('socks5://127.0.0.1:1080')
 const localContainerAutoHost = ref<boolean>(true)
 
-function initLocalProxy(): void {
+// 初始状态快照（用于检测是否有未保存改动）
+const initialState = ref<{
+  colorScheme: string
+  currency: string
+  enabled: boolean
+  proxyUrl: string
+  containerAutoHost: boolean
+}>({
+  colorScheme: 'green-up',
+  currency: 'USDT',
+  enabled: true,
+  proxyUrl: 'socks5://127.0.0.1:1080',
+  containerAutoHost: true,
+})
+
+// 检测是否有未保存改动
+const hasUnsavedChanges = computed(() => {
+  return (
+    localColorScheme.value !== initialState.value.colorScheme ||
+    localCurrency.value !== initialState.value.currency ||
+    localEnabled.value !== initialState.value.enabled ||
+    localProxyUrl.value !== initialState.value.proxyUrl ||
+    localContainerAutoHost.value !== initialState.value.containerAutoHost
+  )
+})
+
+function initializeSettings(): void {
+  // 从 store 读取当前保存的设置
+  localColorScheme.value = colorScheme.value
+  localCurrency.value = currency.value
   localEnabled.value = proxySettings.value.enabled
   localProxyUrl.value = proxySettings.value.proxyUrl
   localContainerAutoHost.value = proxySettings.value.containerAutoHost
+  
+  // 保存初始状态快照
+  initialState.value = {
+    colorScheme: colorScheme.value,
+    currency: currency.value,
+    enabled: proxySettings.value.enabled,
+    proxyUrl: proxySettings.value.proxyUrl,
+    containerAutoHost: proxySettings.value.containerAutoHost,
+  }
 }
 
-const colorSchemeModel = computed({
-  get: () => colorScheme.value,
-  set: (scheme: ColorScheme) => {
-    preferences.setColorScheme(scheme)
-    emit('update:colorScheme', scheme)
+// 关闭抽屉前的检查
+function shouldClose(): boolean {
+  if (!hasUnsavedChanges.value) {
+    return true
   }
-})
+  
+  // 有未保存改动，提示用户
+  const confirmed = window.confirm('您有未保存的改动，确定要放弃吗？')
+  return confirmed
+}
 
-const currencyModel = computed({
-  get: () => currency.value,
-  set: (value: string) => {
-    preferences.setCurrency(value)
-    emit('update:currency', value)
+async function performClose(): Promise<void> {
+  isClosing.value = true
+  // 等待反向滑出动画完成（220ms）
+  await new Promise(resolve => setTimeout(resolve, 220))
+  emit('close')
+}
+
+function handleCloseClick(): void {
+  if (shouldClose()) {
+    performClose()
   }
-})
+}
+
+function handleOverlayClick(): void {
+  if (shouldClose()) {
+    performClose()
+  }
+}
+
+function handleEscKey(): void {
+  if (shouldClose()) {
+    performClose()
+  }
+}
 
 const testProxy = async (): Promise<void> => {
   const url = localProxyUrl.value.trim()
@@ -182,40 +245,56 @@ const testProxy = async (): Promise<void> => {
   }
 }
 
-const saveProxy = async (): Promise<void> => {
+const handleSaveAll = async (): Promise<void> => {
+  // 验证代理地址格式
   const url = localProxyUrl.value.trim()
   if (localEnabled.value && !url.startsWith('http://') && !url.startsWith('socks5://')) {
     proxyMessageType.value = 'error'
     proxyMessage.value = '代理地址需以 http:// 或 socks5:// 开头'
     return
   }
-  proxySaving.value = true
-  proxyMessage.value = ''
-  const settings = {
+
+  isSaving.value = true
+  
+  // 更新初始状态快照（表示数据已"提交"）
+  initialState.value = {
+    colorScheme: localColorScheme.value,
+    currency: localCurrency.value,
     enabled: localEnabled.value,
     proxyUrl: url,
-    containerAutoHost: localContainerAutoHost.value
+    containerAutoHost: localContainerAutoHost.value,
   }
-  try {
-    const error = await preferences.saveProxySettings(settings)
-    if (error) {
-      proxyMessageType.value = 'error'
-      proxyMessage.value = error
-      return
+  
+  // 立即关闭抽屉（不等待保存完成）
+  performClose()
+  
+  // 在后台异步执行保存
+  setTimeout(async () => {
+    try {
+      // 保存颜色方案
+      preferences.setColorScheme(localColorScheme.value as ColorScheme)
+      
+      // 保存货币
+      preferences.setCurrency(localCurrency.value)
+      
+      // 保存代理配置
+      const proxySettings = {
+        enabled: localEnabled.value,
+        proxyUrl: url,
+        containerAutoHost: localContainerAutoHost.value
+      }
+      await preferences.saveProxySettings(proxySettings)
+    } catch (error: unknown) {
+      console.error('保存设置失败:', error)
+    } finally {
+      isSaving.value = false
     }
-    proxyMessageType.value = 'ok'
-    proxyMessage.value = '代理设置已保存并生效（当前后端进程）'
-  } catch (error: unknown) {
-    proxyMessageType.value = 'error'
-    proxyMessage.value = error instanceof Error ? error.message : '保存代理配置失败'
-  } finally {
-    proxySaving.value = false
-  }
+  }, 0)
 }
 
 onMounted(async () => {
   await preferences.loadProxySettings()
-  initLocalProxy()
+  initializeSettings()
 })
 
 </script>
@@ -227,21 +306,27 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.48);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-end;
   z-index: 2000;
 }
 
 .settings-modal {
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 80vh;
-  overflow: auto;
+  border-left: 1px solid var(--border-color);
+  width: min(520px, 100vw);
+  height: 100vh;
+  overflow: hidden;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
+  animation: drawer-in 0.22s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal.closing {
+  animation: drawer-out 0.22s ease-out forwards;
 }
 
 .modal-header {
@@ -250,6 +335,7 @@ onMounted(async () => {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .modal-header h2 {
@@ -274,6 +360,17 @@ onMounted(async () => {
 
 .modal-body {
   padding: 20px;
+  overflow: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .setting-group {
@@ -411,18 +508,13 @@ onMounted(async () => {
   flex: 1;
 }
 
-.proxy-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 10px;
-}
-
 .btn {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .btn:disabled {
@@ -456,8 +548,32 @@ onMounted(async () => {
 }
 
 @media (max-width: 640px) {
-  .proxy-grid {
-    grid-template-columns: 1fr;
+  .settings-modal {
+    width: 100vw;
+    border-left: none;
+    box-shadow: none;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(28px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(28px);
+    opacity: 0.6;
   }
 }
 </style>
