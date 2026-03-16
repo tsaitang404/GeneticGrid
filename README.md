@@ -151,12 +151,26 @@ static/dist/       # Vue 构建输出
 # 1) 拉取 GitHub 镜像
 docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.1
 
-# 2) 复制环境变量模板
+# 2) 直接按默认值启动（无需 .env、无需额外环境变量）
+./scripts/docker-run.sh
+```
+
+如果你需要自定义配置，再额外提供 `.env` 或 shell 环境变量。
+
+使用 `.env` 文件时：
+
+```bash
 cp .env.example .env
+# 按需编辑 .env
+./scripts/docker-run.sh
+```
 
-# 3) 按需编辑 .env
+使用当前 shell 或 CI 注入的环境变量时：
 
-# 4) 使用 .env 启动容器（推荐）
+```bash
+PROXY_ENABLED=true \
+HTTP_PROXY_HOST=127.0.0.1 \
+HTTP_PROXY_PORT=8080 \
 ./scripts/docker-run.sh
 ```
 
@@ -169,12 +183,31 @@ IMAGE=geneticgrid:local ./scripts/docker-run.sh
 
 访问地址：`http://127.0.0.1:8000`
 
-如需手动运行并持久化配置/数据库（挂载 `.env` + `db.sqlite3`）：
+如需手动运行并持久化配置/数据库，可按需挂载 `.env`，也可只传 Docker 环境变量：
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
+  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+```
+
+不使用 `.env` 文件时：
+
+```bash
+docker run --name geneticgrid -p 8000:8000 \
+  -e PROXY_ENABLED=true \
+  -e HTTP_PROXY_HOST=127.0.0.1 \
+  -e HTTP_PROXY_PORT=8080 \
+  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+```
+
+完全使用默认配置时：
+
+```bash
+docker run --name geneticgrid -p 8000:8000 \
   -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
   ghcr.io/tsaitang404/geneticgrid:v0.2.1
 ```
