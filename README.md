@@ -149,7 +149,7 @@ static/dist/       # Vue 构建输出
 
 ```bash
 # 1) 拉取 GitHub 镜像
-docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.1
+docker pull ghcr.io/tsaitang404/geneticgrid:v0.2.2
 
 # 2) 直接按默认值启动（无需 .env、无需额外环境变量）
 ./scripts/docker-run.sh
@@ -189,8 +189,8 @@ IMAGE=geneticgrid:local ./scripts/docker-run.sh
 docker run --name geneticgrid -p 8000:8000 \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
-  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+  -v $(pwd)/data:/app/data \
+  ghcr.io/tsaitang404/geneticgrid:v0.2.2
 ```
 
 不使用 `.env` 文件时：
@@ -200,17 +200,19 @@ docker run --name geneticgrid -p 8000:8000 \
   -e PROXY_ENABLED=true \
   -e HTTP_PROXY_HOST=127.0.0.1 \
   -e HTTP_PROXY_PORT=8080 \
-  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+  -v $(pwd)/data:/app/data \
+  ghcr.io/tsaitang404/geneticgrid:v0.2.2
 ```
 
 完全使用默认配置时：
 
 ```bash
 docker run --name geneticgrid -p 8000:8000 \
-  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+  -v $(pwd)/data:/app/data \
+  ghcr.io/tsaitang404/geneticgrid:v0.2.2
 ```
+
+说明：容器内默认数据库路径为 `/app/data/db.sqlite3`，如需自定义再额外传入 `DB_PATH`。
 
 如需在容器中使用宿主机代理（默认 SOCKS5 端口 `1080`、HTTP 端口 `8080`），推荐写入 `.env` 后直接使用 `./scripts/docker-run.sh`。
 
@@ -233,9 +235,9 @@ SOCKS5_PROXY_PORT=1080
 docker run --name geneticgrid -p 8000:8000 \
   --env-file .env \
   -v $(pwd)/.env:/app/.env:ro \
-  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  -v $(pwd)/data:/app/data \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/tsaitang404/geneticgrid:v0.2.1
+  ghcr.io/tsaitang404/geneticgrid:v0.2.2
 ```
 
 说明：

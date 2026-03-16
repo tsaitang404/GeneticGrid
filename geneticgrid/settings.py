@@ -80,10 +80,15 @@ ASGI_APPLICATION = 'geneticgrid.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/stable/ref/settings/#databases
+IN_CONTAINER = Path('/.dockerenv').exists()
+DEFAULT_DB_PATH = '/app/data/db.sqlite3' if IN_CONTAINER else str(BASE_DIR / 'db.sqlite3')
+DB_PATH = os.environ.get('DB_PATH', DEFAULT_DB_PATH)
+Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': Path(DB_PATH),
         'OPTIONS': {
             'timeout': 20,  # 增加超时时间到20秒
         },

@@ -2,13 +2,17 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${IMAGE:-ghcr.io/tsaitang404/geneticgrid:v0.2.1}"
+IMAGE="${IMAGE:-ghcr.io/tsaitang404/geneticgrid:v0.2.2}"
 CONTAINER_NAME="${CONTAINER_NAME:-geneticgrid}"
 ENV_FILE="${ENV_FILE:-$PROJECT_ROOT/.env}"
-DB_FILE="${DB_FILE:-$PROJECT_ROOT/db.sqlite3}"
+DATA_DIR="${DATA_DIR:-$PROJECT_ROOT/data}"
+CONTAINER_DATA_DIR="${CONTAINER_DATA_DIR:-/app/data}"
+DB_FILE="${DB_FILE:-$DATA_DIR/db.sqlite3}"
+DB_PATH="${DB_PATH:-$CONTAINER_DATA_DIR/db.sqlite3}"
 PORT="${PORT:-8000}"
 APP_ENV_VARS=(
   DJANGO_SECRET_KEY
+  DB_PATH
   PROXY_ENABLED
   PROXY_CONTAINER_AUTO_HOST
   PROXY_CONTAINER_HOST
@@ -41,6 +45,8 @@ append_env_arg_if_set() {
     PASS_THROUGH_ENV_ARGS+=("-e" "$name=${!name}")
   fi
 }
+
+mkdir -p "$DATA_DIR"
 
 if [[ ! -f "$DB_FILE" ]]; then
   touch "$DB_FILE"
@@ -96,13 +102,16 @@ docker run -d \
   "${NETWORK_ARGS[@]}" \
   "${ENV_FILE_ARGS[@]}" \
   "${PASS_THROUGH_ENV_ARGS[@]}" \
+  -e "DB_PATH=$DB_PATH" \
   "${EXTRA_ENV_ARGS[@]}" \
   "${EXTRA_HOST_ARG[@]}" \
   "${ENV_FILE_MOUNT_ARGS[@]}" \
-  -v "$DB_FILE:/app/db.sqlite3" \
+  -v "$DATA_DIR:$CONTAINER_DATA_DIR" \
   "$IMAGE"
 
 echo "[docker-run] started ${CONTAINER_NAME} with image ${IMAGE}"
+echo "[docker-run] data-dir: ${DATA_DIR} -> ${CONTAINER_DATA_DIR}"
+echo "[docker-run] db-path: ${DB_PATH}"
 if [[ ${#ENV_FILE_ARGS[@]} -gt 0 ]]; then
   echo "[docker-run] env-file: ${ENV_FILE}"
 else
