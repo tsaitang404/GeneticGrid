@@ -3,7 +3,7 @@
 币安交易所数据源插件
 """
 
-from typing import List, Optional, Dict
+from typing import List, Optional
 from datetime import datetime
 import logging
 import requests
@@ -20,7 +20,7 @@ from ..base import (
     PluginError,
     SymbolMode,
 )
-from core.proxy_config import get_proxy
+from core.proxy_config import get_proxy_dict
 from .binance_stream import get_realtime_manager
 
 logger = logging.getLogger(__name__)
@@ -103,17 +103,8 @@ class BinanceMarketPlugin(MarketDataSourcePlugin):
                 'User-Agent': 'GeneticGrid/2.0'
             })
             # 配置代理
-            self._session.proxies = self._get_proxies()
+            self._session.proxies = get_proxy_dict()
         return self._session
-    
-    def _get_proxies(self) -> Dict[str, str]:
-        """获取代理配置"""
-        proxy = get_proxy()
-        if proxy:
-            logger.info(f"Binance 使用代理: {proxy}")
-            return {"http": proxy, "https": proxy}
-        logger.warning("Binance 未配置代理，可能无法访问")
-        return {}
     
     def _convert_symbol(self, inst_id: str, mode: str = SymbolMode.SPOT.value) -> str:
         """将标准格式转换为 Binance 格式: BTC-USDT -> BTCUSDT"""

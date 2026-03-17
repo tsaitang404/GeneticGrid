@@ -9,9 +9,8 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Dict, List, Optional
-from urllib.parse import urlparse
 
-from core.proxy_config import get_proxy
+from core.proxy_config import get_websocket_proxy_kwargs
 from ..base import CandleData
 
 try:  # pragma: no cover - 依赖在运行环境中安装
@@ -24,23 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _build_proxy_kwargs() -> Dict[str, object]:
     """构建 websocket-client 需要的代理参数"""
-    proxy_url = get_proxy()
-    if not proxy_url:
-        return {}
-
-    parsed = urlparse(proxy_url)
-    if not parsed.hostname or not parsed.port:
-        return {}
-
-    proxy_kwargs: Dict[str, object] = {
-        "http_proxy_host": parsed.hostname,
-        "http_proxy_port": parsed.port,
-    }
-    if parsed.username:
-        proxy_kwargs["http_proxy_auth"] = (parsed.username, parsed.password)
-    if parsed.scheme.lower().startswith("socks"):
-        proxy_kwargs["proxy_type"] = parsed.scheme
-    return proxy_kwargs
+    return get_websocket_proxy_kwargs()
 
 
 @dataclass

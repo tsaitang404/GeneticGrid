@@ -9,9 +9,8 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Dict, List, Optional
-from urllib.parse import urlparse
 
-from core.proxy_config import get_proxy
+from core.proxy_config import get_websocket_proxy_kwargs
 from ..base import CandleData
 
 try:  # pragma: no cover - 运行环境需安装 websocket-client
@@ -24,32 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _build_proxy_kwargs() -> Dict[str, object]:
     """构建 websocket-client 代理参数"""
-    proxy_url = get_proxy()
-    if not proxy_url:
-        return {}
-
-    parsed = urlparse(proxy_url)
-    if not parsed.hostname or not parsed.port:
-        return {}
-
-    scheme = (parsed.scheme or '').lower()
-    allowed_types = {'http', 'socks4', 'socks5', ''}
-    if scheme not in allowed_types:
-        logger.warning("OKX WS 代理协议 %s 不受支持，已忽略", scheme)
-        return {}
-
-    proxy_kwargs: Dict[str, object] = {
-        "http_proxy_host": parsed.hostname,
-        "http_proxy_port": parsed.port,
-    }
-    if parsed.username:
-        proxy_kwargs["http_proxy_auth"] = (parsed.username, parsed.password)
-    if scheme.startswith("socks"):
-        proxy_kwargs["proxy_type"] = scheme
-    else:
-        # websocket-client 默认 http，不支持 https，强制降级为 http
-        proxy_kwargs["proxy_type"] = "http"
-    return proxy_kwargs
+    return get_websocket_proxy_kwargs()
 
 
 @dataclass

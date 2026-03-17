@@ -360,6 +360,32 @@ def configure_requests_proxies(session=None) -> Optional[Dict[str, str]]:
     return proxies
 
 
+def get_websocket_proxy_kwargs() -> Dict[str, Any]:
+    """返回 websocket-client 可用的统一代理参数。"""
+    proxy_url = get_proxy()
+    if not proxy_url:
+        return {}
+
+    parsed = urlparse(proxy_url)
+    if not parsed.hostname or not parsed.port:
+        return {}
+
+    scheme = (parsed.scheme or '').lower()
+    allowed_types = {'http', 'socks4', 'socks5', ''}
+    if scheme not in allowed_types:
+        logger.warning("WebSocket 代理协议 %s 不受支持，已忽略", scheme)
+        return {}
+
+    kwargs: Dict[str, Any] = {
+        'http_proxy_host': parsed.hostname,
+        'http_proxy_port': parsed.port,
+    }
+    if parsed.username:
+        kwargs['http_proxy_auth'] = (parsed.username, parsed.password)
+    kwargs['proxy_type'] = scheme if scheme.startswith('socks') else 'http'
+    return kwargs
+
+
 def print_proxy_status():
     """打印代理状态"""
     print("\n=== 代理配置状态 ===")

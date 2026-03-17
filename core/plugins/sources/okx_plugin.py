@@ -8,6 +8,7 @@ from datetime import datetime
 import logging
 import time
 import requests
+from core.proxy_config import get_proxy_dict
 
 from ..base import (
     MarketDataSourcePlugin,
@@ -193,21 +194,10 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         """已废弃：使用 _normalize_granularity 代替"""
         return self._normalize_granularity(bar)
     
-    def _get_proxies(self) -> dict:
-        """获取代理配置"""
-        try:
-            from core.proxy_config import get_proxy
-            proxy = get_proxy()
-            if proxy:
-                return {'http': proxy, 'https': proxy}
-        except Exception as e:
-            logger.warning(f"获取代理配置失败: {e}")
-        return {}
-    
     def _request(self, endpoint: str, params: dict = None, timeout: int = 30) -> dict:
         """发送 HTTP 请求到 OKX API"""
         url = f"{self.BASE_URL}{endpoint}"
-        proxies = self._get_proxies()
+        proxies = get_proxy_dict()
         
         try:
             response = requests.get(
