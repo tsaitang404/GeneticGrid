@@ -14,6 +14,7 @@ from .proxy_config import (
     clear_proxy_cache,
     is_proxy_available,
     test_proxy_url,
+    get_proxy_dict,
 )
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
@@ -665,7 +666,7 @@ def api_positions(request):
         
         # 注意：这里使用公开 API，无需认证
         # 生产环境应该使用私有 API 和用户的 API Key
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=10, proxies=get_proxy_dict())
         
         if response.status_code != 200:
             logger.warning(f"OKX API 返回错误: {response.status_code}")
