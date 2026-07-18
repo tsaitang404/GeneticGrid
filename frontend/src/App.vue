@@ -83,7 +83,7 @@
 
         <!-- 交易工具面板：占据下方主要面积 -->
         <section class="bottom-row">
-          <TradingToolsPanel />
+          <TradingToolsPanel @open-account="toggleAccount" />
         </section>
       </div>
     </main>
