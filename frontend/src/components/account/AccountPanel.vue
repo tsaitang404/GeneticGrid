@@ -76,12 +76,16 @@
               :class="['account-card', { selected: selectedId === acc.id }]"
               @click="selectedId = acc.id"
             >
-              <div class="acc-label">{{ acc.label }}</div>
-              <div class="acc-key">{{ acc.api_key_masked }}</div>
-              <div v-if="acc.note" class="acc-note">{{ acc.note }}</div>
-              <div v-if="acc.account_info" class="acc-info">
-                UID: {{ acc.account_info.uid }} | 等级: {{ acc.account_info.level }}
-              </div>
+            <div class="acc-label">
+              {{ acc.label }}
+              <span v-if="acc.is_demo" class="demo-badge">模拟</span>
+              <span v-else class="real-badge">实盘</span>
+            </div>
+            <div class="acc-key">{{ acc.api_key_masked }}</div>
+            <div v-if="acc.note" class="acc-note">{{ acc.note }}</div>
+            <div v-if="acc.account_info" class="acc-info">
+              UID: {{ acc.account_info.uid }} | 等级: {{ acc.account_info.level }}
+            </div>
             </div>
           </div>
           <input
@@ -104,6 +108,10 @@
           <input v-model="form.secret_key" type="password" placeholder="Secret Key" class="input">
           <input v-model="form.passphrase" type="password" placeholder="Passphrase" class="input">
           <input v-model="form.note" placeholder="备注/权限说明" class="input">
+          <label class="checkbox-label">
+            <input v-model="form.is_demo" type="checkbox" class="checkbox">
+            <span>模拟盘 (Demo)</span>
+          </label>
           <button class="btn secondary" :disabled="loading.register" @click="handleRegister">
             {{ loading.register ? '验证中...' : '注册并验证' }}
           </button>
@@ -146,6 +154,7 @@ const form = ref({
   secret_key: '',
   passphrase: '',
   note: '',
+  is_demo: false,
 })
 
 onMounted(async () => {
@@ -170,9 +179,9 @@ async function handleLogin(): Promise<void> {
 async function handleRegister(): Promise<void> {
   const f = form.value
   if (!f.label || !f.api_key || !f.secret_key || !f.passphrase) return
-  const ok = await register(f.label, f.api_key, f.secret_key, f.passphrase, f.note)
+  const ok = await register(f.label, f.api_key, f.secret_key, f.passphrase, f.note, f.is_demo)
   if (ok) {
-    form.value = { label: '', api_key: '', secret_key: '', passphrase: '', note: '' }
+    form.value = { label: '', api_key: '', secret_key: '', passphrase: '', note: '', is_demo: false }
   }
 }
 
@@ -412,4 +421,37 @@ function formatEq(val: string | number): string {
 }
 
 .input:focus { border-color: #2962ff; }
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #d1d4dc;
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #2962ff;
+}
+
+.demo-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+  margin-left: 6px;
+}
+
+.real-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(41, 98, 255, 0.2);
+  color: #2962ff;
+  margin-left: 6px;
+}
 </style>

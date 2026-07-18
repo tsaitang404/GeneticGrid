@@ -9,6 +9,7 @@ class OKXAccount(models.Model):
     passphrase_hash = models.CharField(max_length=256, help_text="bcrypt 哈希（用于登陆校验）")
     account_info = models.JSONField(null=True, blank=True, help_text="注册时拉取的账户信息缓存")
     note = models.CharField(max_length=128, blank=True, default='', help_text="权限备注(只读/交易/网格等)")
+    is_demo = models.BooleanField(default=False, help_text="是否为模拟盘(OKX Demo)")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)

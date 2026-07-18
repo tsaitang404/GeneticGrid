@@ -84,6 +84,7 @@ export function useAuth() {
     secret_key: string,
     passphrase: string,
     note: string,
+    is_demo: boolean = false,
   ): Promise<boolean> {
     loading.register = true
     error.value = ''
@@ -91,7 +92,7 @@ export function useAuth() {
       const resp = await fetch('/api/account/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, api_key, secret_key, passphrase, note }),
+        body: JSON.stringify({ label, api_key, secret_key, passphrase, note, is_demo }),
       })
       const result = await resp.json()
       if (result.code === 0) {

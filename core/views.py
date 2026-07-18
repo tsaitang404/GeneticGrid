@@ -20,6 +20,7 @@ from .okx_auth import (
     encrypt_credential, decrypt_credential,
     hash_passphrase, verify_passphrase,
     fetch_account_info, fetch_balance, fetch_positions,
+    OKX_DEMO_URL, OKX_REAL_URL,
 )
 from .models import OKXAccount
 from pathlib import Path
@@ -655,7 +656,7 @@ def _session_creds(request) -> tuple:
     creds = request.session.get('okx_credentials')
     if not creds:
         raise Exception('未登录')
-    return creds['api_key'], creds['secret_key'], creds['passphrase']
+    return creds['api_key'], creds['secret_key'], creds['passphrase'], creds.get('is_demo', False)
 
 
 @csrf_exempt
@@ -670,6 +671,8 @@ def api_account_register(request):
         secret_key = data.get('secret_key', '').strip()
         passphrase = data.get('passphrase', '').strip()
         note = data.get('note', '').strip()
+        is_demo = data.get('is_demo', False)
+        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
 
         if not all([label, api_key, secret_key, passphrase]):
             return JsonResponse({'code': -1, 'error': '缺少必填字段'}, status=400)
@@ -678,7 +681,7 @@ def api_account_register(request):
             return JsonResponse({'code': -1, 'error': '该 API Key 已注册'}, status=409)
 
         # 测试连通性
-        info = fetch_account_info(api_key, secret_key, passphrase)
+        info = fetch_account_info(api_key, secret_key, passphrase, base_url=base_url)
 
         account = OKXAccount.objects.create(
             label=label,
@@ -688,6 +691,7 @@ def api_account_register(request):
             passphrase_hash=hash_passphrase(passphrase),
             account_info=info,
             note=note,
+            is_demo=is_demo,
         )
 
         # 注册成功后自动登陆
@@ -697,6 +701,7 @@ def api_account_register(request):
             'passphrase': passphrase,
             'account_id': account.pk,
             'label': account.label,
+            'is_demo': is_demo,
         }
         request.session.set_expiry(0)
 
@@ -707,6 +712,7 @@ def api_account_register(request):
                 'label': account.label,
                 'api_key_masked': account.api_key[:8] + '****',
                 'note': account.note,
+                'is_demo': is_demo,
                 'account_info': info,
             }
         })
@@ -727,6 +733,7 @@ def api_account_list(request):
             'label': a.label,
             'api_key_masked': a.api_key[:8] + '****',
             'note': a.note,
+            'is_demo': a.is_demo,
             'account_info': a.account_info,
             'last_used_at': a.last_used_at.isoformat() if a.last_used_at else None,
             'created_at': a.created_at.isoformat(),
@@ -765,6 +772,7 @@ def api_account_login(request):
             'passphrase': enc_pass,
             'account_id': account.pk,
             'label': account.label,
+            'is_demo': account.is_demo,
         }
         request.session.set_expiry(0)  # 浏览器会话级
 
@@ -778,6 +786,7 @@ def api_account_login(request):
                 'label': account.label,
                 'api_key_masked': account.api_key[:8] + '****',
                 'note': account.note,
+                'is_demo': account.is_demo,
                 'account_info': account.account_info,
             }
         })
@@ -817,8 +826,9 @@ def api_account_session(request):
 def api_account_balance(request):
     """获取账户余额（需 session）"""
     try:
-        api_key, secret_key, passphrase = _session_creds(request)
-        balance = fetch_balance(api_key, secret_key, passphrase)
+        api_key, secret_key, passphrase, is_demo = _session_creds(request)
+        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
+        balance = fetch_balance(api_key, secret_key, passphrase, base_url=base_url)
         return JsonResponse({'code': 0, 'data': balance})
     except Exception as e:
         return JsonResponse({'code': -1, 'error': str(e)}, status=401 if '未登录' in str(e) else 400)
@@ -827,8 +837,9 @@ def api_account_balance(request):
 def api_account_positions(request):
     """获取持仓（需 session）"""
     try:
-        api_key, secret_key, passphrase = _session_creds(request)
-        positions = fetch_positions(api_key, secret_key, passphrase)
+        api_key, secret_key, passphrase, is_demo = _session_creds(request)
+        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
+        positions = fetch_positions(api_key, secret_key, passphrase, base_url=base_url)
         return JsonResponse({
             'code': 0,
             'data': {

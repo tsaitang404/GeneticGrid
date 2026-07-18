@@ -587,7 +587,7 @@ def test_api_account_list_returns_registered(monkeypatch):
     from datetime import datetime
     fake_obj = SimpleNamespace(
         pk=1, label='testkey', api_key='abc123456789',
-        note='', account_info=None,
+        note='', is_demo=False, account_info=None,
         last_used_at=None, created_at=datetime(2025, 1, 1),
     )
     monkeypatch.setattr('core.views.OKXAccount.objects.filter', lambda **kw: SimpleNamespace(order_by=lambda *a, **kw: [fake_obj]))

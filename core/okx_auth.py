@@ -15,6 +15,9 @@ from core.proxy_config import get_proxy_dict
 
 logger = logging.getLogger(__name__)
 
+OKX_REAL_URL = 'https://www.okx.com'
+OKX_DEMO_URL = 'https://www.okx.cab'
+
 
 _fernet: Fernet | None = None
 
@@ -79,13 +82,14 @@ def okx_api_request(
     params: Optional[dict] = None,
     body: Optional[dict] = None,
     timeout: int = 30,
+    base_url: str = OKX_REAL_URL,
 ) -> dict:
     ts = _timestamp()
     body_str = json.dumps(body) if body else ''
     sig = _signature(secret_key, ts, method, path, body_str)
     headers = _build_headers(api_key, passphrase, ts, sig)
     proxies = get_proxy_dict()
-    url = f"https://www.okx.com{path}"
+    url = f"{base_url}{path}"
 
     try:
         if method.upper() == 'GET':
@@ -100,8 +104,8 @@ def okx_api_request(
         raise Exception(f"OKX API 请求失败 ({path}): {e}")
 
 
-def fetch_account_info(api_key: str, secret_key: str, passphrase: str) -> dict:
-    result = okx_api_request('GET', '/api/v5/account/config', api_key, secret_key, passphrase)
+def fetch_account_info(api_key: str, secret_key: str, passphrase: str, base_url: str = OKX_REAL_URL) -> dict:
+    result = okx_api_request('GET', '/api/v5/account/config', api_key, secret_key, passphrase, base_url=base_url)
     if result.get('code') != '0':
         raise Exception(f"获取账户配置失败: {result.get('msg', '未知错误')}")
     data = result.get('data', [{}])[0]
@@ -114,8 +118,8 @@ def fetch_account_info(api_key: str, secret_key: str, passphrase: str) -> dict:
     }
 
 
-def fetch_balance(api_key: str, secret_key: str, passphrase: str) -> dict:
-    result = okx_api_request('GET', '/api/v5/account/balance', api_key, secret_key, passphrase)
+def fetch_balance(api_key: str, secret_key: str, passphrase: str, base_url: str = OKX_REAL_URL) -> dict:
+    result = okx_api_request('GET', '/api/v5/account/balance', api_key, secret_key, passphrase, base_url=base_url)
     if result.get('code') != '0':
         raise Exception(f"获取余额失败: {result.get('msg', '未知错误')}")
     data_raw = result.get('data') or [{}]
@@ -136,8 +140,8 @@ def fetch_balance(api_key: str, secret_key: str, passphrase: str) -> dict:
     }
 
 
-def fetch_positions(api_key: str, secret_key: str, passphrase: str) -> list:
-    result = okx_api_request('GET', '/api/v5/account/positions', api_key, secret_key, passphrase)
+def fetch_positions(api_key: str, secret_key: str, passphrase: str, base_url: str = OKX_REAL_URL) -> list:
+    result = okx_api_request('GET', '/api/v5/account/positions', api_key, secret_key, passphrase, base_url=base_url)
     if result.get('code') != '0':
         raise Exception(f"获取持仓失败: {result.get('msg', '未知错误')}")
     positions = []

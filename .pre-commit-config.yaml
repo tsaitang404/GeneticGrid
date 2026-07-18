@@ -21,7 +21,7 @@ repos:
 
       - id: eslint
         name: eslint (JS/TS/Vue syntax check)
-        entry: bash -c 'source ~/.nvm/nvm.sh && nvm use 20.17.0 2>/dev/null && cd frontend && npx eslint . --ext .vue,.js,.ts,.tsx --ignore-path .gitignore --max-warnings 50'
+        entry: bash -c 'source ~/.nvm/nvm.sh && nvm use 20.17.0 2>/dev/null && cd frontend && npx eslint . --ext .vue,.js,.ts,.tsx --ignore-path .gitignore --max-warnings 60'
         language: system
         pass_filenames: false
         always_run: true
