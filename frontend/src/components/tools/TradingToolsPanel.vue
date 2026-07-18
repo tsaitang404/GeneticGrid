@@ -155,7 +155,6 @@ import { useAuth } from '../../composables/useAuth'
 
 const {
   positions,
-  loading,
   session,
   error: authError,
   isLoggedIn,

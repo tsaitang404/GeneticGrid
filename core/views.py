@@ -690,6 +690,16 @@ def api_account_register(request):
             note=note,
         )
 
+        # 注册成功后自动登陆
+        request.session['okx_credentials'] = {
+            'api_key': account.api_key,
+            'secret_key': secret_key,
+            'passphrase': passphrase,
+            'account_id': account.pk,
+            'label': account.label,
+        }
+        request.session.set_expiry(0)
+
         return JsonResponse({
             'code': 0,
             'data': {

@@ -54,7 +54,5 @@ else
     log "已提交: $msg"
 fi
 
-# 5. 推送
-log "推送到远程..."
-git push
-log "✅ 推送完成"
+# 5. 推送已在 post-commit hook 中自动完成
+log "✅ 提交完成（post-commit 会自动推送并部署 Docker）"
