@@ -20,7 +20,6 @@ from .okx_auth import (
     encrypt_credential, decrypt_credential,
     hash_passphrase, verify_passphrase,
     fetch_account_info, fetch_balance, fetch_positions,
-    OKX_DEMO_URL, OKX_REAL_URL,
 )
 from .models import OKXAccount
 from pathlib import Path
@@ -672,7 +671,6 @@ def api_account_register(request):
         passphrase = data.get('passphrase', '').strip()
         note = data.get('note', '').strip()
         is_demo = data.get('is_demo', False)
-        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
 
         if not all([label, api_key, secret_key, passphrase]):
             return JsonResponse({'code': -1, 'error': '缺少必填字段'}, status=400)
@@ -680,8 +678,8 @@ def api_account_register(request):
         if OKXAccount.objects.filter(api_key=api_key).exists():
             return JsonResponse({'code': -1, 'error': '该 API Key 已注册'}, status=409)
 
-        # 测试连通性
-        info = fetch_account_info(api_key, secret_key, passphrase, base_url=base_url)
+        # 测试连通性（模拟盘需加 x-simulated-trading: 1 头）
+        info = fetch_account_info(api_key, secret_key, passphrase, is_demo=is_demo)
 
         account = OKXAccount.objects.create(
             label=label,
@@ -827,8 +825,7 @@ def api_account_balance(request):
     """获取账户余额（需 session）"""
     try:
         api_key, secret_key, passphrase, is_demo = _session_creds(request)
-        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
-        balance = fetch_balance(api_key, secret_key, passphrase, base_url=base_url)
+        balance = fetch_balance(api_key, secret_key, passphrase, is_demo=is_demo)
         return JsonResponse({'code': 0, 'data': balance})
     except Exception as e:
         return JsonResponse({'code': -1, 'error': str(e)}, status=401 if '未登录' in str(e) else 400)
@@ -838,8 +835,7 @@ def api_account_positions(request):
     """获取持仓（需 session）"""
     try:
         api_key, secret_key, passphrase, is_demo = _session_creds(request)
-        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
-        positions = fetch_positions(api_key, secret_key, passphrase, base_url=base_url)
+        positions = fetch_positions(api_key, secret_key, passphrase, is_demo=is_demo)
         return JsonResponse({
             'code': 0,
             'data': {
