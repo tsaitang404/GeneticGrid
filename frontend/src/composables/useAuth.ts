@@ -5,6 +5,7 @@ export interface OKXAccount {
   label: string
   api_key_masked: string
   note: string
+  is_demo: boolean
   account_info: Record<string, any> | null
   last_used_at: string | null
   created_at: string

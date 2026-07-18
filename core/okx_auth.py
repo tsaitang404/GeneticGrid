@@ -96,11 +96,19 @@ def okx_api_request(
             resp = requests.get(url, headers=headers, params=params, proxies=proxies, timeout=timeout)
         else:
             resp = requests.post(url, headers=headers, json=body, proxies=proxies, timeout=timeout)
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            try:
+                err = resp.json()
+                msg = err.get('msg', resp.reason)
+            except Exception:
+                msg = resp.reason
+            raise Exception(f"OKX API 错误 ({path}): {msg} (code={resp.status_code})")
         return resp.json()
     except requests.exceptions.Timeout:
         raise Exception(f"OKX API 请求超时 ({path})")
     except requests.exceptions.RequestException as e:
+        if 'OKX API 错误' in str(e):
+            raise
         raise Exception(f"OKX API 请求失败 ({path}): {e}")
 
 
