@@ -4,7 +4,7 @@
     <div class="current-basis-section">
       <div class="basis-header">
         <h3>当前合约基差</h3>
-        <span class="update-time" v-if="basisData?.timestamp">
+        <span v-if="basisData?.timestamp" class="update-time">
           {{ formatTime(basisData.timestamp) }}
         </span>
       </div>
@@ -47,18 +47,18 @@
       
       <div class="chart-container">
         <div v-if="chartLoading" class="chart-loading">
-          <div class="spinner"></div>
+          <div class="spinner" />
         </div>
         <div v-else-if="chartError" class="chart-error">
           <p>{{ chartError }}</p>
-          <button @click="loadHistory" class="retry-btn">重试</button>
+          <button class="retry-btn" @click="loadHistory">重试</button>
         </div>
-        <canvas v-else ref="chartCanvas" class="basis-chart"></canvas>
+        <canvas v-else ref="chartCanvas" class="basis-chart" />
       </div>
     </div>
 
     <!-- 市场分析 -->
-    <div class="analysis-section" v-if="basisData">
+    <div v-if="basisData" class="analysis-section">
       <h4>市场状态</h4>
       <div class="market-state" :class="marketStateClass">
         {{ marketStateText }}

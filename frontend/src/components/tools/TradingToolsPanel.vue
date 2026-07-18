@@ -19,7 +19,7 @@
     <div v-show="activeTab === 'position'" class="tab-content">
       <div class="position-section">
         <h4>持有仓位</h4>
-        <button class="refresh-btn" @click="loadPositions" :disabled="posLoading">
+        <button class="refresh-btn" :disabled="posLoading" @click="loadPositions">
           {{ posLoading ? '加载中...' : '刷新' }}
         </button>
       </div>
@@ -67,13 +67,13 @@
         </div>
       </div>
 
-      <hr />
+      <hr>
 
       <div class="form-title">开平仓</div>
       <div class="form-grid">
         <div class="form-group">
           <label>交易对</label>
-          <input v-model="positionForm.symbol" placeholder="如 BTC-USDT" />
+          <input v-model="positionForm.symbol" placeholder="如 BTC-USDT">
         </div>
         <div class="form-group">
           <label>方向</label>
@@ -84,11 +84,11 @@
         </div>
         <div class="form-group">
           <label>杠杆</label>
-          <input v-model.number="positionForm.leverage" type="number" min="1" max="125" />
+          <input v-model.number="positionForm.leverage" type="number" min="1" max="125">
         </div>
         <div class="form-group">
           <label>数量</label>
-          <input v-model.number="positionForm.size" type="number" min="0" step="0.0001" />
+          <input v-model.number="positionForm.size" type="number" min="0" step="0.0001">
         </div>
       </div>
       <div class="form-actions">
@@ -103,23 +103,23 @@
       <div class="form-grid">
         <div class="form-group">
           <label>交易对</label>
-          <input v-model="gridForm.symbol" placeholder="如 BTCUSDT" />
+          <input v-model="gridForm.symbol" placeholder="如 BTCUSDT">
         </div>
         <div class="form-group">
           <label>网格数量</label>
-          <input v-model.number="gridForm.grids" type="number" min="2" max="200" />
+          <input v-model.number="gridForm.grids" type="number" min="2" max="200">
         </div>
         <div class="form-group">
           <label>下限价格</label>
-          <input v-model.number="gridForm.lower" type="number" min="0" step="0.01" />
+          <input v-model.number="gridForm.lower" type="number" min="0" step="0.01">
         </div>
         <div class="form-group">
           <label>上限价格</label>
-          <input v-model.number="gridForm.upper" type="number" min="0" step="0.01" />
+          <input v-model.number="gridForm.upper" type="number" min="0" step="0.01">
         </div>
         <div class="form-group">
           <label>投资金额</label>
-          <input v-model.number="gridForm.invest" type="number" min="0" step="0.01" />
+          <input v-model.number="gridForm.invest" type="number" min="0" step="0.01">
         </div>
         <div class="form-group">
           <label>风格</label>
@@ -150,12 +150,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useAuth } from '../../composables/useAuth'
+
+const {
+  positions,
+  loading,
+  session,
+  error: authError,
+  isLoggedIn,
+  fetchPositions,
+} = useAuth()
+
+watch(session, (newVal) => {
+  if (!newVal?.authenticated) {
+    positions.value = []
+    posError.value = ''
+  }
+})
 
 const activeTab = ref<'position' | 'grid'>('position')
 
 // 仓位管理相关
-const positions = ref<any[]>([])
 const posLoading = ref(false)
 const posError = ref('')
 
@@ -195,29 +211,16 @@ const stepPreview = computed(() => {
 
 // 加载仓位信息
 const loadPositions = async (): Promise<void> => {
+  if (!isLoggedIn.value) {
+    posError.value = '请先在账户面板登陆'
+    return
+  }
   posLoading.value = true
   posError.value = ''
-  positions.value = []
-
-  try {
-    const response = await fetch('/api/positions/?source=okx')
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const result = await response.json()
-
-    if (result.code === 0 && result.data) {
-      positions.value = result.data.positions || []
-    } else {
-      posError.value = result.error || '获取仓位失败'
-    }
-  } catch (error: any) {
-    console.error('Failed to load positions:', error)
-    posError.value = error.message || '网络错误'
-  } finally {
-    posLoading.value = false
+  await fetchPositions()
+  posLoading.value = false
+  if (authError.value) {
+    posError.value = authError.value
   }
 }
 

@@ -4,16 +4,16 @@
       v-for="tf in primaryTimeframes"
       :key="tf"
       :class="{ active: modelValue === tf }"
-      @click="handleSelect(tf)"
       class="timeframe-btn"
+      @click="handleSelect(tf)"
     >
       {{ tf }}
     </button>
     
     <select
       v-model="moreTimeframe"
-      @change="handleMoreChange"
       class="more-timeframes"
+      @change="handleMoreChange"
     >
       <option value="">更多...</option>
       <option
@@ -28,14 +28,14 @@
     
     <input
       v-show="showCustomInput"
-      v-model="customValue"
-      @keydown.enter="applyCustom"
-      @blur="cancelCustom"
       ref="customInputRef"
+      v-model="customValue"
       type="text"
       class="custom-input"
       placeholder="如: 2h, 7d"
-    />
+      @keydown.enter="applyCustom"
+      @blur="cancelCustom"
+    >
   </div>
 </template>
 

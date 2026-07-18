@@ -1,10 +1,10 @@
 <template>
   <div
     class="resize-handle"
+    :class="{ hovered: isHovered }"
     @mousedown.prevent="$emit('resize-start', $event)"
     @mouseover="isHovered = true"
     @mouseleave="isHovered = false"
-    :class="{ hovered: isHovered }"
   >
     <div class="handle-indicator" />
   </div>

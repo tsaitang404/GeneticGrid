@@ -59,11 +59,11 @@ def test_standard_granularities():
             # 验证粒度
             is_valid, invalid = Granularity.validate_list(granularities)
             if is_valid:
-                print(f"   ✅ 所有粒度符合标准协议")
+                print("   ✅ 所有粒度符合标准协议")
             else:
                 print(f"   ⚠️ 非标准粒度: {', '.join(invalid)}")
         else:
-            print(f"   不支持 K线数据")
+            print("   不支持 K线数据")
     
     # 测试粒度聚合
     print("\n" + "="*60)
@@ -72,7 +72,7 @@ def test_standard_granularities():
     
     okx = manager.get_plugin("okx")
     if okx:
-        print(f"\n测试 OKX 插件聚合功能...")
+        print("\n测试 OKX 插件聚合功能...")
         print(f"OKX 支持的粒度: {', '.join(okx._capability.candlestick_granularities)}")
         
         # 测试聚合功能
@@ -94,7 +94,7 @@ def test_standard_granularities():
                     print(f"   最新时间: {datetime.fromtimestamp(latest.time)}")
                     print(f"   价格: {latest.close}")
                     if should_aggregate:
-                        print(f"   (通过粒度聚合获得)")
+                        print("   (通过粒度聚合获得)")
             except Exception as e:
                 print(f"   ⚠️ {e}")
     

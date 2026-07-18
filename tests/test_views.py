@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import mock_open
 
 import django  # type: ignore
-import requests  # type: ignore
 from django.test import RequestFactory
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -518,126 +517,82 @@ def test_api_source_documentation_handles_exception(monkeypatch):
     assert response.status_code == 500
 
 
-def test_api_positions_rejects_unsupported_source():
-    request = RequestFactory().get('/api/positions/', {'source': 'binance'})
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 400
-    assert '暂不支持' in _json(response)['error']
-
-
-def test_api_positions_handles_timeout(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: (_ for _ in ()).throw(requests.exceptions.Timeout()))
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 408
-    assert _json(response)['error'] == 'OKX API 请求超时'
+def _with_session(request, creds: dict | None = None):
+    """Attach a session to a RequestFactory request."""
+    from django.contrib.sessions.middleware import SessionMiddleware
+    middleware = SessionMiddleware(lambda req: None)
+    middleware.process_request(request)
+    request.session.save()
+    if creds:
+        request.session['okx_credentials'] = creds
+        request.session.save()
+    return request
 
 
-def test_api_positions_returns_filtered_positions(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
+def test_api_positions_returns_no_auth():
+    request = _with_session(RequestFactory().get('/api/account/positions/'))
+    response = views.api_account_positions(request)
+    assert response.status_code == 401
+    assert '未登录' in _json(response)['error']
 
-    class FakeResponse:
-        status_code = 200
 
-        @staticmethod
-        def json():
-            return {
-                'code': '0',
-                'data': [
-                    {
-                        'instId': 'BTC-USDT-SWAP',
-                        'pos': '2',
-                        'notionalUsd': '200',
-                        'markPx': '100',
-                        'lever': '10',
-                        'mgnMode': 'cross',
-                        'posSide': 'long',
-                        'availPos': '1',
-                        'frozenQty': '0.5',
-                        'upl': '12',
-                        'uplRatio': '0.1',
-                        'uTime': '123456',
-                    },
-                    {
-                        'instId': 'ETH-USDT-SWAP',
-                        'pos': '0',
-                    },
-                ],
-            }
+def test_api_account_positions_returns_filtered(monkeypatch):
+    request = _with_session(
+        RequestFactory().get('/api/account/positions/'),
+        {'api_key': 'k', 'secret_key': 's', 'passphrase': 'p'},
+    )
 
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: FakeResponse())
+    fake_positions = [
+        {'symbol': 'BTC-USDT-SWAP', 'positionQty': 2, 'notionalValue': 200, 'markPrice': 100, 'leverage': 10, 'mgnMode': 'cross', 'side': 'long', 'available': 1, 'frozenQty': 0.5, 'unrealizedPnl': 12, 'unrealizedPnlRatio': 0.1, 'timestamp': '123456'},
+    ]
+    monkeypatch.setattr('core.views.fetch_positions', lambda *a, **kw: fake_positions)
 
-    response = views.api_positions(request)
-
+    response = views.api_account_positions(request)
     assert response.status_code == 200
     payload = _json(response)
     assert payload['data']['total'] == 1
     assert payload['data']['positions'][0]['symbol'] == 'BTC-USDT-SWAP'
 
 
-def test_api_positions_handles_non_200_response(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
+def test_api_account_balance_returns_data(monkeypatch):
+    request = _with_session(
+        RequestFactory().get('/api/account/balance/'),
+        {'api_key': 'k', 'secret_key': 's', 'passphrase': 'p'},
+    )
 
-    class FakeResponse:
-        status_code = 503
+    fake_balance = {'totalEq': '1000', 'details': [{'ccy': 'USDT', 'eq': '500'}]}
+    monkeypatch.setattr('core.views.fetch_balance', lambda *a, **kw: fake_balance)
 
-        @staticmethod
-        def json():
-            return {}
-
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: FakeResponse())
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 503
-    assert 'OKX API 返回 503' in _json(response)['error']
+    response = views.api_account_balance(request)
+    assert response.status_code == 200
+    payload = _json(response)
+    assert payload['data']['totalEq'] == '1000'
 
 
-def test_api_positions_handles_okx_business_error(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
+def test_api_account_session_returns_status():
+    request = _with_session(RequestFactory().get('/api/account/session/'))
+    response = views.api_account_session(request)
+    assert _json(response)['data']['authenticated'] is False
 
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json():
-            return {'code': '1', 'msg': 'bad request'}
-
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: FakeResponse())
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 400
-    assert _json(response)['error'] == 'bad request'
+    request2 = _with_session(
+        RequestFactory().get('/api/account/session/'),
+        {'api_key': 'k', 'secret_key': 's', 'passphrase': 'p', 'account_id': 1, 'label': 'test'},
+    )
+    response2 = views.api_account_session(request2)
+    assert _json(response2)['data']['authenticated'] is True
+    assert _json(response2)['data']['label'] == 'test'
 
 
-def test_api_positions_handles_request_exception(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: (_ for _ in ()).throw(requests.exceptions.RequestException('network error')))
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 500
-    assert '网络错误' in _json(response)['error']
-
-
-def test_api_positions_handles_unexpected_exception(monkeypatch):
-    request = RequestFactory().get('/api/positions/', {'source': 'okx'})
-
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json():
-            raise RuntimeError('bad payload')
-
-    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: FakeResponse())
-
-    response = views.api_positions(request)
-
-    assert response.status_code == 500
-    assert _json(response)['error'] == 'bad payload'
+def test_api_account_list_returns_registered(monkeypatch):
+    from datetime import datetime
+    fake_obj = SimpleNamespace(
+        pk=1, label='testkey', api_key='abc123456789',
+        note='', account_info=None,
+        last_used_at=None, created_at=datetime(2025, 1, 1),
+    )
+    monkeypatch.setattr('core.views.OKXAccount.objects.filter', lambda **kw: SimpleNamespace(order_by=lambda *a, **kw: [fake_obj]))
+    request = _with_session(RequestFactory().get('/api/account/list/'))
+    response = views.api_account_list(request)
+    payload = _json(response)
+    assert len(payload['data']) == 1
+    assert payload['data'][0]['label'] == 'testkey'

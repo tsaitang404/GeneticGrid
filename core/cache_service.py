@@ -377,11 +377,11 @@ class CandlestickCacheService:
             logger.info(f"✅ API success: {len(api_data)} candles")
             return api_data
             
-        except MarketAPIError as e:
+        except MarketAPIError:
             # API失败时，返回缓存数据（即使不足）
             if cached_data:
                 logger.warning(f"⚠️ API failed, returning cached data: {len(cached_data)} candles")
                 return cached_data
             else:
-                logger.error(f"❌ API failed and no cached data available")
+                logger.error("❌ API failed and no cached data available")
                 raise

@@ -45,12 +45,12 @@ def test_plugin_proxy_config():
             direct_plugins.append(name)
             print(f"  🌐 {metadata.display_name:20} - 直接连接")
     
-    print(f"\n📊 统计:")
+    print("\n📊 统计:")
     print(f"  - 需要代理: {len(proxy_plugins)} 个 {proxy_plugins}")
     print(f"  - 直接连接: {len(direct_plugins)} 个 {direct_plugins}")
     
     # 测试代理注入
-    print(f"\n🧪 测试代理注入:\n")
+    print("\n🧪 测试代理注入:\n")
     
     test_plugins = []
     if proxy_plugins:
@@ -96,7 +96,7 @@ def test_plugin_proxy_config():
                     print(f"     配置要求: {'🔐 需要代理' if requires_proxy else '🌐 直连'}")
                     print(f"     实际状态: {proxy_info}\n")
                 else:
-                    print(f"  ⚠️  服务没有 session 属性\n")
+                    print("  ⚠️  服务没有 session 属性\n")
             except AttributeError as e:
                 print(f"  ⚠️  插件没有 _service 属性: {e}\n")
                 

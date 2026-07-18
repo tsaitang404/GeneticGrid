@@ -1,0 +1,24 @@
+{
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportPrivateUsage": false,
+  "reportUnnecessaryTypeIgnoreComment": false,
+  "reportIncompatibleMethodOverride": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportArgumentType": "warning",
+  "reportReturnType": "warning",
+  "reportOperatorIssue": "none",
+  "reportAssignmentType": "none",
+  "reportIndexIssue": "none",
+  "exclude": [
+    "tests",
+    ".venv",
+    "migrations",
+    "static",
+    "frontend"
+  ]
+}

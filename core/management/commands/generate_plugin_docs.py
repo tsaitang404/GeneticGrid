@@ -4,7 +4,7 @@ Django 管理命令：生成数据源插件文档
 """
 
 from django.core.management.base import BaseCommand
-from django.core.management.color import no_style, color_style
+from django.core.management.color import color_style
 from core.plugins.manager import get_plugin_manager
 from core.plugins.documentation import DocumentationGenerator
 from pathlib import Path

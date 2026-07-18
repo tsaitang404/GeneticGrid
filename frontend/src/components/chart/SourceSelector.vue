@@ -2,19 +2,19 @@
   <div class="source-selector">
     <label class="source-label">数据源:</label>
     <div class="source-select-wrapper">
-      <div class="source-dropdown" ref="dropdownRef">
+      <div ref="dropdownRef" class="source-dropdown">
         <button 
           class="source-button" 
           :class="{ 'dropdown-open': showDropdown }"
           :disabled="loading || error"
-          @click="toggleDropdown"
           type="button"
+          @click="toggleDropdown"
         >
           <span v-if="loading" class="source-value">加载中...</span>
           <span v-else-if="error" class="source-value">加载失败</span>
           <span v-else class="source-value">{{ displaySource }}</span>
           <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 12 12">
-            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
         
@@ -25,8 +25,8 @@
               :key="src.name"
               class="source-option"
               :class="{ 'selected': src.name === modelValue }"
-              @click="selectSource(src)"
               type="button"
+              @click="selectSource(src)"
             >
               <div class="source-content">
                 <span class="source-name">{{ src.display_name }}</span>
@@ -46,7 +46,7 @@
                 </span>
               </div>
               <svg v-if="src.name === modelValue" class="check-icon" width="14" height="14" viewBox="0 0 14 14">
-                <path d="M3 7l3 3 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 7l3 3 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
           </div>

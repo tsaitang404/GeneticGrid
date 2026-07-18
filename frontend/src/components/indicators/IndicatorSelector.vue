@@ -1,6 +1,6 @@
 <template>
   <div class="indicator-selector">
-    <div class="indicator-dropdown" ref="dropdownRef">
+    <div ref="dropdownRef" class="indicator-dropdown">
       <button
         class="indicator-btn"
         @click="toggleDropdown"
@@ -14,15 +14,15 @@
           v-for="item in allIndicatorEntries"
           :key="item.key"
           class="dropdown-item"
-          @click="emitToggle(item.key)"
           :title="item.config.description"
+          @click="emitToggle(item.key)"
         >
           <input
             type="checkbox"
             :checked="item.config.enabled"
             @click.stop
             @change="emitToggle(item.key)"
-          />
+          >
           <div class="indicator-info">
             <div class="indicator-name">
               <span class="name-en">{{ item.config.name }}</span>

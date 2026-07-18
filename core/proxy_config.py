@@ -355,7 +355,7 @@ def configure_requests_proxies(session=None) -> Optional[Dict[str, str]]:
     
     if session and proxies:
         session.proxies.update(proxies)
-        logger.info(f"✅ 已为 requests session 配置代理")
+        logger.info("✅ 已为 requests session 配置代理")
     
     return proxies
 

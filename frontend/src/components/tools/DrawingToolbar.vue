@@ -2,18 +2,18 @@
   <div class="drawing-controls">
     <button
       v-if="!expanded"
-      @click="$emit('update:expanded', true)"
       class="toggle-btn"
       title="画线工具"
+      @click="$emit('update:expanded', true)"
     >
       ✏️
     </button>
     
     <div v-else class="drawing-toolbar">
       <button
-        @click="$emit('update:expanded', false)"
         class="close-btn"
         title="收起"
+        @click="$emit('update:expanded', false)"
       >
         ✕
       </button>
@@ -27,9 +27,9 @@
       >
         <button
           :class="{ active: modelValue === tool.id }"
-          @click="handleToolClick(tool)"
           :title="tool.name"
           class="tool-btn"
+          @click="handleToolClick(tool)"
         >
           {{ tool.icon }}
         </button>
@@ -58,9 +58,9 @@
       </div>
       
       <button
-        @click="handleTrashClick"
         :class="['tool-btn', { active: modelValue === 'delete' }]"
         :title="modelValue === 'delete' ? '再次点击清除全部' : '删除模式'"
+        @click="handleTrashClick"
       >
         🗑️
       </button>

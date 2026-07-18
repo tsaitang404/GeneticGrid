@@ -45,7 +45,7 @@
     <section class="insight-section">
       <div class="section-header">
         <h3>市场脉搏</h3>
-        <span class="pulse-dot"></span>
+        <span class="pulse-dot" />
       </div>
       <ul>
         <li v-for="item in insights" :key="item.label" class="insight-row">

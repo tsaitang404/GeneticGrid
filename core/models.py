@@ -1,6 +1,27 @@
 from django.db import models
 
 
+class OKXAccount(models.Model):
+    label = models.CharField(max_length=64, help_text="用户命名，如'只读Key'")
+    api_key = models.CharField(max_length=128, unique=True, help_text="OKX API Key")
+    encrypted_secret_key = models.BinaryField(help_text="Fernet 加密的 Secret Key")
+    encrypted_passphrase = models.BinaryField(help_text="Fernet 加密的 Passphrase")
+    passphrase_hash = models.CharField(max_length=256, help_text="bcrypt 哈希（用于登陆校验）")
+    account_info = models.JSONField(null=True, blank=True, help_text="注册时拉取的账户信息缓存")
+    note = models.CharField(max_length=128, blank=True, default='', help_text="权限备注(只读/交易/网格等)")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'okx_account'
+        verbose_name = 'OKX 账户'
+        verbose_name_plural = 'OKX 账户'
+
+    def __str__(self):
+        return f"{self.label} ({self.api_key[:8]}...)"
+
+
 class CandlestickCache(models.Model):
     """K线数据缓存表"""
     

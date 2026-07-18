@@ -5,7 +5,10 @@
         <h1 class="logo">GeneticGrid</h1>
       </div>
       <div class="header-right">
-        <button @click="toggleSettings" class="settings-btn">⚙️ 设置</button>
+        <button :class="['account-btn', { logged: isLoggedIn }]" @click="toggleAccount">
+          {{ isLoggedIn ? `🔑 ${activeLabel}` : '🔑 账户' }}
+        </button>
+        <button class="settings-btn" @click="toggleSettings">⚙️ 设置</button>
       </div>
     </header>
 
@@ -26,56 +29,56 @@
             />
           </section>
           <aside class="market-column">
-          <!-- 合约模式下的标签切换 -->
-          <div v-if="currentMode === 'contract'" class="panel-tabs">
-            <button 
-              :class="['tab-btn', { active: activeTab === 'market' }]"
-              @click="activeTab = 'market'"
-            >
-              市场信息
-            </button>
-            <button 
-              :class="['tab-btn', { active: activeTab === 'funding' }]"
-              @click="activeTab = 'funding'"
-            >
-              资金费率
-            </button>
-            <button 
-              :class="['tab-btn', { active: activeTab === 'basis' }]"
-              @click="activeTab = 'basis'"
-            >
-              合约基差
-            </button>
-          </div>
+            <!-- 合约模式下的标签切换 -->
+            <div v-if="currentMode === 'contract'" class="panel-tabs">
+              <button 
+                :class="['tab-btn', { active: activeTab === 'market' }]"
+                @click="activeTab = 'market'"
+              >
+                市场信息
+              </button>
+              <button 
+                :class="['tab-btn', { active: activeTab === 'funding' }]"
+                @click="activeTab = 'funding'"
+              >
+                资金费率
+              </button>
+              <button 
+                :class="['tab-btn', { active: activeTab === 'basis' }]"
+                @click="activeTab = 'basis'"
+              >
+                合约基差
+              </button>
+            </div>
 
-          <MarketInfoPanel
-            v-show="currentMode === 'spot' || activeTab === 'market'"
-            :symbol="currentSymbol"
-            :source="currentSource"
-            :ticker="ticker"
-            :currency="currency"
-          />
+            <MarketInfoPanel
+              v-show="currentMode === 'spot' || activeTab === 'market'"
+              :symbol="currentSymbol"
+              :source="currentSource"
+              :ticker="ticker"
+              :currency="currency"
+            />
           
-          <FundingRatePanel
-            v-if="currentMode === 'contract' && activeTab === 'funding'"
-            :symbol="currentSymbol"
-            :source="currentSource"
-            :funding-data="fundingRate"
-            :loading="fundingLoading"
-            :error="fundingError"
-            @retry="loadFundingRate"
-          />
+            <FundingRatePanel
+              v-if="currentMode === 'contract' && activeTab === 'funding'"
+              :symbol="currentSymbol"
+              :source="currentSource"
+              :funding-data="fundingRate"
+              :loading="fundingLoading"
+              :error="fundingError"
+              @retry="loadFundingRate"
+            />
           
-          <ContractBasisPanel
-            v-if="currentMode === 'contract' && activeTab === 'basis'"
-            :symbol="currentSymbol"
-            :source="currentSource"
-            :basis-data="contractBasis"
-            :loading="basisLoading"
-            :error="basisError"
-            @retry="loadContractBasis"
-          />
-        </aside>
+            <ContractBasisPanel
+              v-if="currentMode === 'contract' && activeTab === 'basis'"
+              :symbol="currentSymbol"
+              :source="currentSource"
+              :basis-data="contractBasis"
+              :loading="basisLoading"
+              :error="basisError"
+              @retry="loadContractBasis"
+            />
+          </aside>
         </div>
 
         <!-- 交易工具面板：占据下方主要面积 -->
@@ -89,6 +92,11 @@
       v-if="showSettings"
       @close="toggleSettings"
     />
+
+    <AccountPanel
+      v-if="showAccount"
+      @close="toggleAccount"
+    />
   </div>
 </template>
 
@@ -101,7 +109,9 @@ import MarketInfoPanel from './components/market/MarketInfoPanel.vue'
 import FundingRatePanel from './components/market/FundingRatePanel.vue'
 import ContractBasisPanel from './components/market/ContractBasisPanel.vue'
 import TradingToolsPanel from './components/tools/TradingToolsPanel.vue'
+import AccountPanel from './components/account/AccountPanel.vue'
 import { useTicker } from './composables/useTicker'
+import { useAuth } from './composables/useAuth'
 import { usePreferencesStore } from './stores/preferences'
 import type { SymbolMode } from '@/types'
 
@@ -110,6 +120,7 @@ const initialBar = ref<string>('1h')
 const initialSource = ref<string>('okx')
 const initialMode = ref<SymbolMode>('spot')
 const showSettings = ref<boolean>(false)
+const showAccount = ref<boolean>(false)
 const activeTab = ref<'market' | 'funding' | 'basis'>('market')
 
 const preferences = usePreferencesStore()
@@ -132,8 +143,14 @@ const contractBasis = ref<any>({})
 const basisLoading = ref<boolean>(false)
 const basisError = ref<string>('')
 
+const { isLoggedIn, activeLabel, checkSession: checkAuthSession } = useAuth()
+
 const toggleSettings = (): void => {
   showSettings.value = !showSettings.value
+}
+
+const toggleAccount = (): void => {
+  showAccount.value = !showAccount.value
 }
 
 const handleSymbolChange = (symbol: string): void => {
@@ -219,6 +236,7 @@ watch([currentMode, currentSymbol, currentSource], () => {
 })
 
 onMounted(async () => {
+  await checkAuthSession()
   await preferences.loadProxySettings()
   loadTicker()
   
@@ -308,6 +326,20 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
 }
+
+.account-btn {
+  background: transparent;
+  border: 1px solid #2a2e39;
+  color: #d1d4dc;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.account-btn:hover { background: #2a2e39; }
+.account-btn.logged { border-color: #2962ff; color: #2962ff; }
 
 .settings-btn {
   background: transparent;

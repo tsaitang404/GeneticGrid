@@ -1,0 +1,161 @@
+"""OKX API v5 认证工具 — 签名、加密、账户接口"""
+import base64
+import hashlib
+import hmac
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+import requests
+from cryptography.fernet import Fernet
+from django.conf import settings
+
+from core.proxy_config import get_proxy_dict
+
+logger = logging.getLogger(__name__)
+
+
+_fernet: Fernet | None = None
+
+def _get_fernet() -> Fernet:
+    global _fernet
+    if _fernet is None:
+        key = base64.urlsafe_b64encode(
+            hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+        )
+        _fernet = Fernet(key)
+    return _fernet
+
+
+def encrypt_credential(plaintext: str) -> bytes:
+    return _get_fernet().encrypt(plaintext.encode())
+
+
+def decrypt_credential(ciphertext: bytes) -> str:
+    return _get_fernet().decrypt(ciphertext).decode()
+
+
+def hash_passphrase(plaintext: str) -> str:
+    import bcrypt as _bcrypt
+    return _bcrypt.hashpw(plaintext.encode(), _bcrypt.gensalt()).decode()
+
+
+def verify_passphrase(plaintext: str, hashed: str) -> bool:
+    import bcrypt as _bcrypt
+    return _bcrypt.checkpw(plaintext.encode(), hashed.encode())
+
+
+def _signature(secret_key: str, timestamp: str, method: str, path: str, body: str) -> str:
+    sign_str = f"{timestamp}{method.upper()}{path}{body}"
+    mac = hmac.new(
+        secret_key.encode('utf-8'),
+        sign_str.encode('utf-8'),
+        digestmod=hashlib.sha256,
+    )
+    return base64.b64encode(mac.digest()).decode()
+
+
+def _build_headers(api_key: str, passphrase: str, timestamp: str, signature: str) -> dict:
+    return {
+        'OK-ACCESS-KEY': api_key,
+        'OK-ACCESS-SIGN': signature,
+        'OK-ACCESS-TIMESTAMP': timestamp,
+        'OK-ACCESS-PASSPHRASE': passphrase,
+        'Content-Type': 'application/json',
+    }
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+
+
+def okx_api_request(
+    method: str,
+    path: str,
+    api_key: str,
+    secret_key: str,
+    passphrase: str,
+    params: Optional[dict] = None,
+    body: Optional[dict] = None,
+    timeout: int = 30,
+) -> dict:
+    ts = _timestamp()
+    body_str = json.dumps(body) if body else ''
+    sig = _signature(secret_key, ts, method, path, body_str)
+    headers = _build_headers(api_key, passphrase, ts, sig)
+    proxies = get_proxy_dict()
+    url = f"https://www.okx.com{path}"
+
+    try:
+        if method.upper() == 'GET':
+            resp = requests.get(url, headers=headers, params=params, proxies=proxies, timeout=timeout)
+        else:
+            resp = requests.post(url, headers=headers, json=body, proxies=proxies, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.Timeout:
+        raise Exception(f"OKX API 请求超时 ({path})")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"OKX API 请求失败 ({path}): {e}")
+
+
+def fetch_account_info(api_key: str, secret_key: str, passphrase: str) -> dict:
+    result = okx_api_request('GET', '/api/v5/account/config', api_key, secret_key, passphrase)
+    if result.get('code') != '0':
+        raise Exception(f"获取账户配置失败: {result.get('msg', '未知错误')}")
+    data = result.get('data', [{}])[0]
+    return {
+        'uid': data.get('uid', ''),
+        'mainNet': data.get('mainNet', ''),
+        'acctLv': data.get('acctLv', ''),
+        'posMode': data.get('posMode', ''),
+        'level': data.get('level', ''),
+    }
+
+
+def fetch_balance(api_key: str, secret_key: str, passphrase: str) -> dict:
+    result = okx_api_request('GET', '/api/v5/account/balance', api_key, secret_key, passphrase)
+    if result.get('code') != '0':
+        raise Exception(f"获取余额失败: {result.get('msg', '未知错误')}")
+    data_raw = result.get('data') or [{}]
+    data_item = data_raw[0]
+    return {
+        'totalEq': data_item.get('totalEq', '0'),
+        'totalPnl': data_item.get('totalPnl', '0'),
+        'details': [
+            {
+                'ccy': d.get('ccy'),
+                'eq': d.get('eq'),
+                'eqUsd': d.get('eqUsd'),
+                'availBal': d.get('availBal'),
+                'frozenBal': d.get('frozenBal'),
+            }
+            for d in data_item.get('details', [])
+        ],
+    }
+
+
+def fetch_positions(api_key: str, secret_key: str, passphrase: str) -> list:
+    result = okx_api_request('GET', '/api/v5/account/positions', api_key, secret_key, passphrase)
+    if result.get('code') != '0':
+        raise Exception(f"获取持仓失败: {result.get('msg', '未知错误')}")
+    positions = []
+    for pos in result.get('data', []):
+        pos_qty = float(pos.get('pos', 0))
+        if pos_qty != 0:
+            positions.append({
+                'symbol': pos.get('instId', ''),
+                'positionQty': pos_qty,
+                'notionalValue': float(pos.get('notionalUsd', 0)),
+                'markPrice': float(pos.get('markPx', 0)),
+                'leverage': float(pos.get('lever', 0)),
+                'mgnMode': pos.get('mgnMode', ''),
+                'side': pos.get('posSide', ''),
+                'available': float(pos.get('availPos', pos_qty)),
+                'frozenQty': float(pos.get('frozenQty', 0)),
+                'unrealizedPnl': float(pos.get('upl', 0)),
+                'unrealizedPnlRatio': float(pos.get('uplRatio', 0)),
+                'timestamp': pos.get('uTime', ''),
+            })
+    return positions

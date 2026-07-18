@@ -8,13 +8,13 @@
           <div class="group-label">市场</div>
           <SourceSelector
             v-model="source"
-            @sourceChanged="handleSourceChange"
+            @source-changed="handleSourceChange"
           />
           <ModeSelector
             v-model="mode"
             :modes="availableModes"
           />
-          <div class="divider-vertical"></div>
+          <div class="divider-vertical" />
           <SymbolSelector
             v-model="symbol"
             :symbols="availableSymbols"
@@ -28,19 +28,19 @@
             v-model="bar"
             :timeframes="availableTimeframes"
           />
-          <div class="divider-vertical"></div>
+          <div class="divider-vertical" />
           <IndicatorSelector
             :indicators="indicators"
             @toggle="toggleIndicator"
           />
           <button 
-            @click="toggleAutoRefresh" 
-            :class="['action-btn', 'refresh-btn', { active: autoRefreshEnabled }]"
+            :class="['action-btn', 'refresh-btn', { active: autoRefreshEnabled }]" 
             :title="autoRefreshEnabled ? '关闭自动刷新' : '开启自动刷新'"
+            @click="toggleAutoRefresh"
           >
             <svg class="icon" width="14" height="14" viewBox="0 0 16 16">
-              <path d="M13.65 2.35A7.5 7.5 0 0 0 3.5 4.5M2.35 13.65A7.5 7.5 0 0 0 12.5 11.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-              <path d="M12.5 4.5v-2h2M3.5 11.5v2h-2" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M13.65 2.35A7.5 7.5 0 0 0 3.5 4.5M2.35 13.65A7.5 7.5 0 0 0 12.5 11.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" />
+              <path d="M12.5 4.5v-2h2M3.5 11.5v2h-2" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             <span>{{ autoRefreshEnabled ? '自动刷新' : '手动刷新' }}</span>
           </button>
@@ -49,7 +49,7 @@
     </div>
 
     <!-- 图表区域 -->
-    <div class="chart-area" ref="chartContainerRef">
+    <div ref="chartContainerRef" class="chart-area">
       <div v-if="isLoading" class="loading-overlay">
         <div class="spinner">加载中...</div>
       </div>
@@ -62,14 +62,14 @@
         <!-- 跳转到最新按钮 -->
         <button 
           class="jump-to-latest-btn"
-          @click="jumpToLatest"
           title="跳转到最新K线"
+          @click="jumpToLatest"
         >
           ▶
         </button>
 
         <DrawingToolbar
-          :modelValue="currentTool"
+          :model-value="currentTool"
           :expanded="toolbarExpanded"
           :parallel-line-count="parallelLineCount"
           @update:tool="handleToolbarToolUpdate"
@@ -92,7 +92,7 @@
             <div class="error-icon">⚠️</div>
             <div class="error-title">图表加载失败</div>
             <div class="error-message">{{ chartError.message }}</div>
-            <button @click="retryLoad" class="retry-btn">重试</button>
+            <button class="retry-btn" @click="retryLoad">重试</button>
           </div>
         </div>
 
@@ -156,8 +156,8 @@
       <div class="sub-charts">
         <div
           v-for="(config, key) in enabledSubIndicators"
-          :key="key"
           v-show="config.enabled"
+          :key="key"
           class="sub-chart"
           :style="{ height: subChartHeights[key] + 'px', position: 'relative' }"
         >
@@ -174,15 +174,15 @@
               width: earliestDataOverlayWidth + 'px'
             }"
           >
-              <div class="no-earlier-data-content">
-                <span class="no-earlier-data-text">无更早数据</span>
-                <span class="no-earlier-data-icon">▶</span>
-              </div>
+            <div class="no-earlier-data-content">
+              <span class="no-earlier-data-text">无更早数据</span>
+              <span class="no-earlier-data-icon">▶</span>
             </div>
+          </div>
             
-            <ResizeHandle
-              @resize-start="startResize(String(key), $event)"
-            />
+          <ResizeHandle
+            @resize-start="startResize(String(key), $event)"
+          />
         </div>
       </div>
     </div>

@@ -5,12 +5,11 @@
 提供旧服务和新插件系统之间的转换层，确保平滑过渡。
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import logging
 
 from .plugins.manager import get_plugin_manager
 from .plugins.base import (
-    MarketDataSourcePlugin,
     CandleData,
     TickerData,
     PluginError,

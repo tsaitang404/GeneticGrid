@@ -5,10 +5,10 @@
 根据插件的元数据和能力自动生成文档。
 """
 
-from typing import Dict, List
+from typing import Dict
 from datetime import datetime
 
-from .base import MarketDataSourcePlugin, DataSourceMetadata, Capability
+from .base import MarketDataSourcePlugin, Capability
 from .manager import PluginManager
 
 

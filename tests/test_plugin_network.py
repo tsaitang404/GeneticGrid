@@ -16,7 +16,6 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'geneticgrid.settings')
 django.setup()
 
 from core.plugins.manager import PluginManager
-from core.plugins.base import PluginError
 from core.proxy_config import is_proxy_available
 
 
@@ -29,7 +28,7 @@ def test_plugin_network():
     # 检查代理状态
     socks5_available = is_proxy_available('socks5')
     http_available = is_proxy_available('http')
-    print(f"代理状态:")
+    print("代理状态:")
     print(f"  SOCKS5 (127.0.0.1:1080): {'✅ 可用' if socks5_available else '❌ 不可用'}")
     print(f"  HTTP (127.0.0.1:8080): {'✅ 可用' if http_available else '❌ 不可用'}\n")
     
@@ -59,7 +58,7 @@ def test_plugin_network():
             
             try:
                 ticker = plugin.get_ticker(test_symbol)
-                print(f"✅ 成功")
+                print("✅ 成功")
                 print(f"      价格: {ticker.last:.2f}")
                 results['success'].append({
                     'name': name,
@@ -70,7 +69,7 @@ def test_plugin_network():
                 })
             except Exception as e:
                 error_msg = str(e)
-                print(f"❌ 失败")
+                print("❌ 失败")
                 print(f"      错误: {error_msg[:80]}")
                 
                 # 判断是否是网络问题
@@ -81,7 +80,7 @@ def test_plugin_network():
                             'display_name': metadata.display_name,
                             'error': error_msg
                         })
-                        print(f"      💡 建议: 可能需要配置代理")
+                        print("      💡 建议: 可能需要配置代理")
                     else:
                         results['failed'].append({
                             'name': name,
@@ -103,7 +102,7 @@ def test_plugin_network():
             
             try:
                 candles = plugin.get_candlesticks(test_symbol, test_bar, limit=5)
-                print(f"✅ 成功")
+                print("✅ 成功")
                 print(f"      获取: {len(candles)} 条K线")
                 if candles:
                     latest = candles[-1]
@@ -120,7 +119,7 @@ def test_plugin_network():
                     })
             except Exception as e:
                 error_msg = str(e)
-                print(f"❌ 失败")
+                print("❌ 失败")
                 print(f"      错误: {error_msg[:80]}")
     
     # 打印测试总结
@@ -137,7 +136,7 @@ def test_plugin_network():
         print(f"\n⚠️  需要代理: {len(results['needs_proxy'])} 个插件")
         for item in results['needs_proxy']:
             print(f"   🔐 {item['display_name']}")
-            print(f"      建议: 在插件配置中设置 requires_proxy=True")
+            print("      建议: 在插件配置中设置 requires_proxy=True")
     
     if results['failed']:
         print(f"\n❌ 失败: {len(results['failed'])} 个插件")
@@ -177,14 +176,14 @@ def suggest_proxy_changes(results):
         plugin_file = f"core/plugins/sources/{item['name']}_plugin.py"
         print(f"📝 {item['display_name']} ({item['name']})")
         print(f"   文件: {plugin_file}")
-        print(f"   修改: 在 _get_metadata() 中设置 requires_proxy=True")
-        print(f"   示例:")
-        print(f"   ```python")
-        print(f"   return DataSourceMetadata(")
-        print(f"       ...,")
-        print(f"       requires_proxy=True,  # 需要代理访问")
-        print(f"   )")
-        print(f"   ```\n")
+        print("   修改: 在 _get_metadata() 中设置 requires_proxy=True")
+        print("   示例:")
+        print("   ```python")
+        print("   return DataSourceMetadata(")
+        print("       ...,")
+        print("       requires_proxy=True,  # 需要代理访问")
+        print("   )")
+        print("   ```\n")
     
     print("="*70 + "\n")
 

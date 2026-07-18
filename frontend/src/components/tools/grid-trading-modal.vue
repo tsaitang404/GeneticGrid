@@ -10,23 +10,23 @@
           <div class="grid">
             <label>
               <span>交易对</span>
-              <input v-model="form.symbol" placeholder="如 BTCUSDT" />
+              <input v-model="form.symbol" placeholder="如 BTCUSDT">
             </label>
             <label>
               <span>网格数量</span>
-              <input v-model.number="form.grids" type="number" min="2" max="200" />
+              <input v-model.number="form.grids" type="number" min="2" max="200">
             </label>
             <label>
               <span>下限价格</span>
-              <input v-model.number="form.lower" type="number" min="0" step="0.01" />
+              <input v-model.number="form.lower" type="number" min="0" step="0.01">
             </label>
             <label>
               <span>上限价格</span>
-              <input v-model.number="form.upper" type="number" min="0" step="0.01" />
+              <input v-model.number="form.upper" type="number" min="0" step="0.01">
             </label>
             <label>
               <span>投资金额</span>
-              <input v-model.number="form.invest" type="number" min="0" step="0.01" />
+              <input v-model.number="form.invest" type="number" min="0" step="0.01">
             </label>
             <label>
               <span>风格</span>

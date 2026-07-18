@@ -10,7 +10,7 @@
           <div class="grid">
             <label>
               <span>交易对</span>
-              <input v-model="form.symbol" placeholder="如 BTCUSDT" />
+              <input v-model="form.symbol" placeholder="如 BTCUSDT">
             </label>
             <label>
               <span>方向</span>
@@ -21,11 +21,11 @@
             </label>
             <label>
               <span>杠杆</span>
-              <input v-model.number="form.leverage" type="number" min="1" max="125" />
+              <input v-model.number="form.leverage" type="number" min="1" max="125">
             </label>
             <label>
               <span>数量</span>
-              <input v-model.number="form.size" type="number" min="0" step="0.0001" />
+              <input v-model.number="form.size" type="number" min="0" step="0.0001">
             </label>
           </div>
 

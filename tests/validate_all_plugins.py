@@ -3,7 +3,6 @@
 """
 完整的插件系统验证脚本
 """
-import sys
 import os
 import django
 
@@ -85,7 +84,7 @@ def main():
             else:
                 print()
             success_list.append(name)
-        except Exception as e:
+        except Exception:
             print(f'❌ {name:12s}: 网络问题或API不可达')
             fail_list.append(name)
     

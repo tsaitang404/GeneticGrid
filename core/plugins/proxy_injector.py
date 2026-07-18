@@ -6,7 +6,6 @@
 """
 
 import logging
-from typing import Optional
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -117,7 +116,7 @@ def inject_proxy_to_service(service_instance, requires_proxy: bool = False):
     
     # OKX 服务使用 SDK，代理通过构造函数传入，不需要后期注入
     if service_class_name == 'OKXMarketService':
-        proxy_status = f"🔐 OKX SDK 代理" if service_instance.proxy else "⚠️ OKX 无代理"
+        proxy_status = "🔐 OKX SDK 代理" if service_instance.proxy else "⚠️ OKX 无代理"
         logger.debug(f"{service_class_name} - {proxy_status}: {service_instance.proxy}")
         return
     

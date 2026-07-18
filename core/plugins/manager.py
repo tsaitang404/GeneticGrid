@@ -11,7 +11,6 @@ from importlib import import_module
 import logging
 import os
 import glob
-import importlib.util
 
 from .base import MarketDataSourcePlugin, PluginError, DataSourceMetadata
 

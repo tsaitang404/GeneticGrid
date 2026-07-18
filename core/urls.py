@@ -19,4 +19,14 @@ urlpatterns = [
     path('api/sources/<str:source_name>/capabilities/', views.api_source_capabilities, name='api_source_capabilities'),
     path('api/documentation/sources/', views.api_source_documentation, name='api_source_documentation'),
     path('api/positions/', views.api_positions, name='api_positions'),
+
+    # 账户认证系统
+    path('api/account/register/', views.api_account_register, name='api_account_register'),
+    path('api/account/list/', views.api_account_list, name='api_account_list'),
+    path('api/account/login/', views.api_account_login, name='api_account_login'),
+    path('api/account/logout/', views.api_account_logout, name='api_account_logout'),
+    path('api/account/session/', views.api_account_session, name='api_account_session'),
+    path('api/account/balance/', views.api_account_balance, name='api_account_balance'),
+    path('api/account/positions/', views.api_account_positions, name='api_account_positions'),
+    path('api/account/<int:account_id>/', views.api_account_delete, name='api_account_delete'),
 ]

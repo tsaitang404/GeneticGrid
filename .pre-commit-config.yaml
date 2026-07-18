@@ -1,0 +1,37 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (Python syntax check)
+        entry: bash -c 'source .venv/bin/activate && ruff check'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: pyright
+        name: pyright (Python type check)
+        entry: bash -c 'source .venv/bin/activate && /home/Ciallo/.nvm/versions/node/v20.17.0/bin/pyright'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: eslint
+        name: eslint (JS/TS/Vue syntax check)
+        entry: bash -c 'source ~/.nvm/nvm.sh && nvm use 20.17.0 2>/dev/null && cd frontend && npx eslint . --ext .vue,.js,.ts,.tsx --ignore-path .gitignore --max-warnings 50'
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: pytest
+        name: pytest
+        entry: bash -c 'source .venv/bin/activate && python -m pytest tests/ -q --ignore=tests/test_cache_service.py'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        verbose: true

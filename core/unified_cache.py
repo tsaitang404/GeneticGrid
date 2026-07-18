@@ -17,10 +17,9 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from enum import Enum
 
-from django.conf import settings
 
 from .redis_cache import get_redis_client, redis_cache_enabled
 

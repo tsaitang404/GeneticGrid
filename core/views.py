@@ -1,9 +1,7 @@
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
-from django.views.decorators.cache import cache_page
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.views.generic import TemplateView
+from django.utils.timezone import now
 from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
@@ -14,13 +12,16 @@ from .proxy_config import (
     clear_proxy_cache,
     is_proxy_available,
     test_proxy_url,
-    get_proxy_dict,
 )
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
 from .plugins.base import PluginError
-from .protocol import ProtocolConverter
-import os
+from .okx_auth import (
+    encrypt_credential, decrypt_credential,
+    hash_passphrase, verify_passphrase,
+    fetch_account_info, fetch_balance, fetch_positions,
+)
+from .models import OKXAccount
 from pathlib import Path
 import logging
 import json
@@ -332,7 +333,6 @@ def api_contract_basis_history(request):
     logger.info(f"📈 合约基差历史请求: {symbol} ({source}) type={contract_type} limit={limit} granularity={granularity}")
     
     # 尝试从缓存获取（包含granularity的缓存key）
-    cache_key = f"{source}:{symbol}:{contract_type}:{granularity}"
     cached_history = DerivativeDataCacheService.get_basis_history_from_cache(source, symbol, contract_type, granularity)
     if cached_history and len(cached_history) >= limit:
         logger.info(f"✅ 合约基差历史缓存命中: {symbol} ({granularity}), {len(cached_history)}条")
@@ -509,15 +509,15 @@ def api_proxy_config(request):
             'data': updated,
             'message': '代理配置已更新（仅当前进程生效）',
         })
-    except ValueError as e:
-        return JsonResponse({
-            'code': -1,
-            'error': str(e),
-        }, status=400)
     except json.JSONDecodeError:
         return JsonResponse({
             'code': -1,
             'error': '请求体必须为合法 JSON',
+        }, status=400)
+    except ValueError as e:
+        return JsonResponse({
+            'code': -1,
+            'error': str(e),
         }, status=400)
     except Exception as e:
         logger.error(f"代理配置更新失败: {e}")
@@ -646,67 +646,179 @@ def api_source_documentation(request):
         }, status=500)
 
 
-def api_positions(request):
-    """获取用户持有的仓位 API (OKX)"""
+# ──────────────────────────────────────────────
+# OKX 账户认证系统
+# ──────────────────────────────────────────────
+
+def _session_creds(request) -> tuple:
+    """从 session 取明文凭证，未登陆则抛出异常"""
+    creds = request.session.get('okx_credentials')
+    if not creds:
+        raise Exception('未登录')
+    return creds['api_key'], creds['secret_key'], creds['passphrase']
+
+
+@csrf_exempt
+def api_account_register(request):
+    """注册 API Key"""
+    if request.method != 'POST':
+        return JsonResponse({'code': -1, 'error': '仅支持 POST'}, status=405)
     try:
-        # 目前仅支持 OKX
-        source = request.GET.get('source', 'okx').lower()
-        
-        if source != 'okx':
-            return JsonResponse({
-                'code': -1,
-                'error': f'暂不支持 {source} 的仓位查询',
-            }, status=400)
-        
-        # 调用 OKX API 获取仓位信息
-        import requests
-        
-        # OKX 仓位 API 端点
-        url = 'https://www.okx.com/api/v5/account/positions'
-        
-        # 注意：这里使用公开 API，无需认证
-        # 生产环境应该使用私有 API 和用户的 API Key
-        response = requests.get(url, timeout=10, proxies=get_proxy_dict())
-        
-        if response.status_code != 200:
-            logger.warning(f"OKX API 返回错误: {response.status_code}")
-            return JsonResponse({
-                'code': -1,
-                'error': f'OKX API 返回 {response.status_code}',
-            }, status=response.status_code)
-        
-        data = response.json()
-        
-        # OKX 返回格式：code=0 表示成功
-        if data.get('code') != '0':
-            return JsonResponse({
-                'code': -1,
-                'error': data.get('msg', '未知错误'),
-            }, status=400)
-        
-        # 提取仓位数据，过滤出有持仓的币种
-        positions = []
-        for pos in data.get('data', []):
-            pos_qty = float(pos.get('pos', 0))
-            
-            # 仅显示有持仓的币种
-            if pos_qty != 0:
-                inst_id = pos.get('instId', '')
-                positions.append({
-                    'symbol': inst_id,
-                    'positionQty': pos_qty,
-                    'notionalValue': float(pos.get('notionalUsd', 0)),
-                    'markPrice': float(pos.get('markPx', 0)),
-                    'leverage': float(pos.get('lever', 0)),
-                    'mgnMode': pos.get('mgnMode', ''),  # isolated 或 cross
-                    'side': pos.get('posSide', ''),  # long, short, net
-                    'available': float(pos.get('availPos', pos_qty)),
-                    'frozenQty': float(pos.get('frozenQty', 0)),
-                    'unrealizedPnl': float(pos.get('upl', 0)),
-                    'unrealizedPnlRatio': float(pos.get('uplRatio', 0)),
-                    'timestamp': pos.get('uTime', ''),
-                })
-        
+        data = json.loads(request.body)
+        label = data.get('label', '').strip()
+        api_key = data.get('api_key', '').strip()
+        secret_key = data.get('secret_key', '').strip()
+        passphrase = data.get('passphrase', '').strip()
+        note = data.get('note', '').strip()
+
+        if not all([label, api_key, secret_key, passphrase]):
+            return JsonResponse({'code': -1, 'error': '缺少必填字段'}, status=400)
+
+        if OKXAccount.objects.filter(api_key=api_key).exists():
+            return JsonResponse({'code': -1, 'error': '该 API Key 已注册'}, status=409)
+
+        # 测试连通性
+        info = fetch_account_info(api_key, secret_key, passphrase)
+
+        account = OKXAccount.objects.create(
+            label=label,
+            api_key=api_key,
+            encrypted_secret_key=encrypt_credential(secret_key),
+            encrypted_passphrase=encrypt_credential(passphrase),
+            passphrase_hash=hash_passphrase(passphrase),
+            account_info=info,
+            note=note,
+        )
+
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'id': account.pk,
+                'label': account.label,
+                'api_key_masked': account.api_key[:8] + '****',
+                'note': account.note,
+                'account_info': info,
+            }
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
+    except Exception as e:
+        logger.error(f"注册失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+
+def api_account_list(request):
+    """列出已注册的 API Key"""
+    accounts = OKXAccount.objects.filter(is_active=True).order_by('-created_at')
+    data = []
+    for a in accounts:
+        data.append({
+            'id': a.pk,
+            'label': a.label,
+            'api_key_masked': a.api_key[:8] + '****',
+            'note': a.note,
+            'account_info': a.account_info,
+            'last_used_at': a.last_used_at.isoformat() if a.last_used_at else None,
+            'created_at': a.created_at.isoformat(),
+        })
+    return JsonResponse({'code': 0, 'data': data})
+
+
+@csrf_exempt
+def api_account_login(request):
+    """用 passphrase 登陆"""
+    if request.method != 'POST':
+        return JsonResponse({'code': -1, 'error': '仅支持 POST'}, status=405)
+    try:
+        data = json.loads(request.body)
+        account_id = data.get('account_id')
+        passphrase_input = data.get('passphrase', '').strip()
+
+        if not account_id or not passphrase_input:
+            return JsonResponse({'code': -1, 'error': '缺少参数'}, status=400)
+
+        try:
+            account = OKXAccount.objects.get(pk=account_id, is_active=True)
+        except OKXAccount.DoesNotExist:
+            return JsonResponse({'code': -1, 'error': '账户不存在'}, status=404)
+
+        if not verify_passphrase(passphrase_input, account.passphrase_hash):
+            return JsonResponse({'code': -1, 'error': 'passphrase 错误'}, status=403)
+
+        secret_key = decrypt_credential(bytes(account.encrypted_secret_key))
+        enc_pass = decrypt_credential(bytes(account.encrypted_passphrase))
+
+        # 存入 session
+        request.session['okx_credentials'] = {
+            'api_key': account.api_key,
+            'secret_key': secret_key,
+            'passphrase': enc_pass,
+            'account_id': account.pk,
+            'label': account.label,
+        }
+        request.session.set_expiry(0)  # 浏览器会话级
+
+        account.last_used_at = now()
+        account.save(update_fields=['last_used_at'])
+
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'id': account.pk,
+                'label': account.label,
+                'api_key_masked': account.api_key[:8] + '****',
+                'note': account.note,
+                'account_info': account.account_info,
+            }
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
+    except Exception as e:
+        logger.error(f"登陆失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+
+@csrf_exempt
+def api_account_logout(request):
+    """登出"""
+    request.session.pop('okx_credentials', None)
+    return JsonResponse({'code': 0, 'data': {'ok': True}})
+
+
+def api_account_session(request):
+    """检查当前 session 状态"""
+    creds = request.session.get('okx_credentials')
+    if creds:
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'authenticated': True,
+                'account_id': creds['account_id'],
+                'label': creds['label'],
+                'api_key_masked': creds['api_key'][:8] + '****',
+            }
+        })
+    return JsonResponse({
+        'code': 0,
+        'data': {'authenticated': False}
+    })
+
+
+def api_account_balance(request):
+    """获取账户余额（需 session）"""
+    try:
+        api_key, secret_key, passphrase = _session_creds(request)
+        balance = fetch_balance(api_key, secret_key, passphrase)
+        return JsonResponse({'code': 0, 'data': balance})
+    except Exception as e:
+        return JsonResponse({'code': -1, 'error': str(e)}, status=401 if '未登录' in str(e) else 400)
+
+
+def api_account_positions(request):
+    """获取持仓（需 session）"""
+    try:
+        api_key, secret_key, passphrase = _session_creds(request)
+        positions = fetch_positions(api_key, secret_key, passphrase)
         return JsonResponse({
             'code': 0,
             'data': {
@@ -715,22 +827,31 @@ def api_positions(request):
                 'total': len(positions),
             }
         })
-    
-    except requests.exceptions.Timeout:
-        logger.error("OKX API 请求超时")
-        return JsonResponse({
-            'code': -1,
-            'error': 'OKX API 请求超时',
-        }, status=408)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"OKX API 请求失败: {e}")
-        return JsonResponse({
-            'code': -1,
-            'error': f'网络错误: {str(e)}',
-        }, status=500)
     except Exception as e:
-        logger.error(f"获取仓位信息失败: {e}")
-        return JsonResponse({
-            'code': -1,
-            'error': str(e),
-        }, status=500)
+        return JsonResponse({'code': -1, 'error': str(e)}, status=401 if '未登录' in str(e) else 400)
+
+
+@csrf_exempt
+def api_account_delete(request, account_id):
+    """删除 API Key"""
+    if request.method != 'DELETE':
+        return JsonResponse({'code': -1, 'error': '仅支持 DELETE'}, status=405)
+    try:
+        account = OKXAccount.objects.get(pk=account_id)
+        account.delete()
+        # 如果删的是当前登陆的账户，清 session
+        creds = request.session.get('okx_credentials')
+        if creds and creds.get('account_id') == account_id:
+            request.session.pop('okx_credentials', None)
+        return JsonResponse({'code': 0, 'data': {'ok': True}})
+    except OKXAccount.DoesNotExist:
+        return JsonResponse({'code': -1, 'error': '账户不存在'}, status=404)
+
+
+# ──────────────────────────────────────────────
+# 旧版 api_positions — 保留兼容，重定向到新端点
+# ──────────────────────────────────────────────
+
+def api_positions(request):
+    """旧版仓位查询 — 使用 session 凭证"""
+    return api_account_positions(request)

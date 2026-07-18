@@ -4,7 +4,7 @@
     <div class="current-rate-section">
       <div class="rate-header">
         <h3>当前资金费率</h3>
-        <span class="update-time" v-if="fundingData?.timestamp">
+        <span v-if="fundingData?.timestamp" class="update-time">
           {{ formatTime(fundingData.timestamp) }}
         </span>
       </div>
@@ -35,18 +35,18 @@
       
       <div class="chart-container">
         <div v-if="chartLoading" class="chart-loading">
-          <div class="spinner"></div>
+          <div class="spinner" />
         </div>
         <div v-else-if="chartError" class="chart-error">
           <p>{{ chartError }}</p>
-          <button @click="loadHistory" class="retry-btn">重试</button>
+          <button class="retry-btn" @click="loadHistory">重试</button>
         </div>
-        <canvas v-else ref="chartCanvas" class="rate-chart"></canvas>
+        <canvas v-else ref="chartCanvas" class="rate-chart" />
       </div>
     </div>
 
     <!-- 市场情绪 -->
-    <div class="sentiment-section" v-if="fundingData">
+    <div v-if="fundingData" class="sentiment-section">
       <h4>市场情绪</h4>
       <div class="sentiment-indicator" :class="sentimentClass">
         {{ sentimentText }}

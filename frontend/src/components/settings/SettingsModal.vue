@@ -3,7 +3,7 @@
     <div class="settings-modal" :class="{ 'closing': isClosing }">
       <div class="modal-header">
         <h2>偏好设置</h2>
-        <button @click="handleCloseClick" class="close-btn">✕</button>
+        <button class="close-btn" @click="handleCloseClick">✕</button>
       </div>
       
       <div class="modal-body">
@@ -12,29 +12,29 @@
           <div class="color-scheme-options">
             <label class="radio-label">
               <input 
+                v-model="localColorScheme" 
                 type="radio" 
                 name="color-scheme" 
-                value="green-up" 
-                v-model="localColorScheme"
+                value="green-up"
               >
               <span class="radio-text">
-                <span class="color-preview" style="background:#26a69a"></span>
+                <span class="color-preview" style="background:#26a69a" />
                 绿涨
-                <span class="color-preview" style="background:#ef5350; margin-left:4px"></span>
+                <span class="color-preview" style="background:#ef5350; margin-left:4px" />
                 红跌
               </span>
             </label>
             <label class="radio-label">
               <input 
+                v-model="localColorScheme" 
                 type="radio" 
                 name="color-scheme" 
-                value="red-up" 
-                v-model="localColorScheme"
+                value="red-up"
               >
               <span class="radio-text">
-                <span class="color-preview" style="background:#ef5350"></span>
+                <span class="color-preview" style="background:#ef5350" />
                 红涨
-                <span class="color-preview" style="background:#26a69a; margin-left:4px"></span>
+                <span class="color-preview" style="background:#26a69a; margin-left:4px" />
                 绿跌
               </span>
             </label>
@@ -66,7 +66,7 @@
           <label class="setting-label">代理配置</label>
 
           <label class="checkbox-label" style="margin-bottom: 14px">
-            <input type="checkbox" v-model="localEnabled" />
+            <input v-model="localEnabled" type="checkbox">
             <span>启用代理</span>
           </label>
 
@@ -74,13 +74,13 @@
             <div class="field" style="margin-bottom: 12px">
               <span>代理地址</span>
               <div class="proxy-input-row">
-                <input v-model="localProxyUrl" class="text-input" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" />
+                <input v-model="localProxyUrl" class="text-input" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080">
                 <button class="btn ghost" :disabled="proxyTesting || proxySaving" @click="testProxy">测试代理</button>
               </div>
             </div>
 
             <label class="checkbox-label" style="margin-bottom: 4px">
-              <input type="checkbox" v-model="localContainerAutoHost" />
+              <input v-model="localContainerAutoHost" type="checkbox">
               <span>容器中自动将 <code>127.0.0.1</code> 映射为宿主机（host.docker.internal）</span>
             </label>
           </template>
