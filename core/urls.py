@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/account/list/', views.api_account_list, name='api_account_list'),
     path('api/account/login/', views.api_account_login, name='api_account_login'),
     path('api/account/logout/', views.api_account_logout, name='api_account_logout'),
+    path('api/account/refresh/', views.api_account_refresh, name='api_account_refresh'),
     path('api/account/session/', views.api_account_session, name='api_account_session'),
     path('api/account/balance/', views.api_account_balance, name='api_account_balance'),
     path('api/account/positions/', views.api_account_positions, name='api_account_positions'),

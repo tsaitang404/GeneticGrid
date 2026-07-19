@@ -21,6 +21,7 @@ from .okx_auth import (
     hash_passphrase, verify_passphrase,
     fetch_account_info, fetch_balance, fetch_positions,
     post_order, cancel_order, has_trade_permission,
+    OKX_DEMO_URL, OKX_REAL_URL,
 )
 from .models import OKXAccount
 from pathlib import Path
@@ -701,7 +702,7 @@ def api_account_register(request):
             'account_id': account.pk,
             'label': account.label,
             'is_demo': is_demo,
-            'trade_permission': has_trade_permission(info),
+            'trade_permission': has_trade_permission(account.account_info or {}),
         }
         request.session.set_expiry(0)
 
@@ -765,6 +766,15 @@ def api_account_login(request):
         secret_key = decrypt_credential(bytes(account.encrypted_secret_key))
         enc_pass = decrypt_credential(bytes(account.encrypted_passphrase))
 
+        # 重新获取账户信息（刷新 perm 等字段）
+        base_url = OKX_DEMO_URL if account.is_demo else OKX_REAL_URL
+        try:
+            fresh_info = fetch_account_info(account.api_key, secret_key, enc_pass, base_url=base_url, is_demo=account.is_demo)
+            account.account_info = fresh_info
+            account.save(update_fields=['account_info'])
+        except Exception:
+            pass
+
         # 存入 session
         request.session['okx_credentials'] = {
             'api_key': account.api_key,
@@ -773,7 +783,7 @@ def api_account_login(request):
             'account_id': account.pk,
             'label': account.label,
             'is_demo': account.is_demo,
-            'trade_permission': has_trade_permission(account.account_info),
+            'trade_permission': has_trade_permission(account.account_info or {}),
         }
         request.session.set_expiry(0)  # 浏览器会话级
 
@@ -795,6 +805,43 @@ def api_account_login(request):
         return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
     except Exception as e:
         logger.error(f"登陆失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+
+@csrf_exempt
+def api_account_refresh(request):
+    """重新拉取 OKX 账户信息，刷新 session 中的权限"""
+    try:
+        api_key, secret_key, passphrase, is_demo = _session_creds(request)
+        creds = request.session.get('okx_credentials', {})
+        account_id = creds.get('account_id')
+        if not account_id:
+            return JsonResponse({'code': -1, 'error': '未登录'}, status=401)
+
+        base_url = OKX_DEMO_URL if is_demo else OKX_REAL_URL
+        fresh_info = fetch_account_info(api_key, secret_key, passphrase, base_url=base_url, is_demo=is_demo)
+
+        # 更新 DB
+        try:
+            account = OKXAccount.objects.get(pk=account_id)
+            account.account_info = fresh_info
+            account.save(update_fields=['account_info'])
+        except OKXAccount.DoesNotExist:
+            pass
+
+        # 更新 session
+        creds['trade_permission'] = has_trade_permission(fresh_info)
+        request.session['okx_credentials'] = creds
+
+        return JsonResponse({
+            'code': 0,
+            'data': {
+                'trade_permission': has_trade_permission(fresh_info),
+                'account_info': fresh_info,
+            }
+        })
+    except Exception as e:
+        logger.error(f"刷新账户信息失败: {e}")
         return JsonResponse({'code': -1, 'error': str(e)}, status=400)
 
 

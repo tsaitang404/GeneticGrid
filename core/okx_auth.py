@@ -128,6 +128,7 @@ def fetch_account_info(api_key: str, secret_key: str, passphrase: str, base_url:
         'acctLv': data.get('acctLv', ''),
         'posMode': data.get('posMode', ''),
         'level': data.get('level', ''),
+        'perm': data.get('perm', ''),
     }
 
 

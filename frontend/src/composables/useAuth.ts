@@ -16,6 +16,7 @@ export interface SessionInfo {
   account_id?: number
   label?: string
   api_key_masked?: string
+  trade_permission?: boolean
 }
 
 export interface BalanceInfo {
@@ -127,6 +128,7 @@ export function useAuth() {
           account_id: result.data.id,
           label: result.data.label,
           api_key_masked: result.data.api_key_masked,
+          trade_permission: result.data.trade_permission ?? false,
         }
         return true
       } else {
