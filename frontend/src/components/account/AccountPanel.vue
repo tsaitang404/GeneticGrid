@@ -18,9 +18,6 @@
           <button class="btn primary" @click="refreshBalance" :disabled="loading.balance">
             {{ loading.balance ? '加载中...' : '刷新余额' }}
           </button>
-          <button class="btn secondary" @click="refreshPermissions" :disabled="refreshingPerm">
-            {{ refreshingPerm ? '刷新中...' : '🔄 刷新权限' }}
-          </button>
           <button class="btn danger" @click="handleLogout">登出</button>
         </div>
 
@@ -150,29 +147,6 @@ const {
 
 const selectedId = ref<number | null>(null)
 const passphraseInput = ref('')
-
-const refreshingPerm = ref(false)
-
-async function refreshPermissions(): Promise<void> {
-  refreshingPerm.value = true
-  try {
-    const resp = await fetch('/api/account/refresh/', { method: 'POST' })
-    const result = await resp.json()
-    if (result.code === 0) {
-      // 更新 session 信息
-      if (session.value) {
-        session.value.trade_permission = result.data.trade_permission
-      }
-      error.value = '✅ 权限已刷新'
-    } else {
-      error.value = result.error || '刷新失败'
-    }
-  } catch (e: any) {
-    error.value = e.message || '网络错误'
-  } finally {
-    refreshingPerm.value = false
-  }
-}
 
 const form = ref({
   label: '',

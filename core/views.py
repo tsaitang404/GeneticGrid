@@ -853,9 +853,29 @@ def api_account_logout(request):
 
 
 def api_account_session(request):
-    """检查当前 session 状态"""
+    """检查当前 session 状态（自动刷新权限）"""
     creds = request.session.get('okx_credentials')
     if creds:
+        # 自动从 OKX 拉取最新账户信息，刷新权限
+        try:
+            fresh_info = fetch_account_info(
+                creds['api_key'], creds['secret_key'], creds['passphrase'],
+                is_demo=creds.get('is_demo', False),
+            )
+            creds['trade_permission'] = has_trade_permission(fresh_info)
+            request.session['okx_credentials'] = creds
+            # 更新 DB
+            account_id = creds.get('account_id')
+            if account_id:
+                try:
+                    account = OKXAccount.objects.get(pk=account_id)
+                    account.account_info = fresh_info
+                    account.save(update_fields=['account_info'])
+                except OKXAccount.DoesNotExist:
+                    pass
+        except Exception:
+            pass
+
         return JsonResponse({
             'code': 0,
             'data': {

@@ -31,7 +31,9 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <input v-model="spotForm.symbol" class="input" />
+            <select v-model="spotForm.symbol" class="input" @change="onSymbolChange('spot')">
+              <option v-for="s in symbolList" :key="s" :value="s">{{ s }}</option>
+            </select>
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: spotForm.side === 'buy' }]" @click="spotForm.side = 'buy'">买入</button>
@@ -85,7 +87,9 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <input v-model="contractForm.symbol" class="input" />
+            <select v-model="contractForm.symbol" class="input" @change="onSymbolChange('contract')">
+              <option v-for="s in symbolList" :key="s" :value="s">{{ s }}</option>
+            </select>
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: contractForm.side === 'long' }]" @click="contractForm.side = 'long'">做多</button>
@@ -256,6 +260,17 @@ const {
 
 const tradePerm = computed(() => session.value?.trade_permission ?? false)
 const spotPrice = ref(0)
+
+const symbolList = [
+  'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT',
+  'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT',
+  'MATICUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'ETCUSDT',
+  'BCHUSDT', 'TRXUSDT', 'NEARUSDT', 'APTUSDT', 'ARBUSDT',
+]
+
+function onSymbolChange(_type: 'spot' | 'contract'): void {
+  fetchTicker()
+}
 
 // 从 ticker API 获取当前价格
 async function fetchTicker(): Promise<void> {
