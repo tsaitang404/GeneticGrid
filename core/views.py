@@ -952,13 +952,25 @@ def api_account_place_order(request):
             return JsonResponse({'code': -1, 'error': '当前 API Key 无交易权限'}, status=403)
 
         data = json.loads(request.body)
+        inst_id = ProtocolConverter.to_source_symbol(data['instId'], 'okx')
+        sz = data['sz']
+        # OKX 市价买单 sz 为计价币数量，市价卖单 sz 为币数量
+        if data['ordType'] == 'market' and data['side'] == 'buy' and data['tdMode'] == 'cash':
+            try:
+                ticker_resp = okx_api_request('GET', '/api/v5/market/ticker', api_key, secret_key, passphrase, params={'instId': inst_id}, is_demo=is_demo)
+                if ticker_resp.get('code') == '0' and ticker_resp.get('data'):
+                    last = float(ticker_resp['data'][0].get('last', 0))
+                    if last > 0:
+                        sz = str(round(float(sz) * last, 8))
+            except Exception:
+                pass
         result = post_order(
             api_key, secret_key, passphrase,
-            inst_id=data['instId'],
+            inst_id=inst_id,
             td_mode=data['tdMode'],
             side=data['side'],
             ord_type=data['ordType'],
-            sz=data['sz'],
+            sz=sz,
             px=data.get('px'),
             pos_side=data.get('posSide'),
             lever=data.get('lever'),
