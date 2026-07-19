@@ -12,6 +12,7 @@ from .proxy_config import (
     clear_proxy_cache,
     is_proxy_available,
     test_proxy_url,
+    get_proxy_dict,
 )
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
@@ -934,6 +935,40 @@ def api_account_delete(request, account_id):
         return JsonResponse({'code': 0, 'data': {'ok': True}})
     except OKXAccount.DoesNotExist:
         return JsonResponse({'code': -1, 'error': '账户不存在'}, status=404)
+
+
+# ──────────────────────────────────────────────
+# 交易对列表（从 OKX 实时拉取）
+# ──────────────────────────────────────────────
+
+def api_account_symbols(request):
+    """获取 OKX 交易对列表"""
+    inst_type = request.GET.get('type', 'SPOT').upper()
+    try:
+        import requests
+        url = 'https://www.okx.com/api/v5/public/instruments'
+        resp = requests.get(url, params={'instType': inst_type}, proxies=get_proxy_dict(), timeout=15)
+        result = resp.json()
+        if result.get('code') != '0':
+            return JsonResponse({'code': 0, 'data': []})
+
+        symbols = []
+        for item in result.get('data', []):
+            inst_id = item.get('instId', '')
+            if inst_type == 'SWAP':
+                if inst_id.endswith('USDT-SWAP') or inst_id.endswith('USD-SWAP'):
+                    # BTC-USDT-SWAP → BTCUSDT
+                    parts = inst_id.split('-')
+                    symbols.append(parts[0] + parts[1])
+            else:
+                base, _, quote = inst_id.partition('-')
+                if quote == 'USDT':
+                    symbols.append(base + quote)
+        symbols.sort()
+        return JsonResponse({'code': 0, 'data': symbols})
+    except Exception as e:
+        logger.warning(f"获取交易对列表失败: {e}")
+        return JsonResponse({'code': 0, 'data': []})
 
 
 # ──────────────────────────────────────────────

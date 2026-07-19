@@ -32,7 +32,7 @@
           <div class="form-row">
             <label>交易对</label>
             <select v-model="spotForm.symbol" class="input" @change="onSymbolChange('spot')">
-              <option v-for="s in symbolList" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="side-group">
@@ -88,7 +88,7 @@
           <div class="form-row">
             <label>交易对</label>
             <select v-model="contractForm.symbol" class="input" @change="onSymbolChange('contract')">
-              <option v-for="s in symbolList" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in contractSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="side-group">
@@ -261,12 +261,21 @@ const {
 const tradePerm = computed(() => session.value?.trade_permission ?? false)
 const spotPrice = ref(0)
 
-const symbolList = [
-  'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT',
-  'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT',
-  'MATICUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'ETCUSDT',
-  'BCHUSDT', 'TRXUSDT', 'NEARUSDT', 'APTUSDT', 'ARBUSDT',
-]
+const spotSymbols = ref<string[]>([])
+const contractSymbols = ref<string[]>([])
+
+async function fetchSymbols(): Promise<void> {
+  try {
+    const [spotResp, swapResp] = await Promise.all([
+      fetch('/api/account/symbols/?type=SPOT'),
+      fetch('/api/account/symbols/?type=SWAP'),
+    ])
+    const spotData = await spotResp.json()
+    const swapData = await swapResp.json()
+    if (spotData.code === 0) spotSymbols.value = spotData.data
+    if (swapData.code === 0) contractSymbols.value = swapData.data
+  } catch { /* ignore */ }
+}
 
 function onSymbolChange(_type: 'spot' | 'contract'): void {
   fetchTicker()
@@ -493,6 +502,7 @@ watch(() => props.symbol, (sym) => {
 })
 
 onMounted(() => {
+  fetchSymbols()
   if (isLoggedIn.value) {
     loadPositions()
     fetchBalance()
