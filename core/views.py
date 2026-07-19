@@ -20,6 +20,7 @@ from .okx_auth import (
     encrypt_credential, decrypt_credential,
     hash_passphrase, verify_passphrase,
     fetch_account_info, fetch_balance, fetch_positions,
+    post_order, cancel_order, has_trade_permission,
 )
 from .models import OKXAccount
 from pathlib import Path
@@ -700,6 +701,7 @@ def api_account_register(request):
             'account_id': account.pk,
             'label': account.label,
             'is_demo': is_demo,
+            'trade_permission': has_trade_permission(info),
         }
         request.session.set_expiry(0)
 
@@ -771,6 +773,7 @@ def api_account_login(request):
             'account_id': account.pk,
             'label': account.label,
             'is_demo': account.is_demo,
+            'trade_permission': has_trade_permission(account.account_info),
         }
         request.session.set_expiry(0)  # 浏览器会话级
 
@@ -813,6 +816,7 @@ def api_account_session(request):
                 'account_id': creds['account_id'],
                 'label': creds['label'],
                 'api_key_masked': creds['api_key'][:8] + '****',
+                'trade_permission': creds.get('trade_permission', False),
             }
         })
     return JsonResponse({
@@ -868,6 +872,64 @@ def api_account_delete(request, account_id):
 # ──────────────────────────────────────────────
 # 旧版 api_positions — 保留兼容，重定向到新端点
 # ──────────────────────────────────────────────
+
+@csrf_exempt
+def api_account_place_order(request):
+    """下单"""
+    if request.method != 'POST':
+        return JsonResponse({'code': -1, 'error': '仅支持 POST'}, status=405)
+    try:
+        api_key, secret_key, passphrase, is_demo = _session_creds(request)
+        creds = request.session.get('okx_credentials')
+        if not creds.get('trade_permission'):
+            return JsonResponse({'code': -1, 'error': '当前 API Key 无交易权限'}, status=403)
+
+        data = json.loads(request.body)
+        result = post_order(
+            api_key, secret_key, passphrase,
+            inst_id=data['instId'],
+            td_mode=data['tdMode'],
+            side=data['side'],
+            ord_type=data['ordType'],
+            sz=data['sz'],
+            px=data.get('px'),
+            pos_side=data.get('posSide'),
+            lever=data.get('lever'),
+            is_demo=is_demo,
+        )
+        return JsonResponse({'code': 0, 'data': result})
+    except json.JSONDecodeError:
+        return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
+    except Exception as e:
+        logger.error(f"下单失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+
+@csrf_exempt
+def api_account_cancel_order(request):
+    """撤单"""
+    if request.method != 'POST':
+        return JsonResponse({'code': -1, 'error': '仅支持 POST'}, status=405)
+    try:
+        api_key, secret_key, passphrase, is_demo = _session_creds(request)
+        creds = request.session.get('okx_credentials')
+        if not creds.get('trade_permission'):
+            return JsonResponse({'code': -1, 'error': '当前 API Key 无交易权限'}, status=403)
+
+        data = json.loads(request.body)
+        result = cancel_order(
+            api_key, secret_key, passphrase,
+            inst_id=data['instId'],
+            ord_id=data['ordId'],
+            is_demo=is_demo,
+        )
+        return JsonResponse({'code': 0, 'data': result})
+    except json.JSONDecodeError:
+        return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
+    except Exception as e:
+        logger.error(f"撤单失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
 
 def api_positions(request):
     """旧版仓位查询 — 使用 session 凭证"""

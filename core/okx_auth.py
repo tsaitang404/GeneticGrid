@@ -176,3 +176,58 @@ def fetch_positions(api_key: str, secret_key: str, passphrase: str, base_url: st
                 'timestamp': pos.get('uTime', ''),
             })
     return positions
+
+
+def has_trade_permission(account_info: dict | None) -> bool:
+    if not account_info:
+        return False
+    perm = account_info.get('perm', '')
+    return 'trade' in perm.split(',')
+
+
+def post_order(
+    api_key: str,
+    secret_key: str,
+    passphrase: str,
+    inst_id: str,
+    td_mode: str,
+    side: str,
+    ord_type: str,
+    sz: str,
+    px: str | None = None,
+    pos_side: str | None = None,
+    lever: str | None = None,
+    is_demo: bool = False,
+) -> dict:
+    body = {
+        'instId': inst_id,
+        'tdMode': td_mode,
+        'side': side,
+        'ordType': ord_type,
+        'sz': sz,
+    }
+    if px is not None:
+        body['px'] = px
+    if pos_side is not None:
+        body['posSide'] = pos_side
+    if lever is not None:
+        body['lever'] = lever
+    result = okx_api_request('POST', '/api/v5/trade/order', api_key, secret_key, passphrase, body=body, is_demo=is_demo)
+    if result.get('code') != '0':
+        raise Exception(f"下单失败: {result.get('msg', '未知错误')}")
+    return result.get('data', [{}])[0] if result.get('data') else {}
+
+
+def cancel_order(
+    api_key: str,
+    secret_key: str,
+    passphrase: str,
+    inst_id: str,
+    ord_id: str,
+    is_demo: bool = False,
+) -> dict:
+    body = {'instId': inst_id, 'ordId': ord_id}
+    result = okx_api_request('POST', '/api/v5/trade/cancel-order', api_key, secret_key, passphrase, body=body, is_demo=is_demo)
+    if result.get('code') != '0':
+        raise Exception(f"撤单失败: {result.get('msg', '未知错误')}")
+    return result.get('data', [{}])[0] if result.get('data') else {}

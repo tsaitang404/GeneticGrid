@@ -29,4 +29,6 @@ urlpatterns = [
     path('api/account/balance/', views.api_account_balance, name='api_account_balance'),
     path('api/account/positions/', views.api_account_positions, name='api_account_positions'),
     path('api/account/<int:account_id>/', views.api_account_delete, name='api_account_delete'),
+    path('api/account/place-order/', views.api_account_place_order, name='api_account_place_order'),
+    path('api/account/cancel-order/', views.api_account_cancel_order, name='api_account_cancel_order'),
 ]

@@ -83,7 +83,11 @@
 
         <!-- 交易工具面板：占据下方主要面积 -->
         <section class="bottom-row">
-          <TradingToolsPanel @open-account="toggleAccount" />
+          <TradingToolsPanel
+            :symbol="currentSymbol"
+            :currency="currency"
+            @open-account="toggleAccount"
+          />
         </section>
       </div>
     </main>
