@@ -14,7 +14,7 @@ DEBUG = True
 
 # 支持环境变量：ALLOWED_HOSTS=example.com,127.0.0.1
 _allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
-ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] or ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] or ['127.0.0.1', 'localhost', '38.76.190.84']
 
 # Application definition
 INSTALLED_APPS = [

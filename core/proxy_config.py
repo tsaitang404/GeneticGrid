@@ -31,7 +31,7 @@ def _is_container_environment() -> bool:
 
 # 全局代理选项（可通过 API 运行时更新）
 PROXY_OPTIONS = {
-    'enabled': True,
+    'enabled': False,
     # 容器中若配置为 localhost，自动改为宿主机地址
     'container_auto_host': True,
     'container_host': 'host.docker.internal',
@@ -62,17 +62,14 @@ def clear_proxy_cache() -> None:
 
 
 def _resolve_container_host_alias() -> str:
-    """解析容器访问宿主机别名，失败时给出明确配置要求。"""
+    """解析容器访问宿主机别名，失败时降级返回原值。"""
     candidate = str(PROXY_OPTIONS.get('container_host') or '').strip() or 'host.docker.internal'
     try:
         socket.gethostbyname(candidate)
         return candidate
-    except OSError as exc:
-        raise RuntimeError(
-            f'容器内无法解析宿主机别名 {candidate}。'
-            'Docker 模式下请在运行参数中显式添加 '
-            '--add-host=host.docker.internal:host-gateway'
-        ) from exc
+    except OSError:
+        logger.warning(f"容器内无法解析宿主机别名 {candidate}，使用原始配置")
+        return candidate
 
 
 def _resolve_proxy_host(host: str) -> str:

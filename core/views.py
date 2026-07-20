@@ -17,11 +17,13 @@ from .proxy_config import (
 from .plugins.manager import get_plugin_manager
 from .plugins.documentation import DocumentationGenerator
 from .plugins.base import PluginError
+from .protocol import ProtocolConverter
 from .okx_auth import (
     encrypt_credential, decrypt_credential,
     hash_passphrase, verify_passphrase,
     fetch_account_info, fetch_balance, fetch_positions,
     post_order, cancel_order, has_trade_permission,
+    okx_api_request,
     OKX_DEMO_URL, OKX_REAL_URL,
 )
 from .models import OKXAccount
@@ -922,16 +924,18 @@ def api_account_positions(request):
 
 @csrf_exempt
 def api_account_delete(request, account_id):
-    """删除 API Key"""
+    """删除当前登录的 API Key"""
     if request.method != 'DELETE':
         return JsonResponse({'code': -1, 'error': '仅支持 DELETE'}, status=405)
+    creds = request.session.get('okx_credentials')
+    if not creds:
+        return JsonResponse({'code': -1, 'error': '未登录'}, status=401)
+    if creds.get('account_id') != account_id:
+        return JsonResponse({'code': -1, 'error': '只能删除自己当前登录的账户'}, status=403)
     try:
         account = OKXAccount.objects.get(pk=account_id)
         account.delete()
-        # 如果删的是当前登陆的账户，清 session
-        creds = request.session.get('okx_credentials')
-        if creds and creds.get('account_id') == account_id:
-            request.session.pop('okx_credentials', None)
+        request.session.pop('okx_credentials', None)
         return JsonResponse({'code': 0, 'data': {'ok': True}})
     except OKXAccount.DoesNotExist:
         return JsonResponse({'code': -1, 'error': '账户不存在'}, status=404)
@@ -991,14 +995,13 @@ def api_account_place_order(request):
         sz = data['sz']
         # OKX 市价买单 sz 为计价币数量，市价卖单 sz 为币数量
         if data['ordType'] == 'market' and data['side'] == 'buy' and data['tdMode'] == 'cash':
-            try:
-                ticker_resp = okx_api_request('GET', '/api/v5/market/ticker', api_key, secret_key, passphrase, params={'instId': inst_id}, is_demo=is_demo)
-                if ticker_resp.get('code') == '0' and ticker_resp.get('data'):
-                    last = float(ticker_resp['data'][0].get('last', 0))
-                    if last > 0:
-                        sz = str(round(float(sz) * last, 8))
-            except Exception:
-                pass
+            ticker_resp = okx_api_request('GET', '/api/v5/market/ticker', api_key, secret_key, passphrase, params={'instId': inst_id}, is_demo=is_demo)
+            if ticker_resp.get('code') != '0' or not ticker_resp.get('data'):
+                raise Exception(f"获取行情价格失败: {ticker_resp.get('msg', '未知错误')}")
+            last = float(ticker_resp['data'][0].get('last', 0))
+            if last <= 0:
+                raise Exception(f"无效行情价格: {last}")
+            sz = str(round(float(sz) * last, 8))
         result = post_order(
             api_key, secret_key, passphrase,
             inst_id=inst_id,

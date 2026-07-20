@@ -215,7 +215,13 @@ def post_order(
         body['lever'] = lever
     result = okx_api_request('POST', '/api/v5/trade/order', api_key, secret_key, passphrase, body=body, is_demo=is_demo)
     if result.get('code') != '0':
-        raise Exception(f"下单失败: {result.get('msg', '未知错误')}")
+        s_code = ''
+        s_msg = ''
+        if result.get('data'):
+            s_code = result['data'][0].get('sCode', '')
+            s_msg = result['data'][0].get('sMsg', '')
+        msg = s_msg or result.get('msg', '')
+        raise Exception(f"下单失败: {msg} (sCode={s_code})")
     return result.get('data', [{}])[0] if result.get('data') else {}
 
 

@@ -19,6 +19,7 @@
             {{ loading.balance ? '加载中...' : '刷新余额' }}
           </button>
           <button class="btn danger" @click="handleLogout">登出</button>
+          <button class="btn danger-outline" @click="handleDeleteCurrent">删除此账户</button>
         </div>
 
         <!-- 余额 -->
@@ -185,6 +186,28 @@ async function handleRegister(): Promise<void> {
   }
 }
 
+async function handleDeleteCurrent(): Promise<void> {
+  if (!session.value) return
+  const accId = session.value.account_id
+  const acc = accounts.value.find((a: any) => a.id === accId)
+  if (!acc) return
+  if (!confirm(`确定删除当前登录的 API Key「${acc.label}」(${acc.api_key_masked})？\n此操作不可撤销。`)) return
+  try {
+    const resp = await fetch(`/api/account/${accId}/`, { method: 'DELETE' })
+    const result = await resp.json()
+    if (result.code === 0) {
+      accounts.value = accounts.value.filter((a: any) => a.id !== accId)
+      await logout()
+      selectedId.value = null
+      passphraseInput.value = ''
+    } else {
+      error.value = result.error || '删除失败'
+    }
+  } catch (e: any) {
+    error.value = e.message || '网络错误'
+  }
+}
+
 async function handleLogout(): Promise<void> {
   await logout()
   selectedId.value = null
@@ -287,6 +310,8 @@ function formatEq(val: string | number): string {
 .btn.primary:hover { background: #1e53e5; }
 .btn.danger { background: #d32f2f; border-color: #d32f2f; color: #fff; }
 .btn.danger:hover { background: #b71c1c; }
+.btn.danger-outline { background: transparent; border-color: #e53935; color: #e53935; }
+.btn.danger-outline:hover { background: #e53935; color: #fff; }
 .btn.secondary { background: transparent; }
 
 .error-msg {
@@ -407,6 +432,24 @@ function formatEq(val: string | number): string {
 .acc-key { font-size: 12px; color: #8b90a0; }
 .acc-note { font-size: 11px; color: #2962ff; margin-top: 2px; }
 .acc-info { font-size: 11px; color: #787b86; margin-top: 2px; }
+
+.account-card { position: relative; }
+.btn-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid #e53935;
+  border-radius: 4px;
+  background: transparent;
+  color: #e53935;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.account-card:hover .btn-delete { opacity: 1; }
+.btn-delete:hover { background: #e53935; color: #fff; }
 
 .input {
   background: #1b202b;
