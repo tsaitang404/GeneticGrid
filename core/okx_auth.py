@@ -148,6 +148,11 @@ def fetch_balance(api_key: str, secret_key: str, passphrase: str, base_url: str 
                 'eqUsd': d.get('eqUsd'),
                 'availBal': d.get('availBal'),
                 'frozenBal': d.get('frozenBal'),
+                'openAvgPx': d.get('openAvgPx'),
+                'accAvgPx': d.get('accAvgPx'),
+                'spotUpl': d.get('spotUpl'),
+                'spotUplRatio': d.get('spotUplRatio'),
+                'spotBal': d.get('spotBal'),
             }
             for d in data_item.get('details', [])
         ],

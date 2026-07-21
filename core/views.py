@@ -906,16 +906,47 @@ def api_account_balance(request):
 
 
 def api_account_positions(request):
-    """获取持仓（需 session）"""
+    """获取持仓（需 session），包含合约持仓 + 现货余额"""
     try:
         api_key, secret_key, passphrase, is_demo = _session_creds(request)
         positions = fetch_positions(api_key, secret_key, passphrase, is_demo=is_demo)
+        balance = fetch_balance(api_key, secret_key, passphrase, is_demo=is_demo)
+        spot_holdings = []
+        for d in balance.get('details', []):
+            eq = float(d.get('eq', '0'))
+            eq_usd = float(d.get('eqUsd', '0'))
+            if eq <= 0:
+                continue
+        spot_holdings = []
+        for d in balance.get('details', []):
+            eq = float(d.get('eq', '0'))
+            eq_usd = float(d.get('eqUsd', '0'))
+            if eq <= 0:
+                continue
+            open_avg_px = d.get('openAvgPx')
+            spot_upl = d.get('spotUpl')
+            spot_upl_ratio = d.get('spotUplRatio')
+            spot_holdings.append({
+                'symbol': d.get('ccy', ''),
+                'positionQty': eq,
+                'notionalValue': eq_usd,
+                'markPrice': eq_usd / eq if eq > 0 else 0,
+                'leverage': 1,
+                'mgnMode': 'spot',
+                'side': 'spot',
+                'available': float(d.get('availBal', '0')),
+                'frozenQty': float(d.get('frozenBal', '0')),
+                'unrealizedPnl': float(spot_upl) if spot_upl else 0,
+                'unrealizedPnlRatio': float(spot_upl_ratio) if spot_upl_ratio else 0,
+                'avgCostPrice': float(open_avg_px) if open_avg_px else None,
+                'timestamp': '',
+            })
         return JsonResponse({
             'code': 0,
             'data': {
                 'source': 'okx',
-                'positions': positions,
-                'total': len(positions),
+                'positions': positions + spot_holdings,
+                'total': len(positions) + len(spot_holdings),
             }
         })
     except Exception as e:

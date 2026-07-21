@@ -154,6 +154,7 @@
           <div class="summary-item"><span class="label">总未实现盈亏</span><span :class="['value', totalUnrealizedPnl >= 0 ? 'profit' : 'loss']">{{ totalUnrealizedPnl >= 0 ? '+' : '' }}{{ totalUnrealizedPnl }}</span></div>
           <div class="summary-item"><span class="label">多头</span><span class="value long-count">{{ longCount }}</span></div>
           <div class="summary-item"><span class="label">空头</span><span class="value short-count">{{ shortCount }}</span></div>
+          <div class="summary-item"><span class="label">现货</span><span class="value spot-count">{{ spotCount }}</span></div>
         </div>
         <div v-if="posLoading" class="loading">加载仓位中...</div>
         <div v-else-if="posError" class="error">{{ posError }}</div>
@@ -172,7 +173,8 @@
             <div class="pos-row">
               <div class="pos-metric"><span class="label">数量</span><span class="value">{{ formatNumber(pos.positionQty) }}</span></div>
               <div class="pos-metric"><span class="label">标记价格</span><span class="value">${{ formatNumber(pos.markPrice) }}</span></div>
-              <div class="pos-metric"><span class="label">杠杆</span><span class="value">{{ pos.leverage }}x</span></div>
+              <div v-if="pos.side === 'spot' && pos.avgCostPrice" class="pos-metric"><span class="label">建仓均价</span><span class="value">${{ formatNumber(pos.avgCostPrice) }}</span></div>
+              <div v-else class="pos-metric"><span class="label">杠杆</span><span class="value">{{ pos.leverage }}x</span></div>
             </div>
             <div v-if="expandedSymbol === pos.symbol + '-' + pos.side" class="pos-details">
               <div class="detail-row">
@@ -188,6 +190,7 @@
                 <div class="detail-item"><span class="label">更新时间</span><span class="value">{{ formatTime(pos.timestamp) }}</span></div>
               </div>
             </div>
+            <div v-if="pos.side === 'spot' && !pos.avgCostPrice" class="pos-note">转入资产，无建仓成本</div>
             <div class="pos-expand-hint">{{ expandedSymbol === pos.symbol + '-' + pos.side ? '收起' : '查看详情' }}</div>
           </div>
         </div>
@@ -425,6 +428,7 @@ const totalUnrealizedPnl = computed(() => {
 
 const longCount = computed(() => filteredPositions.value.filter((p: any) => p.side?.toLowerCase() === 'long').length)
 const shortCount = computed(() => filteredPositions.value.filter((p: any) => p.side?.toLowerCase() === 'short').length)
+const spotCount = computed(() => filteredPositions.value.filter((p: any) => p.side?.toLowerCase() === 'spot').length)
 
 function toggleExpand(key: string): void {
   expandedSymbol.value = expandedSymbol.value === key ? null : key
@@ -593,6 +597,8 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .pos-side { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
 .pos-side.long { background: rgba(76,175,80,0.15); color: #4caf50; }
 .pos-side.short { background: rgba(244,67,54,0.15); color: #f44336; }
+.pos-side.spot { background: rgba(33,150,243,0.15); color: #2196f3; }
+.spot-count { color: #2196f3 !important; }
 .pos-pnl { text-align: right; display: flex; flex-direction: column; gap: 1px; font-size: 13px; font-weight: 600; }
 .pnl-pct { font-size: 11px; font-weight: 400; }
 .profit { color: #4caf50; }
