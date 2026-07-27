@@ -240,6 +240,8 @@ def update_proxy_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
             PROXY_CONFIG[proxy_type]['port'] = _normalize_port(value['port'])
 
     clear_proxy_cache()
+    # 持久化到数据库
+    _save_to_db()
     return get_proxy_settings_snapshot()
 
 
@@ -419,3 +421,49 @@ def print_proxy_status():
     print(f"Requests/HTTPX 代理: {proxy_dict or '未配置'}")
     
     print()
+
+
+# ---------------------------------------------------------------------------
+# 数据库持久化
+# ---------------------------------------------------------------------------
+
+def _load_from_db() -> None:
+    """从数据库加载持久化的代理配置，覆盖内存默认值。"""
+    try:
+        from .models import ProxySettings
+        settings = ProxySettings.load()
+        PROXY_OPTIONS['enabled'] = settings.enabled
+        PROXY_OPTIONS['container_auto_host'] = settings.container_auto_host
+        PROXY_OPTIONS['container_host'] = settings.container_host
+        PROXY_OPTIONS['preferred_type'] = settings.preferred_type
+        PROXY_CONFIG['socks5']['host'] = settings.socks5_host
+        PROXY_CONFIG['socks5']['port'] = settings.socks5_port
+        PROXY_CONFIG['http']['host'] = settings.http_host
+        PROXY_CONFIG['http']['port'] = settings.http_port
+        logger.debug("已从数据库加载代理配置 (enabled=%s)", settings.enabled)
+    except Exception as exc:
+        # 数据库尚未就绪时静默使用默认值
+        logger.debug("从数据库加载代理配置失败（可能首次运行）: %s", exc)
+
+
+def _save_to_db() -> None:
+    """将当前内存中的代理配置持久化到数据库。"""
+    try:
+        from .models import ProxySettings
+        obj, _ = ProxySettings.objects.get_or_create(pk=1)
+        obj.enabled = PROXY_OPTIONS['enabled']
+        obj.container_auto_host = PROXY_OPTIONS['container_auto_host']
+        obj.container_host = PROXY_OPTIONS['container_host']
+        obj.preferred_type = PROXY_OPTIONS['preferred_type']
+        obj.socks5_host = PROXY_CONFIG['socks5']['host']
+        obj.socks5_port = PROXY_CONFIG['socks5']['port']
+        obj.http_host = PROXY_CONFIG['http']['host']
+        obj.http_port = PROXY_CONFIG['http']['port']
+        obj.save()
+        logger.info("代理配置已持久化到数据库")
+    except Exception as exc:
+        logger.warning("代理配置持久化失败: %s", exc)
+
+
+# 模块加载时尝试从数据库恢复配置
+_load_from_db()

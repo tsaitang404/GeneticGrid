@@ -512,7 +512,7 @@ def api_proxy_config(request):
         return JsonResponse({
             'code': 0,
             'data': updated,
-            'message': '代理配置已更新（仅当前进程生效）',
+            'message': '代理配置已更新并持久化',
         })
     except json.JSONDecodeError:
         return JsonResponse({
