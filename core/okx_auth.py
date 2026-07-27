@@ -34,11 +34,14 @@ def _get_fernet() -> Fernet:
 
 
 def encrypt_credential(plaintext: str) -> bytes:
+    """加密凭据。"""
     return _get_fernet().encrypt(plaintext.encode())
 
 
-def decrypt_credential(ciphertext: bytes) -> str:
-    return _get_fernet().decrypt(ciphertext).decode()
+def decrypt_credential(ciphertext: memoryview | bytes | bytearray) -> str:
+    """解密凭据。支持 bytes / memoryview / bytearray 等数据库返回类型。"""
+    raw = bytes(ciphertext)
+    return _get_fernet().decrypt(raw).decode()
 
 
 def hash_passphrase(plaintext: str) -> str:
