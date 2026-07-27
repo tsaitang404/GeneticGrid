@@ -15,6 +15,8 @@ from core import proxy_config
 
 def setup_function():
     proxy_config._PROXY_CACHE.clear()
+    proxy_config.PROXY_OPTIONS['enabled'] = False
+    proxy_config.PROXY_OPTIONS['preferred_type'] = 'http'
 
 
 class FakeSocket:
@@ -34,6 +36,7 @@ class FakeSocket:
 
 
 def test_is_proxy_available_uses_cache(monkeypatch):
+    proxy_config.PROXY_OPTIONS['enabled'] = True
     calls = {'count': 0}
 
     def _socket(*args, **kwargs):
@@ -74,6 +77,7 @@ def test_get_proxy_url_and_dict(monkeypatch):
 
 
 def test_get_proxy_prefers_http_then_socks5(monkeypatch):
+    proxy_config.PROXY_OPTIONS['enabled'] = True
     proxy_config.PROXY_OPTIONS['preferred_type'] = 'http'
 
     def _url(proxy_type='http'):

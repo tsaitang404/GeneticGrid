@@ -68,20 +68,28 @@ TEMPLATES = [
 WSGI_APPLICATION = 'geneticgrid.wsgi.application'
 ASGI_APPLICATION = 'geneticgrid.asgi.application'
 
-# Database
+# Database — PostgreSQL (TimescaleDB)
 # https://docs.djangoproject.com/en/stable/ref/settings/#databases
-IN_CONTAINER = Path('/.dockerenv').exists()
-DEFAULT_DB_PATH = '/app/data/db.sqlite3' if IN_CONTAINER else str(BASE_DIR / 'db.sqlite3')
-DB_PATH = os.environ.get('DB_PATH', DEFAULT_DB_PATH)
-Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+if not DATABASE_URL:
+    raise RuntimeError(
+        'DATABASE_URL 环境变量未设置。\n'
+        '请配置 PostgreSQL 连接，例如:\n'
+        '  DATABASE_URL=postgres://geneticgrid:geneticgrid@localhost:5432/geneticgrid\n'
+        '或在 .env 文件中配置。'
+    )
 
+import urllib.parse
+parsed = urllib.parse.urlparse(DATABASE_URL)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': Path(DB_PATH),
-        'OPTIONS': {
-            'timeout': 20,  # 增加超时时间到20秒
-        },
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': parsed.path.lstrip('/') or 'geneticgrid',
+        'USER': parsed.username or 'geneticgrid',
+        'PASSWORD': parsed.password or 'geneticgrid',
+        'HOST': parsed.hostname or 'localhost',
+        'PORT': parsed.port or 5432,
+        'OPTIONS': {'connect_timeout': 10},
     }
 }
 
@@ -172,8 +180,14 @@ _raw_realtime_streams = os.environ.get('REALTIME_INGESTION_STREAMS')
 if _raw_realtime_streams:
     REALTIME_INGESTION_STREAMS = parse_realtime_ingestion_streams(_raw_realtime_streams)
 
-# Redis 缓存配置（用于缓解 SQLite 锁表问题）
+# Redis 缓存配置（热数据缓存层，降低数据库查询压力）
 REDIS_CACHE_ENABLED = os.environ.get('REDIS_CACHE_ENABLED', 'false').lower() in ('true', '1', 'yes')
 REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/0')
 REDIS_CACHE_TTL_SECONDS = int(os.environ.get('REDIS_CACHE_TTL_SECONDS', 86400))  # 默认1天
 REDIS_CACHE_MAX_ENTRIES = int(os.environ.get('REDIS_CACHE_MAX_ENTRIES', 5000))
+
+# K 线数据保留天数（-1 表示永久保留）
+DB_RETENTION_DAYS = int(os.environ.get('DB_RETENTION_DAYS', '30'))
+
+# 插件 HTTP 请求超时（秒）
+PLUGIN_HTTP_TIMEOUT = int(os.environ.get('PLUGIN_HTTP_TIMEOUT', '60'))

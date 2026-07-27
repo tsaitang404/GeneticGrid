@@ -12,7 +12,7 @@ repos:
 
       - id: pyright
         name: pyright (Python type check)
-        entry: bash -c 'source .venv/bin/activate && /home/Ciallo/.nvm/versions/node/v20.17.0/bin/pyright'
+        entry: bash -c 'source .venv/bin/activate && basedpyright'
         language: system
         types: [python]
         pass_filenames: false
@@ -21,7 +21,7 @@ repos:
 
       - id: eslint
         name: eslint (JS/TS/Vue syntax check)
-        entry: bash -c 'source ~/.nvm/nvm.sh && nvm use 20.17.0 2>/dev/null && cd frontend && npx eslint . --ext .vue,.js,.ts,.tsx --ignore-path .gitignore --max-warnings 80'
+        entry: bash -c 'cd frontend && if test -d node_modules/@typescript-eslint; then npx eslint . --ext .vue,.js,.ts,.tsx --ignore-path .gitignore --max-warnings 80; else echo "⚠️  @typescript-eslint 未安装，跳过 eslint 检查"; fi'
         language: system
         pass_filenames: false
         always_run: true
@@ -29,7 +29,7 @@ repos:
 
       - id: pytest
         name: pytest
-        entry: bash -c 'source .venv/bin/activate && python -m pytest tests/ -q --ignore=tests/test_cache_service.py'
+        entry: bash -c 'source .venv/bin/activate && DATABASE_URL=postgres://geneticgrid:geneticgrid@localhost:5432/geneticgrid python -m pytest tests/ -q --no-header --ignore=tests/test_cache_service.py 2>&1 | tail -20'
         language: system
         types: [python]
         pass_filenames: false

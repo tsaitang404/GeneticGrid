@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class CandlestickCacheService:
     """K线数据缓存服务 - 负责数据库缓存的读写"""
 
-    # SQLite 在并发写入时容易触发 database is locked，这里用进程内锁串行化写入
+    # 并发写入时使用进程内锁串行化，避免数据库锁冲突
     _write_lock = threading.RLock()
     _redis_max_entries = getattr(settings, 'REDIS_CACHE_MAX_ENTRIES', 5000)
     _redis_ttl_seconds = getattr(settings, 'REDIS_CACHE_TTL_SECONDS', 86400)

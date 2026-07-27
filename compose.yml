@@ -1,0 +1,84 @@
+# GeneticGrid - Podman Compose 本地开发与生产配置
+# 使用: podman-compose up -d
+# 重建: podman-compose up -d --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: geneticgrid-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # PostgreSQL 连接（容器内使用服务名 timescaledb）
+      - DATABASE_URL=postgres://geneticgrid:geneticgrid@timescaledb:5432/geneticgrid
+      - REDIS_CACHE_URL=redis://redis:6379/0
+      - DB_RETENTION_DAYS=30
+    volumes:
+      - ./.env:/app/.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/sources/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_started
+      timescaledb:
+        condition: service_healthy
+    networks:
+      - geneticgrid-net
+
+  redis:
+    image: docker.io/redis:7-alpine
+    container_name: geneticgrid-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - geneticgrid-net
+
+  timescaledb:
+    image: docker.io/postgres:16-alpine
+    container_name: geneticgrid-timescaledb
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: geneticgrid
+      POSTGRES_USER: geneticgrid
+      POSTGRES_PASSWORD: geneticgrid
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geneticgrid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - geneticgrid-net
+
+volumes:
+  redis-data:
+    name: geneticgrid-redis-data
+  timescaledb-data:
+    name: geneticgrid-timescaledb-data
+
+networks:
+  geneticgrid-net:
+    name: geneticgrid-net

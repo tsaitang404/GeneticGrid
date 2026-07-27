@@ -1,7 +1,63 @@
 #!/usr/bin/env bash
+# GeneticGrid Docker/Compose 启动脚本
+# 用法:
+#   ./scripts/docker-run.sh              # 直接运行容器（需指定 IMAGE）
+#   ./scripts/docker-run.sh compose      # 使用 docker-compose / podman-compose 启动
+#   ./scripts/docker-run.sh compose:up   # 同上
+#   ./scripts/docker-run.sh compose:down # 停止并移除
+#   ./scripts/docker-run.sh compose:logs # 查看日志
+#   ./scripts/docker-run.sh compose:rebuild  # 强制重建并启动
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ACTION="${1:-run}"
+COMPOSE_CMD="${COMPOSE_CMD:-podman-compose}"
+PODMAN_SOCKET="/run/user/1000/podman/podman.sock"
+
+# ---------------------------------------------------------------------------
+# Compose 模式
+# ---------------------------------------------------------------------------
+if [[ "$ACTION" =~ ^compose ]]; then
+  COMPOSE_ACTION="${2:-up}"
+
+  # 自动检测 podman socket 并设置 DOCKER_HOST
+  if [[ "$COMPOSE_CMD" == "podman-compose" && -S "$PODMAN_SOCKET" ]]; then
+    export DOCKER_HOST="unix://$PODMAN_SOCKET"
+    echo "[compose] Using Podman socket: $DOCKER_HOST"
+  fi
+
+  cd "$PROJECT_ROOT"
+
+  case "$COMPOSE_ACTION" in
+    up|start)
+      echo "[compose] Starting GeneticGrid via ${COMPOSE_CMD} ..."
+      $COMPOSE_CMD up -d
+      echo "[compose] Visit http://127.0.0.1:8000"
+      ;;
+    down|stop)
+      echo "[compose] Stopping GeneticGrid ..."
+      $COMPOSE_CMD down
+      ;;
+    logs)
+      $COMPOSE_CMD logs -f
+      ;;
+    rebuild)
+      echo "[compose] Rebuilding and starting GeneticGrid ..."
+      $COMPOSE_CMD up -d --build
+      echo "[compose] Rebuild complete. Visit http://127.0.0.1:8000"
+      ;;
+    *)
+      echo "[compose] Unknown action: $COMPOSE_ACTION"
+      echo "Usage: $0 compose [up|down|logs|rebuild]"
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 原始 docker run 模式（向下兼容）
+# ---------------------------------------------------------------------------
 IMAGE="${IMAGE:-ghcr.io/tsaitang404/geneticgrid:v0.2.2}"
 CONTAINER_NAME="${CONTAINER_NAME:-geneticgrid}"
 ENV_FILE="${ENV_FILE:-$PROJECT_ROOT/.env}"

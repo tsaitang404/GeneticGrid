@@ -8,6 +8,7 @@ from datetime import datetime
 import logging
 import time
 import requests
+from django.conf import settings
 from core.proxy_config import get_proxy_dict
 
 from ..base import (
@@ -194,11 +195,19 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         """已废弃：使用 _normalize_granularity 代替"""
         return self._normalize_granularity(bar)
     
-    def _request(self, endpoint: str, params: dict = None, timeout: int = 30) -> dict:
-        """发送 HTTP 请求到 OKX API"""
+    def _request(self, endpoint: str, params: dict = None, timeout: int = None) -> dict:
+        """发送 HTTP 请求到 OKX API
+
+        Args:
+            endpoint: API 端点，如 /market/candles
+            params: 查询参数
+            timeout: 超时秒数（默认取 settings.PLUGIN_HTTP_TIMEOUT 或 60）
+        """
+        if timeout is None:
+            timeout = getattr(settings, 'PLUGIN_HTTP_TIMEOUT', 60)
         url = f"{self.BASE_URL}{endpoint}"
         proxies = get_proxy_dict()
-        
+
         try:
             response = requests.get(
                 url,

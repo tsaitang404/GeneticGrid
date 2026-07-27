@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 def _is_container_environment() -> bool:
+    # Docker 标记文件
     if os.path.exists('/.dockerenv'):
         return True
 
+    # Docker / containerd cgroup 检测
     cgroup_path = Path('/proc/1/cgroup')
     if cgroup_path.exists():
         try:
@@ -26,6 +28,12 @@ def _is_container_environment() -> bool:
                 return True
         except OSError:
             pass
+
+    # Podman / OCI 容器检测：环境变量 container=<runtime>
+    container_env = os.environ.get('container', '')
+    if container_env.lower() in ('podman', 'oci', 'containerd'):
+        return True
+
     return False
 
 
@@ -295,7 +303,7 @@ def get_proxy_url(proxy_type: str = 'http') -> Optional[str]:
     port = config['port']
     
     if proxy_type.lower() == 'socks5':
-        return f"socks5://{host}:{port}"
+        return f"socks5h://{host}:{port}"
     else:
         return f"http://{host}:{port}"
 
