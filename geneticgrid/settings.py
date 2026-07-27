@@ -16,6 +16,14 @@ DEBUG = True
 _allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '')
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] or ['127.0.0.1', 'localhost', '38.76.190.84']
 
+# CIDR 网段白名单（通过 ALLOWED_CIDR_NETS 环境变量配置）
+# 格式: 10.126.126.0/24,192.168.1.0/24
+_allowed_cidr_env = os.environ.get('ALLOWED_CIDR_NETS', '').strip()
+if _allowed_cidr_env:
+    ALLOWED_CIDR_NETS = [n.strip() for n in _allowed_cidr_env.split(',') if n.strip()]
+else:
+    ALLOWED_CIDR_NETS = []
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -31,6 +39,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'allow_cidr.middleware.AllowCIDRMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
