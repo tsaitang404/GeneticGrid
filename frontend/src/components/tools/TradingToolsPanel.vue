@@ -10,11 +10,11 @@
       <button :class="['tab-btn', { active: activeTab === 'option' }]" @click="activeTab = 'option'">
         🎯 期权交易
       </button>
-      <button :class="['tab-btn', { active: activeTab === 'position' }]" @click="activeTab = 'position'">
-        📊 仓位管理
-      </button>
       <button :class="['tab-btn', { active: activeTab === 'strategy' }]" @click="activeTab = 'strategy'">
         🤖 策略交易
+      </button>
+      <button :class="['tab-btn', { active: activeTab === 'position' }]" @click="activeTab = 'position'">
+        📊 仓位管理
       </button>
     </div>
 
