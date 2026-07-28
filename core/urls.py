@@ -33,4 +33,8 @@ urlpatterns = [
     path('api/account/<int:account_id>/', views.api_account_delete, name='api_account_delete'),
     path('api/account/place-order/', views.api_account_place_order, name='api_account_place_order'),
     path('api/account/cancel-order/', views.api_account_cancel_order, name='api_account_cancel_order'),
+    
+    # 期权数据
+    path('api/options/instruments/', views.api_option_instruments, name='api_option_instruments'),
+    path('api/options/ticker/', views.api_option_ticker, name='api_option_ticker'),
 ]

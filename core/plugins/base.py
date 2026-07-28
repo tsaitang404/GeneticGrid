@@ -26,6 +26,7 @@ class SymbolMode(Enum):
     """交易对模式"""
     SPOT = "spot"
     CONTRACT = "contract"
+    OPTION = "option"
 
 
 class Granularity:
@@ -338,6 +339,32 @@ class ContractBasisData:
             'reference_price': self.reference_price,
             'tenor': self.tenor,
             'quote_currency': self.quote_currency,
+        }
+
+
+@dataclass
+class OptionInstrument:
+    """期权合约信息"""
+    inst_id: str          # 合约ID，如 BTC-USD-260728-59000-C
+    uly: str              # 标的资产，如 BTC-USD
+    opt_type: str         # C=看涨, P=看跌
+    strike: float         # 行权价
+    exp_time: int         # 到期时间（秒）
+    ct_val: float         # 合约面值
+    ct_mult: str          # 合约乘数
+    settle_currency: str  # 结算币种
+    ticker: Optional[dict] = None  # 最新行情
+
+    def to_dict(self) -> dict:
+        return {
+            'inst_id': self.inst_id,
+            'uly': self.uly,
+            'opt_type': self.opt_type,
+            'strike': self.strike,
+            'exp_time': self.exp_time,
+            'ct_val': self.ct_val,
+            'ct_mult': self.ct_mult,
+            'settle_currency': self.settle_currency,
         }
 
 

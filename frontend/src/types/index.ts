@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 
-export type SymbolMode = 'spot' | 'contract'
+export type SymbolMode = 'spot' | 'contract' | 'option'
 
 // Candle data types
 export interface Candle {

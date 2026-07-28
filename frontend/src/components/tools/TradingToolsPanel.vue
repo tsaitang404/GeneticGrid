@@ -7,6 +7,9 @@
       <button :class="['tab-btn', { active: activeTab === 'contract' }]" @click="activeTab = 'contract'">
         📈 合约交易
       </button>
+      <button :class="['tab-btn', { active: activeTab === 'option' }]" @click="activeTab = 'option'">
+        🎯 期权交易
+      </button>
       <button :class="['tab-btn', { active: activeTab === 'position' }]" @click="activeTab = 'position'">
         📊 仓位管理
       </button>
@@ -122,6 +125,88 @@
           </div>
           <button class="btn primary trade-submit" @click="showConfirm = true">
             {{ contractForm.side === 'long' ? '做多' : '做空' }} {{ contractForm.symbol }}
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <!-- ===== 期权交易 ===== -->
+    <div v-show="activeTab === 'option'" class="tab-content">
+      <template v-if="!isLoggedIn">
+        <div class="login-prompt">
+          <div class="prompt-icon">🔑</div>
+          <div class="prompt-text">请先登陆</div>
+          <button class="btn primary" @click="$emit('open-account')">前往登陆</button>
+        </div>
+      </template>
+      <template v-else-if="!tradePerm">
+        <div class="no-perm">⚠️ 当前 API Key 无交易权限</div>
+      </template>
+      <template v-else>
+        <div class="trade-form">
+          <div class="form-row">
+            <label>标的资产</label>
+            <select v-model="optionForm.uly" class="input" @change="fetchOptionInstruments">
+              <option v-for="u in optionUlyList" :key="u" :value="u">{{ u }}</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>到期日</label>
+            <select v-model="optionForm.expTime" class="input" @change="onOptionChange">
+              <option v-for="e in sortedExpiries" :key="e.value" :value="e.value">{{ e.label }}</option>
+            </select>
+          </div>
+          <div class="option-chain">
+            <div class="chain-header">
+              <span class="col-strike">行权价</span>
+              <span class="col-call">看涨 (C)</span>
+              <span class="col-put">看跌 (P)</span>
+            </div>
+            <div v-for="row in optionChainRows" :key="row.strike" class="chain-row" :class="{ selected: selectedStrike === row.strike }">
+              <span class="col-strike">{{ row.strike }}</span>
+              <span class="col-call" :class="{ active: optionForm.optType === 'C' && selectedStrike === row.strike }">
+                <button v-if="row.call" class="opt-btn" @click="selectOption(row.call, 'C')">
+                  <span class="opt-bid">{{ row.call.bid || '-' }}</span>
+                  <span class="opt-ask">{{ row.call.ask || '-' }}</span>
+                </button>
+                <span v-else class="no-opt">-</span>
+              </span>
+              <span class="col-put" :class="{ active: optionForm.optType === 'P' && selectedStrike === row.strike }">
+                <button v-if="row.put" class="opt-btn" @click="selectOption(row.put, 'P')">
+                  <span class="opt-bid">{{ row.put.bid || '-' }}</span>
+                  <span class="opt-ask">{{ row.put.ask || '-' }}</span>
+                </button>
+                <span v-else class="no-opt">-</span>
+              </span>
+            </div>
+          </div>
+          <div v-if="selectedOption" class="selected-info">
+            已选: {{ selectedOption.inst_id }}
+            <span v-if="optionTicker" class="ticker-info">
+              最新价: {{ optionTicker.last }} IV: {{ optionTicker.iv }}
+            </span>
+          </div>
+          <div class="side-group">
+            <button :class="['side-btn', { active: optionForm.side === 'buy' }]" @click="optionForm.side = 'buy'">买入</button>
+            <button :class="['side-btn', 'sell', { active: optionForm.side === 'sell' }]" @click="optionForm.side = 'sell'">卖出</button>
+          </div>
+          <div class="form-row">
+            <label>类型</label>
+            <div class="type-group">
+              <button :class="['type-btn', { active: optionForm.ordType === 'limit' }]" @click="optionForm.ordType = 'limit'">限价单</button>
+              <button :class="['type-btn', { active: optionForm.ordType === 'market' }]" @click="optionForm.ordType = 'market'">市价单</button>
+            </div>
+          </div>
+          <div v-if="optionForm.ordType === 'limit'" class="form-row">
+            <label>价格 (USDT)</label>
+            <input v-model.number="optionForm.px" type="number" step="0.1" class="input" />
+          </div>
+          <div class="form-row">
+            <label>数量 (张)</label>
+            <input v-model.number="optionForm.sz" type="number" step="1" min="1" class="input" />
+          </div>
+          <button class="btn primary trade-submit" :disabled="!selectedOption" @click="showConfirm = true">
+            {{ optionForm.side === 'buy' ? '买入' : '卖出' }} 期权
           </button>
         </div>
       </template>
@@ -297,7 +382,7 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const activeTab = ref<'spot' | 'contract' | 'position' | 'grid'>('position')
+const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'grid'>('position')
 const posLoading = ref(false)
 const posError = ref('')
 const filterSymbol = ref('')
@@ -324,6 +409,98 @@ const contractForm = reactive({
   szMode: 'coin',
 })
 
+// ---- 期权表单 ----
+const optionUlyList = ['BTC-USD', 'ETH-USD', 'SOL-USD']
+const allOptionInstruments = ref<any[]>([])
+const optionChainRows = ref<{ strike: number; call: any; put: any }[]>([])
+const selectedOption = ref<any>(null)
+const optionTicker = ref<any>(null)
+const selectedStrike = ref<number | null>(null)
+
+const optionForm = reactive({
+  uly: 'BTC-USD',
+  expTime: 0,
+  optType: 'C',
+  side: 'buy',
+  ordType: 'limit',
+  px: 0,
+  sz: 1,
+})
+
+const sortedExpiries = computed(() => {
+  const map = new Map<number, string>()
+  for (const inst of allOptionInstruments.value) {
+    const t = inst.exp_time
+    const d = new Date(t * 1000)
+    const label = d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    if (!map.has(t) || label) map.set(t, label)
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a - b)
+    .slice(0, 10)
+    .map(([value, label]) => ({ value, label }))
+})
+
+async function fetchOptionInstruments(): Promise<void> {
+  try {
+    const resp = await fetch(`/api/options/instruments/?uly=${optionForm.uly}`)
+    const result = await resp.json()
+    if (result.code === 0) {
+      allOptionInstruments.value = result.data
+      if (sortedExpiries.value.length) {
+        optionForm.expTime = sortedExpiries.value[0].value
+      }
+      buildOptionChain()
+    }
+  } catch { /* ignore */ }
+}
+
+function buildOptionChain(): void {
+  const exp = optionForm.expTime
+  const filtered = allOptionInstruments.value.filter((i: any) => i.exp_time === exp)
+  const strikes = new Set(filtered.map((i: any) => i.strike))
+  const rows: { strike: number; call: any; put: any }[] = []
+  for (const s of strikes) {
+    const call = filtered.find((i: any) => i.strike === s && i.opt_type === 'C')
+    const put = filtered.find((i: any) => i.strike === s && i.opt_type === 'P')
+    rows.push({ strike: s, call, put })
+  }
+  rows.sort((a, b) => a.strike - b.strike)
+  optionChainRows.value = rows
+}
+
+function onOptionChange(): void {
+  buildOptionChain()
+  selectedOption.value = null
+  optionTicker.value = null
+  selectedStrike.value = null
+}
+
+async function selectOption(inst: any, optType: string): Promise<void> {
+  selectedOption.value = inst
+  optionForm.optType = optType
+  selectedStrike.value = inst.strike
+  optionForm.px = 0
+  // 同步获取该期权行权价的 bid/ask 并刷新链条显示
+  try {
+    const resp = await fetch(`/api/options/ticker/?instId=${inst.inst_id}`)
+    const result = await resp.json()
+    if (result.code === 0) {
+      optionTicker.value = result.data
+      // 将 ticker 中的 bid/ask 写回 optionChainRows 对应行
+      const tk = result.data
+      for (const row of optionChainRows.value) {
+        if (row.call && row.call.strike === inst.strike) row.call.bid = tk.bid
+        if (row.call && row.call.strike === inst.strike) row.call.ask = tk.ask
+        if (row.put && row.put.strike === inst.strike) row.put.bid = tk.bid
+        if (row.put && row.put.strike === inst.strike) row.put.ask = tk.ask
+      }
+      if (tk.ask > 0) optionForm.px = tk.ask
+      else if (tk.last > 0) optionForm.px = tk.last
+    }
+  } catch { /* ignore */ }
+}
+
 // 单位
 const spotUnit = computed(() => spotForm.szMode === 'base' ? spotForm.symbol.replace(/USDT|USD|USDC/, '') : 'USDT')
 const contractUnit = computed(() => contractForm.szMode === 'coin' ? contractForm.symbol.replace(/USDT|USD|USDC/, '') : '张')
@@ -349,22 +526,38 @@ const orderError = ref('')
 const orderResult = ref<any>(null)
 
 const isContract = computed(() => activeTab.value === 'contract')
-const f = computed(() => isContract.value ? contractForm : spotForm)
-const confirmSymbol = computed(() => f.value.symbol)
+const isOption = computed(() => activeTab.value === 'option')
+const f = computed(() => {
+  return isOption.value ? (optionForm as unknown as typeof spotForm) : (isContract.value ? contractForm : spotForm)
+})
+const confirmSymbol = computed(() => {
+  if (isOption.value && selectedOption.value) return selectedOption.value.inst_id
+  return f.value.symbol
+})
 const confirmSideText = computed(() => {
+  if (isOption.value) return optionForm.side === 'buy' ? '买入看涨' : (optionForm.optType === 'C' ? '卖出看涨' : '卖出看跌')
   if (isContract.value) return f.value.side === 'long' ? '做多' : '做空'
   return f.value.side === 'buy' ? '买入' : '卖出'
 })
-const confirmSideClass = computed(() => ({
-  buy: 'text-green',
-  long: 'text-green',
-  sell: 'text-red',
-  short: 'text-red',
-}[f.value.side] || ''))
-const confirmPx = computed(() => isContract.value ? (spotPrice.value || '-') : (spotForm.ordType === 'market' ? '市价' : spotForm.px))
+const confirmSideClass = computed(() => {
+  const side = isOption.value ? optionForm.side : f.value.side
+  const classes: Record<string, string> = {
+    buy: 'text-green', long: 'text-green',
+    sell: 'text-red', short: 'text-red',
+  }
+  return classes[side] || ''
+})
+const confirmPx = computed(() => {
+  if (isOption.value) return optionForm.ordType === 'market' ? '市价' : (optionForm.px || '-')
+  return isContract.value ? (spotPrice.value || '-') : (spotForm.ordType === 'market' ? '市价' : spotForm.px)
+})
 const confirmSz = computed(() => f.value.sz)
-const confirmUnit = computed(() => isContract.value ? contractUnit.value : spotUnit.value)
+const confirmUnit = computed(() => {
+  if (isOption.value) return '张'
+  return isContract.value ? contractUnit.value : spotUnit.value
+})
 const confirmOrdType = computed(() => {
+  if (isOption.value) return optionForm.ordType === 'limit' ? '限价单' : '市价单'
   if (!isContract.value) return spotForm.ordType === 'limit' ? '限价单' : '市价单'
   return '限价单'
 })
@@ -377,19 +570,27 @@ async function submitOrder(): Promise<void> {
   orderError.value = ''
   orderResult.value = null
   try {
-    const body: any = {
-      instId: f.value.symbol,
-      side: isContract.value ? (f.value.side === 'long' ? 'buy' : 'sell') : f.value.side,
-      ordType: isContract.value ? 'limit' : spotForm.ordType,
-      sz: String(f.value.sz),
-      tdMode: isContract.value ? contractForm.tdMode : 'cash',
-    }
-    if (body.ordType === 'limit') {
-      body.px = String(isContract.value ? spotPrice.value : spotForm.px)
-    }
-    if (isContract.value) {
-      body.posSide = f.value.side
-      body.lever = String(contractForm.lever)
+    const body: any = {}
+    if (isOption.value) {
+      body.instId = selectedOption.value?.inst_id
+      body.side = optionForm.side
+      body.ordType = optionForm.ordType
+      body.sz = String(optionForm.sz)
+      body.tdMode = 'isolated'
+      if (body.ordType === 'limit') body.px = String(optionForm.px)
+    } else {
+      body.instId = f.value.symbol
+      body.side = isContract.value ? (f.value.side === 'long' ? 'buy' : 'sell') : f.value.side
+      body.ordType = isContract.value ? 'limit' : spotForm.ordType
+      body.sz = String(f.value.sz)
+      body.tdMode = isContract.value ? contractForm.tdMode : 'cash'
+      if (body.ordType === 'limit') {
+        body.px = String(isContract.value ? spotPrice.value : spotForm.px)
+      }
+      if (isContract.value) {
+        body.posSide = f.value.side
+        body.lever = String(contractForm.lever)
+      }
     }
     const resp = await fetch('/api/account/place-order/', {
       method: 'POST',
@@ -496,6 +697,7 @@ const createGrid = () => console.log('[GridTrading] create', { ...gridForm })
 
 watch(activeTab, (tab) => {
   if (tab === 'spot' || tab === 'contract') fetchTicker()
+  if (tab === 'option') fetchOptionInstruments()
 })
 
 watch(() => props.symbol, (sym) => {
@@ -507,6 +709,7 @@ watch(() => props.symbol, (sym) => {
 
 onMounted(() => {
   fetchSymbols()
+  fetchOptionInstruments()
   if (isLoggedIn.value) {
     loadPositions()
     fetchBalance()
@@ -545,13 +748,13 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .type-btn { flex:1; height: 32px; border-radius: 6px; border: 1px solid #2a2e39; background: #202534; color: #d1d4dc; cursor: pointer; font-size: 12px; transition: all 0.2s; }
 .type-btn.active { background: rgba(41,98,255,0.15); border-color: #2962ff; color: #2962ff; }
 
-.qty-row { display: flex; gap: 4px; align-items: center; }
-.qty-row .input { flex:1; }
+ qty-row { display: flex; gap: 4px; align-items: center; }
+ qty-row .input { flex:1; }
 .unit { font-size: 12px; color: #8b90a0; min-width: 36px; }
 
-.qty-mode-group { display: flex; gap: 4px; }
-.qty-mode-btn { padding: 2px 8px; border-radius: 4px; border: 1px solid #2a2e39; background: transparent; color: #787b86; cursor: pointer; font-size: 11px; }
-.qty-mode-btn.active { border-color: #2962ff; color: #2962ff; }
+ qty-mode-group { display: flex; gap: 4px; }
+ qty-mode-btn { padding: 2px 8px; border-radius: 4px; border: 1px solid #2a2e39; background: transparent; color: #787b86; cursor: pointer; font-size: 11px; }
+ qty-mode-btn.active { border-color: #2962ff; color: #2962ff; }
 
 .balance-row { font-size: 12px; color: #8b90a0; }
 .margin-preview { font-size: 12px; color: #8b90a0; padding: 8px; background: #161a23; border-radius: 4px; }
@@ -638,4 +841,22 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .text-red { color: #f44336; }
 .order-result { background: rgba(76,175,80,0.1); color: #4caf50; padding: 8px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* 期权链 */
+.option-chain { border: 1px solid #2a2e39; border-radius: 6px; overflow: hidden; font-size: 12px; margin-bottom: 8px; }
+.chain-header { display: flex; background: #12151c; padding: 6px 8px; font-weight: 600; color: #787b86; font-size: 11px; }
+.chain-row { display: flex; border-top: 1px solid #2a2e39; transition: background 0.15s; }
+.chain-row:hover { background: rgba(255,255,255,0.03); }
+.chain-row.selected { background: rgba(41,98,255,0.08); }
+.col-strike { width: 70px; min-width: 70px; text-align: center; padding: 4px 2px; color: #d1d4dc; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.col-call, .col-put { flex: 1; padding: 2px; min-width: 0; }
+.col-call.active { background: rgba(76,175,80,0.1); }
+.col-put.active { background: rgba(244,67,54,0.1); }
+.opt-btn { width: 100%; display: flex; justify-content: space-between; gap: 4px; padding: 4px 6px; border: none; background: none; color: #d1d4dc; cursor: pointer; border-radius: 4px; font-size: 11px; transition: all 0.15s; white-space: nowrap; }
+.opt-btn:hover { background: rgba(41,98,255,0.15); }
+.opt-bid { color: #4caf50; }
+.opt-ask { color: #f44336; }
+.no-opt { display: block; padding: 4px 6px; color: #3a3d45; text-align: center; font-size: 11px; }
+.selected-info { padding: 8px; background: #12151c; border-radius: 4px; font-size: 12px; color: #8b90a0; margin-bottom: 8px; }
+.ticker-info { margin-left: 8px; color: #2962ff; }
 </style>

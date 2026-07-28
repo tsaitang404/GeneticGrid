@@ -1007,6 +1007,86 @@ def api_account_symbols(request):
 
 
 # ──────────────────────────────────────────────
+# 期权数据（从 OKX 实时拉取）
+# ──────────────────────────────────────────────
+
+
+def api_option_instruments(request):
+    """获取 OKX 期权合约列表"""
+    uly = request.GET.get('uly', 'BTC-USD')
+    try:
+        import requests
+        url = 'https://www.okx.com/api/v5/public/instruments'
+        resp = requests.get(url, params={'instType': 'OPTION', 'uly': uly}, proxies=get_proxy_dict(), timeout=15)
+        result = resp.json()
+        if result.get('code') != '0':
+            return JsonResponse({'code': -1, 'error': result.get('msg', '')}, status=400)
+
+        data = []
+        for item in result.get('data', []):
+            stk_raw = item.get('stk', '0')
+            try:
+                strike_val = float(stk_raw)
+            except ValueError:
+                strike_val = 0.0
+            data.append({
+                'inst_id': item.get('instId', ''),
+                'uly': item.get('uly', ''),
+                'opt_type': item.get('optType', ''),
+                'strike': strike_val,
+                'exp_time': int(item.get('expTime', 0)),
+                'ct_val': item.get('ctVal', ''),
+                'ct_mult': item.get('ctMult', ''),
+                'settle_currency': item.get('settleCcy', ''),
+            })
+        return JsonResponse({'code': 0, 'data': data})
+    except Exception as e:
+        logger.warning(f"获取期权合约列表失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=500)
+
+
+def api_option_ticker(request):
+    """获取期权行情"""
+    inst_id = request.GET.get('instId', '')
+    if not inst_id:
+        return JsonResponse({'code': -1, 'error': '缺少 instId 参数'}, status=400)
+    try:
+        import requests
+        url = 'https://www.okx.com/api/v5/market/ticker'
+        resp = requests.get(url, params={'instId': inst_id}, proxies=get_proxy_dict(), timeout=15)
+        result = resp.json()
+        if result.get('code') != '0':
+            return JsonResponse({'code': -1, 'error': result.get('msg', '')}, status=400)
+
+        items = result.get('data', [])
+        if not items:
+            return JsonResponse({'code': -1, 'error': '无数据'}, status=404)
+
+        item = items[0]
+        def _safe_float(v: str, fallback: float = 0.0) -> float:
+            try: return float(v)
+            except (ValueError, TypeError): return fallback
+        return JsonResponse({'code': 0, 'data': {
+            'inst_id': item.get('instId', ''),
+            'last': _safe_float(item.get('last', '0')),
+            'bid': _safe_float(item.get('bid', '0')),
+            'ask': _safe_float(item.get('ask', '0')),
+            'volume_24h': _safe_float(item.get('vol24h', '0')),
+            'open_24h': _safe_float(item.get('open24h', '0')),
+            'high_24h': _safe_float(item.get('high24h', '0')),
+            'low_24h': _safe_float(item.get('low24h', '0')),
+            'delta': _safe_float(item.get('delta', '0')),
+            'gamma': _safe_float(item.get('gamma', '0')),
+            'vega': _safe_float(item.get('vega', '0')),
+            'theta': _safe_float(item.get('theta', '0')),
+            'iv': _safe_float(item.get('optIv', '0')),
+        }})
+    except Exception as e:
+        logger.warning(f"获取期权行情失败: {e}")
+        return JsonResponse({'code': -1, 'error': str(e)}, status=500)
+
+
+# ──────────────────────────────────────────────
 # 旧版 api_positions — 保留兼容，重定向到新端点
 # ──────────────────────────────────────────────
 
@@ -1022,29 +1102,48 @@ def api_account_place_order(request):
             return JsonResponse({'code': -1, 'error': '当前 API Key 无交易权限'}, status=403)
 
         data = json.loads(request.body)
-        inst_id = ProtocolConverter.to_source_symbol(data['instId'], 'okx')
-        sz = data['sz']
-        # OKX 市价买单 sz 为计价币数量，市价卖单 sz 为币数量
-        if data['ordType'] == 'market' and data['side'] == 'buy' and data['tdMode'] == 'cash':
-            ticker_resp = okx_api_request('GET', '/api/v5/market/ticker', api_key, secret_key, passphrase, params={'instId': inst_id}, is_demo=is_demo)
-            if ticker_resp.get('code') != '0' or not ticker_resp.get('data'):
-                raise Exception(f"获取行情价格失败: {ticker_resp.get('msg', '未知错误')}")
-            last = float(ticker_resp['data'][0].get('last', 0))
-            if last <= 0:
-                raise Exception(f"无效行情价格: {last}")
-            sz = str(round(float(sz) * last, 8))
-        result = post_order(
-            api_key, secret_key, passphrase,
-            inst_id=inst_id,
-            td_mode=data['tdMode'],
-            side=data['side'],
-            ord_type=data['ordType'],
-            sz=sz,
-            px=data.get('px'),
-            pos_side=data.get('posSide'),
-            lever=data.get('lever'),
-            is_demo=is_demo,
-        )
+        inst_id = data['instId']
+        # 期权订单：直接使用 OKX 原始 ID（如 BTC-USD-260728-59000-C）
+        if '-C' in inst_id or '-P' in inst_id:
+            td_mode = data.get('tdMode', 'isolated')
+            side = data['side']
+            ord_type = data['ordType']
+            sz = data['sz']
+            px = data.get('px')
+            result = post_order(
+                api_key, secret_key, passphrase,
+                inst_id=inst_id,
+                td_mode=td_mode,
+                side=side,
+                ord_type=ord_type,
+                sz=sz,
+                px=px,
+                is_demo=is_demo,
+            )
+        else:
+            inst_id = ProtocolConverter.to_source_symbol(inst_id, 'okx')
+            sz = data['sz']
+            # OKX 市价买单 sz 为计价币数量，市价卖单 sz 为币数量
+            if data['ordType'] == 'market' and data['side'] == 'buy' and data['tdMode'] == 'cash':
+                ticker_resp = okx_api_request('GET', '/api/v5/market/ticker', api_key, secret_key, passphrase, params={'instId': inst_id}, is_demo=is_demo)
+                if ticker_resp.get('code') != '0' or not ticker_resp.get('data'):
+                    raise Exception(f"获取行情价格失败: {ticker_resp.get('msg', '未知错误')}")
+                last = float(ticker_resp['data'][0].get('last', 0))
+                if last <= 0:
+                    raise Exception(f"无效行情价格: {last}")
+                sz = str(round(float(sz) * last, 8))
+            result = post_order(
+                api_key, secret_key, passphrase,
+                inst_id=inst_id,
+                td_mode=data['tdMode'],
+                side=data['side'],
+                ord_type=data['ordType'],
+                sz=sz,
+                px=data.get('px'),
+                pos_side=data.get('posSide'),
+                lever=data.get('lever'),
+                is_demo=is_demo,
+            )
         return JsonResponse({'code': 0, 'data': result})
     except json.JSONDecodeError:
         return JsonResponse({'code': -1, 'error': '请求格式错误'}, status=400)
