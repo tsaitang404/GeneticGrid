@@ -495,12 +495,15 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
     def get_funding_rate_history(self, symbol: str, limit: int = 100) -> List[dict]:
         """获取资金费率历史数据
         
+        使用 OKX `/public/funding-rate-history` 端点获取历史资金费率。
+        OKX 该端点按时间倒序返回，最多 3000 条（每次最多 100 条）。
+        
         Args:
             symbol: 交易对 (BTCUSDT格式)
             limit: 返回数据条数，默认100
             
         Returns:
-            资金费率历史数据列表
+            资金费率历史数据列表（按时间从旧到新排序）
         """
         # 先格式化symbol为OKX格式 (BTC-USDT)
         formatted_symbol = self._normalize_symbol(symbol, SymbolMode.SPOT.value)
@@ -508,9 +511,10 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
         inst_id = self._resolve_contract_inst_id(formatted_symbol, "perpetual")
         
         try:
-            result = self._request("/public/funding-rate", {
+            # 使用历史资金费率端点
+            result = self._request("/public/funding-rate-history", {
                 "instId": inst_id,
-                "limit": str(min(limit, 100))  # OKX限制最多100条
+                "limit": str(min(limit, 100))
             })
             
             if result.get("code") != "0":
@@ -528,11 +532,11 @@ class OKXMarketPlugin(MarketDataSourcePlugin):
                 history.append({
                     "timestamp": timestamp,
                     "funding_rate": funding_rate,
-                    "inst_id": inst_id
+                    "inst_id": inst_id,
                 })
             
-            # 按时间排序（从旧到新）
-            history.sort(key=lambda x: x["timestamp"] if x["timestamp"] else 0)
+            # OKX 返回倒序（最新在前），反转为正序（最旧在前）
+            history.reverse()
             return history
             
         except PluginError:
