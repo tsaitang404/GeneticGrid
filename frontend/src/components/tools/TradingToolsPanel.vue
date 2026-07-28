@@ -13,8 +13,8 @@
       <button :class="['tab-btn', { active: activeTab === 'position' }]" @click="activeTab = 'position'">
         📊 仓位管理
       </button>
-      <button :class="['tab-btn', { active: activeTab === 'grid' }]" @click="activeTab = 'grid'">
-        🧱 网格交易
+      <button :class="['tab-btn', { active: activeTab === 'strategy' }]" @click="activeTab = 'strategy'">
+        🤖 策略交易
       </button>
     </div>
 
@@ -282,22 +282,31 @@
       </template>
     </div>
 
-    <!-- ===== 网格交易 ===== (保持不变) -->
-    <div v-show="activeTab === 'grid'" class="tab-content">
-      <div class="form-grid">
-        <div class="form-group"><label>交易对</label><input v-model="gridForm.symbol" placeholder="如 BTCUSDT" /></div>
-        <div class="form-group"><label>网格数量</label><input v-model.number="gridForm.grids" type="number" min="2" max="200" /></div>
-        <div class="form-group"><label>下限价格</label><input v-model.number="gridForm.lower" type="number" min="0" step="0.01" /></div>
-        <div class="form-group"><label>上限价格</label><input v-model.number="gridForm.upper" type="number" min="0" step="0.01" /></div>
-        <div class="form-group"><label>投资金额</label><input v-model.number="gridForm.invest" type="number" min="0" step="0.01" /></div>
-        <div class="form-group"><label>风格</label><select v-model="gridForm.mode"><option value="arithmetic">等差</option><option value="geometric">等比</option></select></div>
+    <!-- ===== 策略交易 ===== -->
+    <div v-show="activeTab === 'strategy'" class="tab-content">
+      <div class="strategy-sub-tabs">
+        <button :class="['sub-tab-btn', { active: strategyMode === 'grid' }]" @click="strategyMode = 'grid'">🧱 网格交易</button>
+        <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">📈 策略回测</button>
+        <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">🛡️ 风险控制</button>
       </div>
-      <div class="preview-info">
-        <div class="preview-item"><span>预计每网格资金</span><b>{{ gridFund.toFixed(4) }}</b></div>
-        <div class="preview-item"><span>预计价格步长</span><b>{{ stepPreview }}</b></div>
+
+      <!-- 网格交易 -->
+      <div v-show="strategyMode === 'grid'" class="strategy-content">
+        <div class="form-grid">
+          <div class="form-group"><label>交易对</label><input v-model="gridForm.symbol" placeholder="如 BTCUSDT" /></div>
+          <div class="form-group"><label>网格数量</label><input v-model.number="gridForm.grids" type="number" min="2" max="200" /></div>
+          <div class="form-group"><label>下限价格</label><input v-model.number="gridForm.lower" type="number" min="0" step="0.01" /></div>
+          <div class="form-group"><label>上限价格</label><input v-model.number="gridForm.upper" type="number" min="0" step="0.01" /></div>
+          <div class="form-group"><label>投资金额</label><input v-model.number="gridForm.invest" type="number" min="0" step="0.01" /></div>
+          <div class="form-group"><label>风格</label><select v-model="gridForm.mode"><option value="arithmetic">等差</option><option value="geometric">等比</option></select></div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-item"><span>预计每网格资金</span><b>{{ gridFund.toFixed(4) }}</b></div>
+          <div class="preview-item"><span>预计价格步长</span><b>{{ stepPreview }}</b></div>
+        </div>
+        <div class="form-actions"><button class="btn primary" @click="createGrid">创建网格</button></div>
+        <p class="tip">💡 当前为原型占位，不会触发真实交易</p>
       </div>
-      <div class="form-actions"><button class="btn primary" @click="createGrid">创建网格</button></div>
-      <p class="tip">💡 当前为原型占位，不会触发真实交易</p>
     </div>
 
     <!-- ===== 确认下单 Modal ===== -->
@@ -382,7 +391,8 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'grid'>('position')
+const strategyMode = ref<'grid'>('grid')
+const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'strategy'>('position')
 const posLoading = ref(false)
 const posError = ref('')
 const filterSymbol = ref('')
@@ -859,4 +869,12 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .no-opt { display: block; padding: 4px 6px; color: #3a3d45; text-align: center; font-size: 11px; }
 .selected-info { padding: 8px; background: #12151c; border-radius: 4px; font-size: 12px; color: #8b90a0; margin-bottom: 8px; }
 .ticker-info { margin-left: 8px; color: #2962ff; }
+
+/* 策略交易子标签 */
+.strategy-sub-tabs { display: flex; gap: 4px; margin-bottom: 12px; padding: 4px; background: #12151c; border-radius: 6px; }
+.sub-tab-btn { flex: 1; padding: 8px 12px; border: none; border-radius: 4px; background: transparent; color: #787b86; cursor: pointer; font-size: 12px; transition: all 0.2s; white-space: nowrap; }
+.sub-tab-btn:hover { color: #d1d4dc; background: rgba(255,255,255,0.03); }
+.sub-tab-btn.active { color: #2962ff; background: rgba(41,98,255,0.15); }
+.sub-tab-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.strategy-content { }
 </style>
