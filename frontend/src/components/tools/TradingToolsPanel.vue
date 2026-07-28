@@ -289,6 +289,7 @@
         <button :class="['sub-tab-btn', { active: strategyMode === 'grid' }]" @click="strategyMode = 'grid'">🧱 网格交易</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'trailing_stop' }]" @click="strategyMode = 'trailing_stop'">🎯 追踪止损</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'iceberg' }]" @click="strategyMode = 'iceberg'">🧊 冰山订单</button>
+        <button :class="['sub-tab-btn', { active: strategyMode === 'twap' }]" @click="strategyMode = 'twap'">⏱ TWAP</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">📈 策略回测</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">🛡️ 风险控制</button>
       </div>
@@ -419,6 +420,38 @@
         <div v-if="ibError" class="error">{{ ibError }}</div>
         <p class="tip">💡 冰山订单将总数量拆分为多个小单依次发送</p>
       </div>
+
+      <!-- TWAP -->
+      <div v-show="strategyMode === 'twap'" class="strategy-content">
+        <div class="form-grid">
+          <div class="form-group"><label>交易对</label>
+            <select v-model="twapForm.symbol" class="input">
+              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label>方向</label>
+            <div class="side-group">
+              <button :class="['side-btn', { active: twapForm.side === 'buy' }]" @click="twapForm.side = 'buy'">买入</button>
+              <button :class="['side-btn', 'sell', { active: twapForm.side === 'sell' }]" @click="twapForm.side = 'sell'">卖出</button>
+            </div>
+          </div>
+          <div class="form-group"><label>总数量</label><input v-model.number="twapForm.totalQty" type="number" min="0.001" step="0.001" class="input" /></div>
+          <div class="form-group"><label>执行时长 (分钟)</label><input v-model.number="twapForm.duration" type="number" min="1" step="1" class="input" /></div>
+          <div class="form-group"><label>拆单次数</label><input v-model.number="twapForm.slices" type="number" min="2" max="100" class="input" /></div>
+          <div class="form-group"><label>限价 (可选)</label><input v-model.number="twapForm.limitPrice" type="number" min="0.01" step="0.01" class="input" placeholder="0=市价" /></div>
+          <div class="form-group"><label>策略名称（可选）</label><input v-model="twapForm.name" placeholder="如 BTC TWAP" class="input" /></div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-item"><span>每单数量</span><b>{{ (twapForm.totalQty / twapForm.slices).toFixed(4) }}</b></div>
+          <div class="preview-item"><span>间隔时间</span><b>{{ (twapForm.duration / twapForm.slices).toFixed(1) }} 分钟</b></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" :disabled="twapSubmitting" @click="createTWAP">{{ twapSubmitting ? '创建中...' : '创建 TWAP' }}</button>
+        </div>
+        <div v-if="twapResult" class="order-result">✅ 策略已创建 (ID: {{ twapResult.id }})</div>
+        <div v-if="twapError" class="error">{{ twapError }}</div>
+        <p class="tip">💡 TWAP 将大单按时间均匀拆分为小单执行</p>
+      </div>
     </div>
 
     <!-- ===== 确认下单 Modal ===== -->
@@ -503,7 +536,7 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const strategyMode = ref<'dca' | 'grid' | 'trailing_stop' | 'iceberg'>('dca')
+const strategyMode = ref<'dca' | 'grid' | 'trailing_stop' | 'iceberg' | 'twap'>('dca')
 const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'strategy'>('position')
 
 // ---- DCA 表单 ----
@@ -643,6 +676,54 @@ async function createIceberg(): Promise<void> {
     ibError.value = e.message || '网络错误'
   } finally {
     ibSubmitting.value = false
+  }
+}
+
+// ---- TWAP 表单 ----
+const twapForm = reactive({
+  symbol: props.symbol || 'BTCUSDT',
+  side: 'buy',
+  totalQty: 1,
+  duration: 60,
+  slices: 6,
+  limitPrice: 0,
+  name: '',
+})
+const twapSubmitting = ref(false)
+const twapResult = ref<any>(null)
+const twapError = ref('')
+
+async function createTWAP(): Promise<void> {
+  twapSubmitting.value = true
+  twapError.value = ''
+  twapResult.value = null
+  try {
+    const resp = await fetch('/api/strategies/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'twap',
+        symbol: twapForm.symbol,
+        name: twapForm.name || `${twapForm.symbol} TWAP`,
+        params: {
+          side: twapForm.side,
+          total_qty: twapForm.totalQty,
+          duration_minutes: twapForm.duration,
+          slices: twapForm.slices,
+          limit_price: twapForm.limitPrice || null,
+        },
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 0) {
+      twapResult.value = result.data
+    } else {
+      twapError.value = result.error || '创建失败'
+    }
+  } catch (e: any) {
+    twapError.value = e.message || '网络错误'
+  } finally {
+    twapSubmitting.value = false
   }
 }
 
