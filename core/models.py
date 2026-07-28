@@ -115,3 +115,58 @@ class ProxySettings(models.Model):
             'http_host': '127.0.0.1', 'http_port': 8080,
         })
         return obj
+
+
+class Strategy(models.Model):
+    """交易策略配置（DCA、网格等）"""
+
+    STRATEGY_TYPES = [
+        ('dca', '定投 DCA'),
+        ('grid', '网格交易'),
+    ]
+    STATUS_CHOICES = [
+        ('running', '运行中'),
+        ('paused', '已暂停'),
+        ('stopped', '已停止'),
+    ]
+
+    type = models.CharField(max_length=20, choices=STRATEGY_TYPES, help_text="策略类型")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='running', help_text="策略状态")
+    name = models.CharField(max_length=128, blank=True, default='', help_text="策略名称")
+
+    # DCA 专属字段
+    symbol = models.CharField(max_length=20, default='BTCUSDT', help_text="交易对")
+    amount = models.DecimalField(max_digits=20, decimal_places=8, default=10, help_text="每期投入金额 (USDT)")
+    interval_hours = models.IntegerField(default=24, help_text="执行间隔（小时）")
+    max_executions = models.IntegerField(default=0, help_text="最大执行次数（0=不限）")
+    executed_count = models.IntegerField(default=0, help_text="已执行次数")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'strategy'
+        verbose_name = '交易策略'
+        verbose_name_plural = '交易策略'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_type_display()} - {self.symbol} ({self.get_status_display()})"
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.pk,
+            'type': self.type,
+            'status': self.status,
+            'name': self.name,
+            'symbol': self.symbol,
+            'amount': float(self.amount),
+            'interval_hours': self.interval_hours,
+            'max_executions': self.max_executions,
+            'executed_count': self.executed_count,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
+            'next_run_at': self.next_run_at.isoformat() if self.next_run_at else None,
+        }

@@ -37,4 +37,8 @@ urlpatterns = [
     # 期权数据
     path('api/options/instruments/', views.api_option_instruments, name='api_option_instruments'),
     path('api/options/ticker/', views.api_option_ticker, name='api_option_ticker'),
+
+    # 策略管理
+    path('api/strategies/', views.api_strategies, name='api_strategies'),
+    path('api/strategies/<int:strategy_id>/', views.api_strategy_detail, name='api_strategy_detail'),
 ]

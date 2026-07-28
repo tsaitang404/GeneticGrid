@@ -1181,3 +1181,72 @@ def api_account_cancel_order(request):
 def api_positions(request):
     """旧版仓位查询 — 使用 session 凭证"""
     return api_account_positions(request)
+
+
+# ──────────────────────────────────────────────
+# 策略管理 API
+# ──────────────────────────────────────────────
+
+
+@csrf_exempt
+def api_strategies(request):
+    """策略列表 & 创建"""
+    if request.method == 'GET':
+        from .models import Strategy
+        strategies = Strategy.objects.all()
+        return JsonResponse({'code': 0, 'data': [s.to_dict() for s in strategies]})
+
+    if request.method == 'POST':
+        try:
+            import json
+            data = json.loads(request.body)
+            from .models import Strategy
+            strategy = Strategy.objects.create(
+                type=data.get('type', 'dca'),
+                symbol=data.get('symbol', 'BTCUSDT'),
+                amount=data.get('amount', 10),
+                interval_hours=data.get('interval_hours', 24),
+                max_executions=data.get('max_executions', 0),
+                name=data.get('name', ''),
+            )
+            return JsonResponse({'code': 0, 'data': strategy.to_dict(), 'message': '策略已创建'})
+        except Exception as e:
+            return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+    return JsonResponse({'code': -1, 'error': '不支持的请求方法'}, status=405)
+
+
+@csrf_exempt
+def api_strategy_detail(request, strategy_id):
+    """策略详情、更新状态、删除"""
+    from .models import Strategy
+    try:
+        strategy = Strategy.objects.get(pk=strategy_id)
+    except Strategy.DoesNotExist:
+        return JsonResponse({'code': -1, 'error': '策略不存在'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'code': 0, 'data': strategy.to_dict()})
+
+    if request.method == 'PUT':
+        try:
+            import json
+            data = json.loads(request.body)
+            if 'status' in data:
+                strategy.status = data['status']
+            if 'amount' in data:
+                strategy.amount = data['amount']
+            if 'interval_hours' in data:
+                strategy.interval_hours = data['interval_hours']
+            if 'symbol' in data:
+                strategy.symbol = data['symbol']
+            strategy.save()
+            return JsonResponse({'code': 0, 'data': strategy.to_dict(), 'message': '策略已更新'})
+        except Exception as e:
+            return JsonResponse({'code': -1, 'error': str(e)}, status=400)
+
+    if request.method == 'DELETE':
+        strategy.delete()
+        return JsonResponse({'code': 0, 'message': '策略已删除'})
+
+    return JsonResponse({'code': -1, 'error': '不支持的请求方法'}, status=405)

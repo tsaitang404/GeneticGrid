@@ -285,6 +285,7 @@
     <!-- ===== 策略交易 ===== -->
     <div v-show="activeTab === 'strategy'" class="tab-content">
       <div class="strategy-sub-tabs">
+        <button :class="['sub-tab-btn', { active: strategyMode === 'dca' }]" @click="strategyMode = 'dca'">📅 定投 DCA</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'grid' }]" @click="strategyMode = 'grid'">🧱 网格交易</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">📈 策略回测</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">🛡️ 风险控制</button>
@@ -306,6 +307,46 @@
         </div>
         <div class="form-actions"><button class="btn primary" @click="createGrid">创建网格</button></div>
         <p class="tip">💡 当前为原型占位，不会触发真实交易</p>
+      </div>
+
+      <!-- DCA 定投 -->
+      <div v-show="strategyMode === 'dca'" class="strategy-content">
+        <div class="form-grid">
+          <div class="form-group"><label>交易对</label>
+            <select v-model="dcaForm.symbol" class="input">
+              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label>每期投入 (USDT)</label><input v-model.number="dcaForm.amount" type="number" min="1" step="1" class="input" /></div>
+          <div class="form-group"><label>执行间隔</label>
+            <select v-model="dcaForm.intervalHours" class="input">
+              <option :value="1">每小时</option>
+              <option :value="4">每 4 小时</option>
+              <option :value="8">每 8 小时</option>
+              <option :value="24">每天</option>
+              <option :value="168">每周</option>
+            </select>
+          </div>
+          <div class="form-group"><label>最大执行次数</label>
+            <select v-model.number="dcaForm.maxExecutions" class="input">
+              <option :value="0">不限</option>
+              <option :value="12">12 次</option>
+              <option :value="30">30 次</option>
+              <option :value="100">100 次</option>
+            </select>
+          </div>
+          <div class="form-group"><label>策略名称（可选）</label><input v-model="dcaForm.name" placeholder="如 BTC 定投" class="input" /></div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-item"><span>每期金额</span><b>{{ dcaForm.amount }} USDT</b></div>
+          <div class="preview-item"><span>执行计划</span><b>{{ dcaSummary }}</b></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" :disabled="dcaSubmitting" @click="createDCA">{{ dcaSubmitting ? '创建中...' : '创建 DCA 策略' }}</button>
+        </div>
+        <div v-if="dcaResult" class="order-result">✅ 策略已创建 (ID: {{ dcaResult.id }})</div>
+        <div v-if="dcaError" class="error">{{ dcaError }}</div>
+        <p class="tip">💡 DCA 策略创建后将自动在后台执行</p>
       </div>
     </div>
 
@@ -391,8 +432,57 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const strategyMode = ref<'grid'>('grid')
+const strategyMode = ref<'dca' | 'grid'>('dca')
 const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'strategy'>('position')
+
+// ---- DCA 表单 ----
+const dcaForm = reactive({
+  symbol: props.symbol || 'BTCUSDT',
+  amount: 10,
+  intervalHours: 24,
+  maxExecutions: 0,
+  name: '',
+})
+const dcaSubmitting = ref(false)
+const dcaResult = ref<any>(null)
+const dcaError = ref('')
+
+const dcaSummary = computed(() => {
+  const times = dcaForm.maxExecutions > 0 ? `最多 ${dcaForm.maxExecutions} 次` : '不限次数'
+  const interval = { 1: '每小时', 4: '每4小时', 8: '每8小时', 24: '每天', 168: '每周' }
+  return `${interval[dcaForm.intervalHours as keyof typeof interval] || '每天'} · ${times}`
+})
+
+async function createDCA(): Promise<void> {
+  dcaSubmitting.value = true
+  dcaError.value = ''
+  dcaResult.value = null
+  try {
+    const resp = await fetch('/api/strategies/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'dca',
+        symbol: dcaForm.symbol,
+        amount: dcaForm.amount,
+        interval_hours: dcaForm.intervalHours,
+        max_executions: dcaForm.maxExecutions,
+        name: dcaForm.name || `${dcaForm.symbol} 定投`,
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 0) {
+      dcaResult.value = result.data
+    } else {
+      dcaError.value = result.error || '创建失败'
+    }
+  } catch (e: any) {
+    dcaError.value = e.message || '网络错误'
+  } finally {
+    dcaSubmitting.value = false
+  }
+}
+
 const posLoading = ref(false)
 const posError = ref('')
 const filterSymbol = ref('')
