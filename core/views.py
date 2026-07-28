@@ -1208,6 +1208,7 @@ def api_strategies(request):
                 interval_hours=data.get('interval_hours', 24),
                 max_executions=data.get('max_executions', 0),
                 name=data.get('name', ''),
+                params=data.get('params', {}),
             )
             return JsonResponse({'code': 0, 'data': strategy.to_dict(), 'message': '策略已创建'})
         except Exception as e:
@@ -1240,6 +1241,8 @@ def api_strategy_detail(request, strategy_id):
                 strategy.interval_hours = data['interval_hours']
             if 'symbol' in data:
                 strategy.symbol = data['symbol']
+            if 'params' in data:
+                strategy.params = data['params']
             strategy.save()
             return JsonResponse({'code': 0, 'data': strategy.to_dict(), 'message': '策略已更新'})
         except Exception as e:

@@ -140,6 +140,7 @@ class Strategy(models.Model):
     interval_hours = models.IntegerField(default=24, help_text="执行间隔（小时）")
     max_executions = models.IntegerField(default=0, help_text="最大执行次数（0=不限）")
     executed_count = models.IntegerField(default=0, help_text="已执行次数")
+    params = models.JSONField(default=dict, blank=True, help_text="策略参数（JSON），如追踪止损的距离/方向等")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,6 +157,7 @@ class Strategy(models.Model):
         return f"{self.get_type_display()} - {self.symbol} ({self.get_status_display()})"
 
     def to_dict(self) -> dict:
+        p = self.params or {}
         return {
             'id': self.pk,
             'type': self.type,
@@ -166,6 +168,7 @@ class Strategy(models.Model):
             'interval_hours': self.interval_hours,
             'max_executions': self.max_executions,
             'executed_count': self.executed_count,
+            'params': p,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
             'next_run_at': self.next_run_at.isoformat() if self.next_run_at else None,

@@ -287,6 +287,7 @@
       <div class="strategy-sub-tabs">
         <button :class="['sub-tab-btn', { active: strategyMode === 'dca' }]" @click="strategyMode = 'dca'">📅 定投 DCA</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'grid' }]" @click="strategyMode = 'grid'">🧱 网格交易</button>
+        <button :class="['sub-tab-btn', { active: strategyMode === 'trailing_stop' }]" @click="strategyMode = 'trailing_stop'">🎯 追踪止损</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">📈 策略回测</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">🛡️ 风险控制</button>
       </div>
@@ -347,6 +348,44 @@
         <div v-if="dcaResult" class="order-result">✅ 策略已创建 (ID: {{ dcaResult.id }})</div>
         <div v-if="dcaError" class="error">{{ dcaError }}</div>
         <p class="tip">💡 DCA 策略创建后将自动在后台执行</p>
+      </div>
+
+      <!-- 追踪止损 -->
+      <div v-show="strategyMode === 'trailing_stop'" class="strategy-content">
+        <div class="form-grid">
+          <div class="form-group"><label>交易对</label>
+            <select v-model="tsForm.symbol" class="input">
+              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label>方向</label>
+            <div class="side-group">
+              <button :class="['side-btn', { active: tsForm.side === 'sell' }]" @click="tsForm.side = 'sell'">卖出</button>
+              <button :class="['side-btn', { active: tsForm.side === 'buy' }]" @click="tsForm.side = 'buy'">买入</button>
+            </div>
+          </div>
+          <div class="form-group"><label>追踪距离</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input v-model.number="tsForm.distance" type="number" min="0.1" step="0.1" class="input" style="flex:1" />
+              <select v-model="tsForm.distanceType" class="input" style="width:80px">
+                <option value="percent">%</option>
+                <option value="absolute">USDT</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group"><label>数量</label><input v-model.number="tsForm.sz" type="number" min="0.001" step="0.001" class="input" /></div>
+          <div class="form-group"><label>策略名称（可选）</label><input v-model="tsForm.name" placeholder="如 BTC 追踪止损" class="input" /></div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-item"><span>方向</span><b>{{ tsForm.side === 'sell' ? '卖出' : '买入' }}</b></div>
+          <div class="preview-item"><span>追踪距离</span><b>{{ tsForm.distance }}{{ tsForm.distanceType === 'percent' ? '%' : ' USDT' }}</b></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" :disabled="tsSubmitting" @click="createTrailingStop">{{ tsSubmitting ? '创建中...' : '创建追踪止损' }}</button>
+        </div>
+        <div v-if="tsResult" class="order-result">✅ 策略已创建 (ID: {{ tsResult.id }})</div>
+        <div v-if="tsError" class="error">{{ tsError }}</div>
+        <p class="tip">💡 追踪止损将在后台监控价格，触发时自动下单</p>
       </div>
     </div>
 
@@ -432,7 +471,7 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const strategyMode = ref<'dca' | 'grid'>('dca')
+const strategyMode = ref<'dca' | 'grid' | 'trailing_stop'>('dca')
 const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'strategy'>('position')
 
 // ---- DCA 表单 ----
@@ -480,6 +519,52 @@ async function createDCA(): Promise<void> {
     dcaError.value = e.message || '网络错误'
   } finally {
     dcaSubmitting.value = false
+  }
+}
+
+// ---- 追踪止损表单 ----
+const tsForm = reactive({
+  symbol: props.symbol || 'BTCUSDT',
+  side: 'sell',
+  distance: 5,
+  distanceType: 'percent',
+  sz: 0.01,
+  name: '',
+})
+const tsSubmitting = ref(false)
+const tsResult = ref<any>(null)
+const tsError = ref('')
+
+async function createTrailingStop(): Promise<void> {
+  tsSubmitting.value = true
+  tsError.value = ''
+  tsResult.value = null
+  try {
+    const resp = await fetch('/api/strategies/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'trailing_stop',
+        symbol: tsForm.symbol,
+        name: tsForm.name || `${tsForm.symbol} 追踪止损`,
+        params: {
+          side: tsForm.side,
+          distance: tsForm.distance,
+          distance_type: tsForm.distanceType,
+          sz: tsForm.sz,
+        },
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 0) {
+      tsResult.value = result.data
+    } else {
+      tsError.value = result.error || '创建失败'
+    }
+  } catch (e: any) {
+    tsError.value = e.message || '网络错误'
+  } finally {
+    tsSubmitting.value = false
   }
 }
 
