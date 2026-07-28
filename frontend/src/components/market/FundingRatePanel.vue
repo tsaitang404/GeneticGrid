@@ -160,7 +160,9 @@ async function loadHistory() {
     
     if (result.code === 0 && result.data) {
       historyData.value = result.data
-      updateChart()
+      // 不在此处调用 updateChart，因为此时 chartLoading=true
+      // canvas 被 v-if 隐藏，chartCanvas.value 为 null
+      // 改用 watch(chartLoading) 在 loading 结束后自动更新图表
     } else {
       chartError.value = result.error || '获取历史数据失败'
     }
@@ -262,6 +264,13 @@ function updateChart() {
   
   chartInstance = new Chart(ctx, config)
 }
+
+// chartLoading 变为 false 时 canvas 已渲染，此时创建图表
+watch(chartLoading, (loading) => {
+  if (!loading && historyData.value.length > 0) {
+    updateChart()
+  }
+}, { flush: 'post' })
 
 watch(() => [props.symbol, props.source], () => {
   if (props.symbol && props.source) {
