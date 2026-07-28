@@ -288,6 +288,7 @@
         <button :class="['sub-tab-btn', { active: strategyMode === 'dca' }]" @click="strategyMode = 'dca'">📅 定投 DCA</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'grid' }]" @click="strategyMode = 'grid'">🧱 网格交易</button>
         <button :class="['sub-tab-btn', { active: strategyMode === 'trailing_stop' }]" @click="strategyMode = 'trailing_stop'">🎯 追踪止损</button>
+        <button :class="['sub-tab-btn', { active: strategyMode === 'iceberg' }]" @click="strategyMode = 'iceberg'">🧊 冰山订单</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">📈 策略回测</button>
         <button :class="['sub-tab-btn', 'disabled']" disabled title="即将上线">🛡️ 风险控制</button>
       </div>
@@ -387,6 +388,37 @@
         <div v-if="tsError" class="error">{{ tsError }}</div>
         <p class="tip">💡 追踪止损将在后台监控价格，触发时自动下单</p>
       </div>
+
+      <!-- 冰山订单 -->
+      <div v-show="strategyMode === 'iceberg'" class="strategy-content">
+        <div class="form-grid">
+          <div class="form-group"><label>交易对</label>
+            <select v-model="ibForm.symbol" class="input">
+              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="form-group"><label>方向</label>
+            <div class="side-group">
+              <button :class="['side-btn', { active: ibForm.side === 'buy' }]" @click="ibForm.side = 'buy'">买入</button>
+              <button :class="['side-btn', 'sell', { active: ibForm.side === 'sell' }]" @click="ibForm.side = 'sell'">卖出</button>
+            </div>
+          </div>
+          <div class="form-group"><label>总数量</label><input v-model.number="ibForm.totalQty" type="number" min="0.001" step="0.001" class="input" /></div>
+          <div class="form-group"><label>每单可见数量</label><input v-model.number="ibForm.visibleQty" type="number" min="0.001" step="0.001" class="input" /></div>
+          <div class="form-group"><label>限价 (USDT)</label><input v-model.number="ibForm.limitPrice" type="number" min="0.01" step="0.01" class="input" /></div>
+          <div class="form-group"><label>策略名称（可选）</label><input v-model="ibForm.name" placeholder="如 BTC 冰山" class="input" /></div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-item"><span>拆单数</span><b>{{ Math.ceil(ibForm.totalQty / ibForm.visibleQty) }} 单</b></div>
+          <div class="preview-item"><span>总金额</span><b>{{ (ibForm.totalQty * ibForm.limitPrice).toFixed(2) }} USDT</b></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" :disabled="ibSubmitting" @click="createIceberg">{{ ibSubmitting ? '创建中...' : '创建冰山订单' }}</button>
+        </div>
+        <div v-if="ibResult" class="order-result">✅ 策略已创建 (ID: {{ ibResult.id }})</div>
+        <div v-if="ibError" class="error">{{ ibError }}</div>
+        <p class="tip">💡 冰山订单将总数量拆分为多个小单依次发送</p>
+      </div>
     </div>
 
     <!-- ===== 确认下单 Modal ===== -->
@@ -471,7 +503,7 @@ async function fetchTicker(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-const strategyMode = ref<'dca' | 'grid' | 'trailing_stop'>('dca')
+const strategyMode = ref<'dca' | 'grid' | 'trailing_stop' | 'iceberg'>('dca')
 const activeTab = ref<'spot' | 'contract' | 'option' | 'position' | 'strategy'>('position')
 
 // ---- DCA 表单 ----
@@ -565,6 +597,52 @@ async function createTrailingStop(): Promise<void> {
     tsError.value = e.message || '网络错误'
   } finally {
     tsSubmitting.value = false
+  }
+}
+
+// ---- 冰山订单表单 ----
+const ibForm = reactive({
+  symbol: props.symbol || 'BTCUSDT',
+  side: 'buy',
+  totalQty: 1,
+  visibleQty: 0.1,
+  limitPrice: 0,
+  name: '',
+})
+const ibSubmitting = ref(false)
+const ibResult = ref<any>(null)
+const ibError = ref('')
+
+async function createIceberg(): Promise<void> {
+  ibSubmitting.value = true
+  ibError.value = ''
+  ibResult.value = null
+  try {
+    const resp = await fetch('/api/strategies/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'iceberg',
+        symbol: ibForm.symbol,
+        name: ibForm.name || `${ibForm.symbol} 冰山`,
+        params: {
+          side: ibForm.side,
+          total_qty: ibForm.totalQty,
+          visible_qty: ibForm.visibleQty,
+          limit_price: ibForm.limitPrice,
+        },
+      }),
+    })
+    const result = await resp.json()
+    if (result.code === 0) {
+      ibResult.value = result.data
+    } else {
+      ibError.value = result.error || '创建失败'
+    }
+  } catch (e: any) {
+    ibError.value = e.message || '网络错误'
+  } finally {
+    ibSubmitting.value = false
   }
 }
 
