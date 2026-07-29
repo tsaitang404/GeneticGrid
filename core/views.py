@@ -277,6 +277,23 @@ def api_funding_rate_history(request):
         response['Cache-Control'] = 'public, max-age=300'
         return response
     
+    # Redis 未命中，尝试从数据库获取
+    db_history = DerivativeDataCacheService.get_funding_history_from_db(source, symbol, limit, granularity)
+    if db_history:
+        logger.info(f"📦 资金费率历史数据库命中: {symbol}, {len(db_history)}条")
+        # 回填 Redis 缓存
+        DerivativeDataCacheService.save_funding_history_to_cache(source, symbol, db_history)
+        response = JsonResponse({
+            'code': 0,
+            'data': db_history[-limit:],
+            'symbol': symbol,
+            'source': source,
+            'cached': True,
+            'source_cache': 'db',
+        })
+        response['Cache-Control'] = 'public, max-age=300'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -300,6 +317,8 @@ def api_funding_rate_history(request):
         # 保存到缓存
         if history_data:
             DerivativeDataCacheService.save_funding_history_to_cache(source, symbol, history_data)
+            # 持久化到数据库
+            DerivativeDataCacheService.save_funding_history_to_db(source, symbol, history_data, granularity)
         
         response = JsonResponse({
             'code': 0,
@@ -352,6 +371,24 @@ def api_contract_basis_history(request):
         response['Cache-Control'] = 'public, max-age=300'
         return response
     
+    # Redis 未命中，尝试从数据库获取
+    db_history = DerivativeDataCacheService.get_basis_history_from_db(source, symbol, contract_type, limit, granularity)
+    if db_history:
+        logger.info(f"📦 基差历史数据库命中: {symbol} ({granularity}), {len(db_history)}条")
+        # 回填 Redis 缓存
+        DerivativeDataCacheService.save_basis_history_to_cache(source, symbol, contract_type, db_history, granularity)
+        response = JsonResponse({
+            'code': 0,
+            'data': db_history[-limit:],
+            'symbol': symbol,
+            'source': source,
+            'granularity': granularity,
+            'cached': True,
+            'source_cache': 'db',
+        })
+        response['Cache-Control'] = 'public, max-age=300'
+        return response
+    
     try:
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(source)
@@ -380,6 +417,8 @@ def api_contract_basis_history(request):
         # 保存到缓存（包含granularity）
         if history_data:
             DerivativeDataCacheService.save_basis_history_to_cache(source, symbol, contract_type, history_data, granularity)
+            # 持久化到数据库
+            DerivativeDataCacheService.save_basis_history_to_db(source, symbol, contract_type, history_data, granularity)
         
         response = JsonResponse({
             'code': 0,

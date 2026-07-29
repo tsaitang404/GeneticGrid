@@ -173,3 +173,78 @@ class Strategy(models.Model):
             'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
             'next_run_at': self.next_run_at.isoformat() if self.next_run_at else None,
         }
+
+
+class FundingRateHistory(models.Model):
+    """资金费率历史数据持久化表"""
+
+    source = models.CharField(max_length=20, db_index=True, help_text="数据源: binance, okx")
+    symbol = models.CharField(max_length=20, db_index=True, help_text="交易对: BTCUSDT")
+    granularity = models.CharField(max_length=10, default='8h', help_text="粒度: 8h")
+    timestamp = models.BigIntegerField(db_index=True, help_text="资金费率时间戳(秒)")
+
+    funding_rate = models.DecimalField(max_digits=20, decimal_places=12, help_text="资金费率")
+    realized_rate = models.DecimalField(max_digits=20, decimal_places=12, null=True, blank=True, help_text="实际结算费率")
+
+    created_at = models.DateTimeField(auto_now_add=True, help_text="缓存时间")
+    updated_at = models.DateTimeField(auto_now=True, help_text="更新时间")
+
+    class Meta:
+        db_table = 'funding_rate_history'
+        unique_together = [['source', 'symbol', 'granularity', 'timestamp']]
+        indexes = [
+            models.Index(fields=['source', 'symbol', 'granularity', '-timestamp'], name='frh_src_sym_gran_ts_desc'),
+        ]
+        ordering = ['timestamp']
+        verbose_name = '资金费率历史'
+        verbose_name_plural = '资金费率历史'
+
+    def __str__(self):
+        return f"{self.source}_{self.symbol}_{self.granularity}_{self.timestamp}"
+
+    def to_dict(self) -> dict:
+        return {
+            'timestamp': self.timestamp,
+            'funding_rate': float(self.funding_rate),
+            'inst_id': f"{self.symbol}-SWAP" if self.source == 'okx' else self.symbol,
+        }
+
+
+class BasisHistory(models.Model):
+    """合约基差历史数据持久化表"""
+
+    source = models.CharField(max_length=20, db_index=True, help_text="数据源: binance, okx")
+    symbol = models.CharField(max_length=20, db_index=True, help_text="交易对: BTCUSDT")
+    contract_type = models.CharField(max_length=20, default='perpetual', help_text="合约类型: perpetual")
+    granularity = models.CharField(max_length=10, default='1h', help_text="粒度: 1h, 1d")
+    timestamp = models.BigIntegerField(db_index=True, help_text="基差时间戳(秒)")
+
+    basis = models.DecimalField(max_digits=20, decimal_places=8, help_text="基差")
+    basis_rate = models.DecimalField(max_digits=10, decimal_places=6, help_text="基差率(%)")
+    contract_price = models.DecimalField(max_digits=20, decimal_places=8, help_text="合约价格")
+    spot_price = models.DecimalField(max_digits=20, decimal_places=8, help_text="现货价格")
+
+    created_at = models.DateTimeField(auto_now_add=True, help_text="缓存时间")
+    updated_at = models.DateTimeField(auto_now=True, help_text="更新时间")
+
+    class Meta:
+        db_table = 'basis_history'
+        unique_together = [['source', 'symbol', 'contract_type', 'granularity', 'timestamp']]
+        indexes = [
+            models.Index(fields=['source', 'symbol', 'contract_type', 'granularity', '-timestamp'], name='bh_src_sym_ct_gra_ts_desc'),
+        ]
+        ordering = ['timestamp']
+        verbose_name = '基差历史'
+        verbose_name_plural = '基差历史'
+
+    def __str__(self):
+        return f"{self.source}_{self.symbol}_{self.contract_type}_{self.granularity}_{self.timestamp}"
+
+    def to_dict(self) -> dict:
+        return {
+            'timestamp': self.timestamp,
+            'basis': float(self.basis),
+            'basis_rate': float(self.basis_rate),
+            'contract_price': float(self.contract_price),
+            'spot_price': float(self.spot_price),
+        }
