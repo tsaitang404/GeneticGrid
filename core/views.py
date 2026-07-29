@@ -917,12 +917,6 @@ def api_account_positions(request):
             eq_usd = float(d.get('eqUsd', '0'))
             if eq <= 0:
                 continue
-        spot_holdings = []
-        for d in balance.get('details', []):
-            eq = float(d.get('eq', '0'))
-            eq_usd = float(d.get('eqUsd', '0'))
-            if eq <= 0:
-                continue
             open_avg_px = d.get('openAvgPx')
             spot_upl = d.get('spotUpl')
             spot_upl_ratio = d.get('spotUplRatio')
