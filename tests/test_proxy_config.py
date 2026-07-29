@@ -68,7 +68,7 @@ def test_get_proxy_url_and_dict(monkeypatch):
     proxy_config.PROXY_OPTIONS['preferred_type'] = 'socks5'
 
     assert proxy_config.get_proxy_url('http') == 'http://127.0.0.1:8080'
-    assert proxy_config.get_proxy_url('socks5') == 'socks5://127.0.0.1:1080'
+    assert proxy_config.get_proxy_url('socks5') == 'socks5h://127.0.0.1:1080'
 
     monkeypatch.setattr(proxy_config, 'get_proxy', lambda: 'socks5://127.0.0.1:1080')
     proxy_dict = proxy_config.get_proxy_dict()
