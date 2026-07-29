@@ -16,6 +16,7 @@ urlpatterns = [
     
     # 插件系统 API 端点
     path('api/sources/', views.api_sources, name='api_sources'),
+    path('api/symbols/', views.api_symbols, name='api_symbols'),
     path('api/sources/<str:source_name>/capabilities/', views.api_source_capabilities, name='api_source_capabilities'),
     path('api/documentation/sources/', views.api_source_documentation, name='api_source_documentation'),
     path('api/positions/', views.api_positions, name='api_positions'),

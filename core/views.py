@@ -637,6 +637,58 @@ def api_sources(request):
         }, status=500)
 
 
+def api_symbols(request):
+    """按市值排序的交易对列表（用于前端符号选择器）
+    
+    优先使用 CoinGecko 的市值数据排序，按市值降序返回。
+    如果没有 CoinGecko 数据，回退到 OKX 插件支持的符号列表。
+    """
+    source = request.GET.get('source', 'coingecko')
+    limit = int(request.GET.get('limit', '100'))
+    
+    try:
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(source)
+        
+        if not plugin:
+            # 回退：使用 OKX 支持的符号
+            fallback = plugin_manager.get_plugin('okx')
+            symbols = fallback.get_capability().supported_symbols if fallback else [
+                "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT",
+                "DOGEUSDT", "DOTUSDT", "AVAXUSDT", "LINKUSDT", "BNBUSDT",
+            ]
+            data = [{"inst_id": s, "last": None, "market_cap": None,
+                     "market_cap_rank": None, "change_24h_pct": None, "volume_24h": None}
+                    for s in symbols[:limit]]
+            return JsonResponse({"code": 0, "data": data})
+        
+        # 检查插件是否有 get_tickers 方法
+        get_tickers = getattr(plugin, 'get_tickers', None)
+        if callable(get_tickers):
+            try:
+                tickers = get_tickers(mode='spot', limit=limit)
+                if tickers:
+                    return JsonResponse({"code": 0, "data": tickers})
+            except Exception as ticker_err:
+                logger.warning(f"CoinGecko tickers 失败, 回退到 OKX: {ticker_err}")
+                # 回退到 OKX 的 supported_symbols
+        
+        # 回退：使用 OKX 支持的符号
+        fallback = plugin_manager.get_plugin('okx')
+        symbols = fallback.get_capability().supported_symbols if fallback else [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT",
+            "DOGEUSDT", "DOTUSDT", "AVAXUSDT", "LINKUSDT", "BNBUSDT",
+        ]
+        data = [{"inst_id": s, "last": None, "market_cap": None,
+                 "market_cap_rank": None, "change_24h_pct": None, "volume_24h": None}
+                for s in symbols[:limit]]
+        return JsonResponse({"code": 0, "data": data})
+            
+    except Exception as e:
+        logger.error(f"获取符号列表失败: {e}")
+        return JsonResponse({"code": -1, "error": str(e)}, status=500)
+
+
 def api_source_capabilities(request, source_name):
     """获取指定数据源的详细能力 API"""
     try:

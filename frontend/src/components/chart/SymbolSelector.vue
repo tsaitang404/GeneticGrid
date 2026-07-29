@@ -53,7 +53,7 @@
                   type="button"
                   @click="selectSymbol(sym)"
                 >
-                  <span class="symbol-name">{{ sym }}</span>
+                  <span class="symbol-name">{{ symbolLabel(sym) }}</span>
                   <svg v-if="sym === modelValue" class="check-icon" width="14" height="14" viewBox="0 0 14 14">
                     <path d="M3 7l3 3 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
@@ -69,17 +69,23 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useSymbolsStore } from '@/stores/symbols'
 
 interface Props {
   modelValue: string
-  symbols: string[]
+  symbols?: string[]  // 可选降级：父组件传入纯符号列表
   source?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  symbols: () => [],
+  source: 'coingecko',
+})
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+const store = useSymbolsStore()
 
 const showDropdown = ref(false)
 const searchQuery = ref('')
@@ -91,48 +97,58 @@ const displaySymbol = computed(() => {
   return props.modelValue
 })
 
+/** 扁平符号列表（降级或 store） */
 const filteredSymbols = computed(() => {
-  if (!searchQuery.value) return props.symbols
-  const query = searchQuery.value.toLowerCase()
-  return props.symbols.filter(sym => 
-    sym.toLowerCase().includes(query)
-  )
+  if (props.symbols.length > 0) {
+    // 降级模式：使用父组件传入的纯字符串列表
+    if (!searchQuery.value) return props.symbols
+    const q = searchQuery.value.toLowerCase()
+    return props.symbols.filter(s => s.toLowerCase().includes(q))
+  }
+  // 正常模式：把 store 的过滤结果映射为纯符号名列表
+  if (!searchQuery.value) return store.symbols
+  return store.filteredSymbols.map(s => s.inst_id)
 })
 
+/** 分组展示 */
 const groupedSymbols = computed(() => {
-  const groups: Record<string, string[]> = {
-    '主流币': [],
-    '平台币': [],
-    '其他': []
-  }
-  
-  const mainCoins = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'LINK', 'ATOM']
-  const platformCoins = ['BNB', 'OKB', 'FTT', 'HT', 'KCS']
-  
-  filteredSymbols.value.forEach(sym => {
-    const base = sym.replace(/USDT?$/, '').replace(/-.*$/, '')
-    if (mainCoins.some(coin => base.includes(coin))) {
-      groups['主流币'].push(sym)
-    } else if (platformCoins.some(coin => base.includes(coin))) {
-      groups['平台币'].push(sym)
-    } else {
-      groups['其他'].push(sym)
+  if (props.symbols.length > 0) {
+    // 降级分组
+    const groups: Record<string, string[]> = {
+      '主流币': [], '平台币': [], '其他': [],
     }
-  })
-  
-  return [
-    { category: '主流币', symbols: groups['主流币'] },
-    { category: '平台币', symbols: groups['平台币'] },
-    { category: '其他', symbols: groups['其他'] }
-  ].filter(group => group.symbols.length > 0)
+    const mainCoins = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'LINK', 'ATOM']
+    const platformCoins = ['BNB', 'OKB', 'FTT', 'HT', 'KCS']
+    filteredSymbols.value.forEach(sym => {
+      const base = sym.replace(/USDT?$/, '').replace(/-.*$/, '')
+      if (mainCoins.some(c => base.includes(c))) groups['主流币'].push(sym)
+      else if (platformCoins.some(c => base.includes(c))) groups['平台币'].push(sym)
+      else groups['其他'].push(sym)
+    })
+    return [
+      { category: '主流币', symbols: groups['主流币'] },
+      { category: '平台币', symbols: groups['平台币'] },
+      { category: '其他', symbols: groups['其他'] },
+    ].filter(g => g.symbols.length > 0)
+  }
+  // 使用 store 的热门分组
+  return store.groupedSymbols
 })
+
+/** 符号项标签（名称 + 价格 + 市值） */
+function symbolLabel(sym: string): string {
+  if (props.symbols.length > 0) return sym // 降级模式只显示名称
+  const meta = store.getMeta(sym)
+  if (!meta || !meta.last) return sym
+  const price = store.formatPrice(meta.last)
+  const cap = store.formatMarketCap(meta.market_cap)
+  return cap ? `${sym}  $${price}  ${cap}` : `${sym}  $${price}`
+}
 
 const toggleDropdown = () => {
   showDropdown.value = !showDropdown.value
   if (showDropdown.value) {
-    nextTick(() => {
-      searchInputRef.value?.focus()
-    })
+    nextTick(() => searchInputRef.value?.focus())
   }
 }
 
@@ -164,6 +180,10 @@ watch(() => props.source, () => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  // 自动加载符号列表
+  if (!props.symbols || props.symbols.length === 0) {
+    store.fetchSymbols(props.source)
+  }
 })
 
 onUnmounted(() => {

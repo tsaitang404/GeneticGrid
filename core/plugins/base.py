@@ -270,6 +270,8 @@ class TickerData:
     change_24h: Optional[float] = None
     change_24h_pct: Optional[float] = None
     volume_24h: Optional[float] = None
+    market_cap: Optional[float] = None  # 总市值（美元）
+    market_cap_rank: Optional[int] = None  # 总市值排名
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -283,6 +285,8 @@ class TickerData:
             'change_24h': self.change_24h,
             'change_24h_pct': self.change_24h_pct,
             'volume_24h': self.volume_24h,
+            'market_cap': self.market_cap,
+            'market_cap_rank': self.market_cap_rank,
         }
 
 

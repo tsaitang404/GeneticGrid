@@ -49,6 +49,7 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
     
     def __init__(self):
         self._session = None
+        self._tickers_cache: Optional[dict] = None  # {"data": [...], "ts": 0}
         super().__init__()
     
     def _normalize_symbol(
@@ -192,3 +193,95 @@ class CoinGeckoMarketPlugin(MarketDataSourcePlugin):
         except Exception as e:
             logger.error(f"CoinGecko 获取行情数据失败: {e}")
             raise PluginError(f"CoinGecko 获取行情数据失败: {e}")
+    
+    def get_tickers(self, mode: str = 'spot', limit: int = 100) -> List[dict]:
+        """按市值降序获取批量行情数据（用于前端符号选择器排序）
+        
+        调用 CoinGecko /coins/markets 接口，返回按市值排序的代币列表。
+        结果缓存 5 分钟以避免触发免费 API 速率限制。
+        """
+        # 缓存检查：5 分钟内有效
+        CACHE_TTL = 300  # 5 分钟
+        now = __import__('time').time()
+        if self._tickers_cache and (now - self._tickers_cache['ts']) < CACHE_TTL:
+            logger.debug("CoinGecko tickers 缓存命中")
+            return self._tickers_cache['data']
+        
+        try:
+            url = f"{self.BASE_URL}/coins/markets"
+            params = {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": str(min(limit, 250)),
+                "page": "1",
+                "sparkline": "false",
+                "price_change_percentage": "24h",
+            }
+            response = self._get_session.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            coins = response.json()
+
+            # 构建 coin_id → base_symbol 反向映射
+            id_to_base = {v: k for k, v in self.COIN_ID_MAP.items()}
+
+            results = []
+            for coin in coins:
+                coin_id = coin.get("id", "")
+                base_symbol = id_to_base.get(coin_id, "")
+                if not base_symbol:
+                    continue
+                symbol = f"{base_symbol}USDT"
+                last_price = coin.get("current_price") or 0
+                market_cap = coin.get("market_cap")
+                market_cap_rank = coin.get("market_cap_rank")
+                change_24h_pct = coin.get("price_change_percentage_24h")
+                volume_24h = coin.get("total_volume")
+
+                results.append({
+                    "inst_id": symbol,
+                    "last": float(last_price),
+                    "market_cap": float(market_cap) if market_cap else None,
+                    "market_cap_rank": int(market_cap_rank) if market_cap_rank else None,
+                    "change_24h_pct": float(change_24h_pct) if change_24h_pct else None,
+                    "volume_24h": float(volume_24h) if volume_24h else None,
+                })
+
+            # 补充未在 top 中的已知币种（如 BNB 可能在 page 2）
+            seen_ids = {coin.get("id") for coin in coins}
+            for base, coin_id in self.COIN_ID_MAP.items():
+                if coin_id in seen_ids:
+                    continue
+                symbol = f"{base}USDT"
+                try:
+                    detail_url = f"{self.BASE_URL}/coins/{coin_id}"
+                    detail_resp = self._get_session.get(detail_url, params={
+                        "localization": "false", "tickers": "false",
+                        "market_data": "true", "community_data": "false", "developer_data": "false",
+                    }, timeout=10)
+                    detail_resp.raise_for_status()
+                    detail = detail_resp.json()
+                    md = detail.get("market_data", {})
+                    results.append({
+                        "inst_id": symbol,
+                        "last": float(md.get("current_price", {}).get("usd", 0)),
+                        "market_cap": float(md["market_cap"]["usd"]) if md.get("market_cap", {}).get("usd") else None,
+                        "market_cap_rank": detail.get("market_cap_rank"),
+                        "change_24h_pct": md.get("price_change_percentage_24h"),
+                        "volume_24h": float(md["total_volume"]["usd"]) if md.get("total_volume", {}).get("usd") else None,
+                    })
+                except Exception as e:
+                    logger.warning(f"获取 {coin_id} 详情失败: {e}")
+
+            # 按市值降序排列
+            results.sort(key=lambda x: x["market_cap"] if x["market_cap"] else 0, reverse=True)
+            
+            # 写入缓存
+            self._tickers_cache = {'data': results, 'ts': now}
+            return results
+
+        except requests.exceptions.Timeout:
+            logger.error("CoinGecko tickers API 连接超时")
+            raise PluginError("CoinGecko tickers API 连接超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"CoinGecko 获取 tickers 失败: {e}")
+            raise PluginError(f"CoinGecko 获取 tickers 失败: {e}")
