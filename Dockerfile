@@ -30,4 +30,5 @@ COPY --from=frontend-builder /app/static/dist ./static/dist
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+# 使用入口脚本，通过 USE_GUNICORN 环境变量切换 runserver/gunicorn
+CMD ["./docker-entrypoint.sh"]

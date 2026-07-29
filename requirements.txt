@@ -11,6 +11,10 @@ django-allow-cidr>=0.8.0
 pytest>=8.2.0
 pytest-cov>=5.0.0
 
+# Production server (optional, used when USE_GUNICORN=true)
+gunicorn>=23.0.0
+uvicorn>=0.34.0
+
 # Dev / linting
 ruff>=0.5.0
 pre-commit>=3.0.0
