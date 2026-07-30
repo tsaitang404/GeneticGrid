@@ -969,10 +969,6 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   transition: all 0.2s;
-  min-width: 0;
-  flex: 1;
-  flex-wrap: wrap;
-  overflow: hidden;
 }
 
 .controls-group:hover {
@@ -987,19 +983,12 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding-right: 4px;
-  flex-shrink: 0;
-}
-
-.controls-group > * {
-  min-width: 0;
-  flex-shrink: 1;
 }
 
 .divider-vertical {
   width: 1px;
   height: 20px;
   background: var(--border-color);
-  flex-shrink: 0;
 }
 
 .actions-group {
