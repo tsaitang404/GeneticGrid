@@ -958,8 +958,6 @@ onUnmounted(() => {
   gap: 16px;
   padding: 12px 16px;
   flex-wrap: wrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .controls-group {
@@ -972,7 +970,8 @@ onUnmounted(() => {
   border-radius: 6px;
   transition: all 0.2s;
   min-width: 0;
-  overflow: hidden;
+  flex: 1 0 auto;
+  flex-wrap: wrap;
 }
 
 .controls-group:hover {
@@ -987,12 +986,19 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding-right: 4px;
+  flex-shrink: 0;
+}
+
+.controls-group > * {
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .divider-vertical {
   width: 1px;
   height: 20px;
   background: var(--border-color);
+  flex-shrink: 0;
 }
 
 .actions-group {
