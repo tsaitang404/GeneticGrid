@@ -972,6 +972,7 @@ onUnmounted(() => {
   border-radius: 6px;
   transition: all 0.2s;
   min-width: 0;
+  overflow: hidden;
 }
 
 .controls-group:hover {
