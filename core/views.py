@@ -2,6 +2,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils.timezone import now
+import time
 from .services import MarketAPIError
 from .plugin_adapter import get_unified_service
 from .cache_service import CandlestickCacheService
@@ -1058,12 +1059,22 @@ def api_account_delete(request, account_id):
 
 
 # ──────────────────────────────────────────────
-# 交易对列表（从 OKX 实时拉取）
+# 交易对列表（从 OKX 实时拉取，缓存 1 小时）
 # ──────────────────────────────────────────────
 
+_symbols_cache: dict = {}
+_SYMBOLS_CACHE_TTL = 3600  # 1 小时
+
+
 def api_account_symbols(request):
-    """获取 OKX 交易对列表"""
+    """获取 OKX 交易对列表（缓存 1 小时）"""
     inst_type = request.GET.get('type', 'SPOT').upper()
+    now_ts = time.time()
+
+    cached = _symbols_cache.get(inst_type)
+    if cached and (now_ts - cached['ts']) < _SYMBOLS_CACHE_TTL:
+        return JsonResponse({'code': 0, 'data': cached['data']})
+
     try:
         import requests
         url = 'https://www.okx.com/api/v5/public/instruments'
@@ -1085,9 +1096,13 @@ def api_account_symbols(request):
                 if quote == 'USDT':
                     symbols.append(base + quote)
         symbols.sort()
+
+        _symbols_cache[inst_type] = {'data': symbols, 'ts': now_ts}
         return JsonResponse({'code': 0, 'data': symbols})
     except Exception as e:
         logger.warning(f"获取交易对列表失败: {e}")
+        if cached:
+            return JsonResponse({'code': 0, 'data': cached['data']})
         return JsonResponse({'code': 0, 'data': []})
 
 
