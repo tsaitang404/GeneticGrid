@@ -963,6 +963,7 @@ onUnmounted(() => {
 .controls-group {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   padding: 6px 12px;
   background: var(--bg-primary);
