@@ -970,8 +970,9 @@ onUnmounted(() => {
   border-radius: 6px;
   transition: all 0.2s;
   min-width: 0;
-  flex: 1 0 auto;
+  flex: 1;
   flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .controls-group:hover {
