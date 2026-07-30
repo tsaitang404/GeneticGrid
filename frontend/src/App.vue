@@ -439,6 +439,9 @@ onMounted(async () => {
   .main-content {
     flex-direction: column;
   }
+  .top-row {
+    flex-direction: column;
+  }
   .market-column {
     position: static;
     width: 100%;
