@@ -969,6 +969,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   transition: all 0.2s;
+  max-width: 100%;
 }
 
 .controls-group:hover {
