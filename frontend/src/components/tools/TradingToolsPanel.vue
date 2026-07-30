@@ -34,9 +34,12 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <select v-model="spotForm.symbol" class="input" @change="onSymbolChange('spot')">
-              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <div class="symbol-search-row">
+              <input v-model="spotSearch" type="text" placeholder="搜索币对..." class="input symbol-search" />
+              <select v-model="spotForm.symbol" class="input" @change="onSymbolChange('spot')">
+                <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </div>
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: spotForm.side === 'buy' }]" @click="spotForm.side = 'buy'">买入</button>
@@ -90,9 +93,12 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <select v-model="contractForm.symbol" class="input" @change="onSymbolChange('contract')">
-              <option v-for="s in contractSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <div class="symbol-search-row">
+              <input v-model="contractSearch" type="text" placeholder="搜索币对..." class="input symbol-search" />
+              <select v-model="contractForm.symbol" class="input" @change="onSymbolChange('contract')">
+                <option v-for="s in filteredContractSymbols" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </div>
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: contractForm.side === 'long' }]" @click="contractForm.side = 'long'">做多</button>
@@ -317,7 +323,7 @@
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
             <select v-model="dcaForm.symbol" class="input">
-              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="form-group"><label>每期投入 (USDT)</label><input v-model.number="dcaForm.amount" type="number" min="1" step="1" class="input" /></div>
@@ -357,7 +363,7 @@
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
             <select v-model="tsForm.symbol" class="input">
-              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="form-group"><label>方向</label>
@@ -395,7 +401,7 @@
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
             <select v-model="ibForm.symbol" class="input">
-              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="form-group"><label>方向</label>
@@ -426,7 +432,7 @@
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
             <select v-model="twapForm.symbol" class="input">
-              <option v-for="s in spotSymbols" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="form-group"><label>方向</label>
@@ -505,6 +511,20 @@ const spotPrice = ref(0)
 
 const spotSymbols = ref<string[]>([])
 const contractSymbols = ref<string[]>([])
+const spotSearch = ref('')
+const contractSearch = ref('')
+
+const filteredSpotSymbols = computed(() => {
+  const q = spotSearch.value.toLowerCase().trim()
+  if (!q) return spotSymbols.value
+  return spotSymbols.value.filter(s => s.toLowerCase().includes(q))
+})
+
+const filteredContractSymbols = computed(() => {
+  const q = contractSearch.value.toLowerCase().trim()
+  if (!q) return contractSymbols.value
+  return contractSymbols.value.filter(s => s.toLowerCase().includes(q))
+})
 
 async function fetchSymbols(): Promise<void> {
   try {
@@ -1080,6 +1100,9 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .form-row { display: flex; flex-direction: column; gap: 4px; }
 .form-row label { font-size: 12px; color: #9aa3b2; }
 .input { background: #1b202b; border: 1px solid #2a2e39; color: #d1d4dc; height: 36px; border-radius: 6px; padding: 0 10px; font-size: 13px; outline: none; }
+.symbol-search-row { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.symbol-search-row .symbol-search { height: 28px; font-size: 12px; }
+.symbol-search-row select.input { height: 32px; }
 .input:focus { border-color: #2962ff; }
 .input[type="number"] { -moz-appearance: textfield; }
 
