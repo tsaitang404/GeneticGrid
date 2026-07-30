@@ -941,6 +941,7 @@ onUnmounted(() => {
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .chart-toolbar {
@@ -957,6 +958,8 @@ onUnmounted(() => {
   gap: 16px;
   padding: 12px 16px;
   flex-wrap: wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .controls-group {
@@ -968,6 +971,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .controls-group:hover {
