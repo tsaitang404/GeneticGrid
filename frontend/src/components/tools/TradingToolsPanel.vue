@@ -34,12 +34,7 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <div class="symbol-search-row">
-              <input v-model="spotSearch" type="text" placeholder="搜索币对..." class="input symbol-search" />
-              <select v-model="spotForm.symbol" class="input" @change="onSymbolChange('spot')">
-                <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
-              </select>
-            </div>
+            <SymbolSelector v-model="spotForm.symbol" :symbols="spotSymbols" />
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: spotForm.side === 'buy' }]" @click="spotForm.side = 'buy'">买入</button>
@@ -93,12 +88,7 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <div class="symbol-search-row">
-              <input v-model="contractSearch" type="text" placeholder="搜索币对..." class="input symbol-search" />
-              <select v-model="contractForm.symbol" class="input" @change="onSymbolChange('contract')">
-                <option v-for="s in filteredContractSymbols" :key="s" :value="s">{{ s }}</option>
-              </select>
-            </div>
+            <SymbolSelector v-model="contractForm.symbol" :symbols="contractSymbols" />
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: contractForm.side === 'long' }]" @click="contractForm.side = 'long'">做多</button>
@@ -322,9 +312,7 @@
       <div v-show="strategyMode === 'dca'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <select v-model="dcaForm.symbol" class="input">
-              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <SymbolSelector v-model="dcaForm.symbol" :symbols="spotSymbols" />
           </div>
           <div class="form-group"><label>每期投入 (USDT)</label><input v-model.number="dcaForm.amount" type="number" min="1" step="1" class="input" /></div>
           <div class="form-group"><label>执行间隔</label>
@@ -362,9 +350,7 @@
       <div v-show="strategyMode === 'trailing_stop'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <select v-model="tsForm.symbol" class="input">
-              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <SymbolSelector v-model="tsForm.symbol" :symbols="spotSymbols" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">
@@ -400,9 +386,7 @@
       <div v-show="strategyMode === 'iceberg'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <select v-model="ibForm.symbol" class="input">
-              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <SymbolSelector v-model="ibForm.symbol" :symbols="spotSymbols" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">
@@ -431,9 +415,7 @@
       <div v-show="strategyMode === 'twap'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <select v-model="twapForm.symbol" class="input">
-              <option v-for="s in filteredSpotSymbols" :key="s" :value="s">{{ s }}</option>
-            </select>
+            <SymbolSelector v-model="twapForm.symbol" :symbols="spotSymbols" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">
@@ -492,6 +474,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuth } from '../../composables/useAuth'
+import SymbolSelector from '../chart/SymbolSelector.vue'
 
 const props = defineProps<{ symbol?: string; currency?: string }>()
 const emit = defineEmits<{ (e: 'open-account'): void }>()
@@ -511,20 +494,6 @@ const spotPrice = ref(0)
 
 const spotSymbols = ref<string[]>([])
 const contractSymbols = ref<string[]>([])
-const spotSearch = ref('')
-const contractSearch = ref('')
-
-const filteredSpotSymbols = computed(() => {
-  const q = spotSearch.value.toLowerCase().trim()
-  if (!q) return spotSymbols.value
-  return spotSymbols.value.filter(s => s.toLowerCase().includes(q))
-})
-
-const filteredContractSymbols = computed(() => {
-  const q = contractSearch.value.toLowerCase().trim()
-  if (!q) return contractSymbols.value
-  return contractSymbols.value.filter(s => s.toLowerCase().includes(q))
-})
 
 async function fetchSymbols(): Promise<void> {
   try {
@@ -1064,6 +1033,10 @@ watch(activeTab, (tab) => {
   if (tab === 'option') fetchOptionInstruments()
 })
 
+// 交易对变更时更新行情价格
+watch(() => spotForm.symbol, () => { if (activeTab.value === 'spot') fetchTicker() })
+watch(() => contractForm.symbol, () => { if (activeTab.value === 'contract') fetchTicker() })
+
 watch(() => props.symbol, (sym) => {
   if (sym) {
     spotForm.symbol = sym
@@ -1100,9 +1073,6 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .form-row { display: flex; flex-direction: column; gap: 4px; }
 .form-row label { font-size: 12px; color: #9aa3b2; }
 .input { background: #1b202b; border: 1px solid #2a2e39; color: #d1d4dc; height: 36px; border-radius: 6px; padding: 0 10px; font-size: 13px; outline: none; }
-.symbol-search-row { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.symbol-search-row .symbol-search { height: 28px; font-size: 12px; }
-.symbol-search-row select.input { height: 32px; }
 .input:focus { border-color: #2962ff; }
 .input[type="number"] { -moz-appearance: textfield; }
 
