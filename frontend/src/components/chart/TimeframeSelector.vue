@@ -3,7 +3,8 @@
     <button
       v-for="tf in primaryTimeframes"
       :key="tf"
-      :class="['timeframe-btn', { active: modelValue === tf, 'hide-narrow': tf === 'tick' || tf === '1m' }]"
+      :class="{ active: modelValue === tf }"
+      class="timeframe-btn"
       @click="handleSelect(tf)"
     >
       {{ tf }}
@@ -208,9 +209,5 @@ const cancelCustom = (): void => {
 
 .custom-input::placeholder {
   color: #5a5e6b;
-}
-
-@media (max-width: 1200px) {
-  .hide-narrow { display: none; }
 }
 </style>

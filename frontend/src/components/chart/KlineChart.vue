@@ -963,17 +963,13 @@ onUnmounted(() => {
 .controls-group {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   padding: 6px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   transition: all 0.2s;
-  max-width: 100%;
-  overflow: hidden;
-  flex: 1 1 0%;
-  min-width: 440px;
+}
 }
 
 .controls-group:hover {
