@@ -971,8 +971,8 @@ onUnmounted(() => {
   transition: all 0.2s;
   max-width: 100%;
   overflow: hidden;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 0%;
+  min-width: 340px;
 }
 
 .controls-group:hover {
