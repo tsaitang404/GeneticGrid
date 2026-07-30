@@ -34,7 +34,7 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <SymbolSelector v-model="spotForm.symbol" :symbols="spotSymbols" />
+            <SymbolSelector v-model="spotForm.symbol" :symbols="spotSymbols" size="small" />
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: spotForm.side === 'buy' }]" @click="spotForm.side = 'buy'">买入</button>
@@ -88,7 +88,7 @@
         <div class="trade-form">
           <div class="form-row">
             <label>交易对</label>
-            <SymbolSelector v-model="contractForm.symbol" :symbols="contractSymbols" />
+            <SymbolSelector v-model="contractForm.symbol" :symbols="contractSymbols" size="small" />
           </div>
           <div class="side-group">
             <button :class="['side-btn', { active: contractForm.side === 'long' }]" @click="contractForm.side = 'long'">做多</button>
@@ -312,7 +312,7 @@
       <div v-show="strategyMode === 'dca'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <SymbolSelector v-model="dcaForm.symbol" :symbols="spotSymbols" />
+            <SymbolSelector v-model="dcaForm.symbol" :symbols="spotSymbols" size="small" />
           </div>
           <div class="form-group"><label>每期投入 (USDT)</label><input v-model.number="dcaForm.amount" type="number" min="1" step="1" class="input" /></div>
           <div class="form-group"><label>执行间隔</label>
@@ -350,7 +350,7 @@
       <div v-show="strategyMode === 'trailing_stop'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <SymbolSelector v-model="tsForm.symbol" :symbols="spotSymbols" />
+            <SymbolSelector v-model="tsForm.symbol" :symbols="spotSymbols" size="small" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">
@@ -386,7 +386,7 @@
       <div v-show="strategyMode === 'iceberg'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <SymbolSelector v-model="ibForm.symbol" :symbols="spotSymbols" />
+            <SymbolSelector v-model="ibForm.symbol" :symbols="spotSymbols" size="small" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">
@@ -415,7 +415,7 @@
       <div v-show="strategyMode === 'twap'" class="strategy-content">
         <div class="form-grid">
           <div class="form-group"><label>交易对</label>
-            <SymbolSelector v-model="twapForm.symbol" :symbols="spotSymbols" />
+            <SymbolSelector v-model="twapForm.symbol" :symbols="spotSymbols" size="small" />
           </div>
           <div class="form-group"><label>方向</label>
             <div class="side-group">

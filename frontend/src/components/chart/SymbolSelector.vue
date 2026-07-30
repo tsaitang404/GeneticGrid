@@ -5,7 +5,7 @@
       <div ref="dropdownRef" class="symbol-dropdown">
         <button 
           class="symbol-button" 
-          :class="{ 'dropdown-open': showDropdown }"
+          :class="[{ 'dropdown-open': showDropdown }, size]"
           type="button"
           @click="toggleDropdown"
         >
@@ -75,11 +75,13 @@ interface Props {
   modelValue: string
   symbols?: string[]  // 可选降级：父组件传入纯符号列表
   source?: string
+  size?: 'default' | 'small'  // 尺寸：表单中用小尺寸
 }
 
 const props = withDefaults(defineProps<Props>(), {
   symbols: () => [],
   source: 'coingecko',
+  size: 'default',
 })
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -226,6 +228,20 @@ onUnmounted(() => {
   cursor: pointer;
   outline: none;
   transition: all 0.2s;
+}
+
+.symbol-button.small {
+  padding: 0 10px;
+  min-width: 100px;
+  font-size: 13px;
+  height: 36px;
+  background: #1b202b;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+}
+
+.symbol-button.small:hover {
+  border-color: #3a4050;
 }
 
 .symbol-button:hover {
