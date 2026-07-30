@@ -17,6 +17,19 @@ PORT="${GUNICORN_PORT:-8000}"
 echo "→ Running database migrations..."
 python manage.py migrate --noinput
 
+# 预热交易对列表缓存（避免首次页面加载时等待 OKX API）
+echo "→ Warming symbol cache..."
+python -c "
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'geneticgrid.settings')
+import django; django.setup()
+from django.test import Client
+c = Client()
+c.get('/api/account/symbols/?type=SPOT')
+c.get('/api/account/symbols/?type=SWAP')
+print('  ✓ SPOT + SWAP cached')
+" 2>&1
+
 if [ "${USE_GUNICORN}" = "true" ] || [ "${USE_GUNICORN}" = "1" ]; then
     echo "→ Starting gunicorn (production mode) on 0.0.0.0:${PORT} with ${WORKERS} workers..."
     exec gunicorn \
