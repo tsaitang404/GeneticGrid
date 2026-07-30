@@ -973,7 +973,7 @@ onUnmounted(() => {
   max-width: 100%;
   overflow: hidden;
   flex: 1 1 0%;
-  min-width: 340px;
+  min-width: 440px;
 }
 
 .controls-group:hover {
