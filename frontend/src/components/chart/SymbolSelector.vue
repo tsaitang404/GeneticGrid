@@ -200,6 +200,14 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.symbol-selector:has(.small) {
+  width: 100%;
+}
+
+.symbol-select-wrapper:has(.small) {
+  flex: 1;
+}
+
 .symbol-label {
   display: none; /* Hide label in new layout */
 }
@@ -233,6 +241,7 @@ onUnmounted(() => {
 .symbol-button.small {
   padding: 0 10px;
   min-width: 100px;
+  width: 100%;
   font-size: 13px;
   height: 36px;
   background: #1b202b;

@@ -293,7 +293,7 @@
       <!-- 网格交易 -->
       <div v-show="strategyMode === 'grid'" class="strategy-content">
         <div class="form-grid">
-          <div class="form-group"><label>交易对</label><input v-model="gridForm.symbol" placeholder="如 BTCUSDT" /></div>
+          <div class="form-group"><label>交易对</label><SymbolSelector v-model="gridForm.symbol" :symbols="spotSymbols" size="small" /></div>
           <div class="form-group"><label>网格数量</label><input v-model.number="gridForm.grids" type="number" min="2" max="200" /></div>
           <div class="form-group"><label>下限价格</label><input v-model.number="gridForm.lower" type="number" min="0" step="0.01" /></div>
           <div class="form-group"><label>上限价格</label><input v-model.number="gridForm.upper" type="number" min="0" step="0.01" /></div>
